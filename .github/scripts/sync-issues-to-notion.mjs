@@ -267,7 +267,7 @@ async function githubRequest(path, options = {}) {
 }
 
 async function githubGraphql(query, variables) {
-  return request("https://api.github.com/graphql", {
+  const response = await request("https://api.github.com/graphql", {
     method: "POST",
     headers: {
       Accept: "application/vnd.github+json",
@@ -276,6 +276,10 @@ async function githubGraphql(query, variables) {
     },
     body: JSON.stringify({ query, variables }),
   });
+  if (response.errors?.length) {
+    throw new Error(`GitHub GraphQL error: ${JSON.stringify(response.errors)}`);
+  }
+  return response.data;
 }
 
 async function notionRequest(path, options = {}) {
