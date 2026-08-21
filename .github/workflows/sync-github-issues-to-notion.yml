@@ -1,0 +1,51 @@
+name: Sync GitHub issues to Notion
+
+on:
+  issues:
+    types: [opened, edited, assigned, unassigned, labeled, unlabeled, closed, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Optional issue number to reconcile; blank reconciles all issues.
+        required: false
+        type: string
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: notion-issue-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out sync code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Reconcile GitHub issues and Project status to Notion
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+          NOTION_VERSION: "2025-09-03"
+          NOTION_MODULES_DATA_SOURCE_ID: "2691478e-389e-455e-bd70-37a8b51978e4"
+          NOTION_WORK_ITEMS_DATA_SOURCE_ID: "b3d79b64-1765-4a05-a2ac-3bc5846e1d99"
+          NOTION_IDENTITY_MAP_DATA_SOURCE_ID: "88ccab90-3d3d-4d9d-b806-caaee2476aec"
+          GITHUB_PROJECT_OWNER: "Nowcast-in-a-Box"
+          GITHUB_PROJECT_NUMBER: "1"
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER_INPUT: ${{ inputs.issue_number }}
+        run: node .github/scripts/sync-issues-to-notion.mjs
