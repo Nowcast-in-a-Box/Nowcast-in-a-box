@@ -1,0 +1,42 @@
+name: Delivery work item
+description: Add a piece of work that should appear in the NiB delivery board.
+title: "[PILOT-1] "
+labels:
+  - enhancement
+  - module:PILOT-1
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is synchronized to the Notion pilot work-items database.
+        GitHub Project Workflow Status is the authoritative workflow state.
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module
+      description: Choose the module this work belongs to.
+      options:
+        - PILOT-1
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow_status
+    attributes:
+      label: Initial workflow status
+      description: This is applied when the issue is first added to the GitHub Project.
+      options:
+        - Backlog
+        - In progress
+        - Blocked
+        - Done
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the expected work and acceptance criteria.
+      placeholder: What needs to be done, and how will we know it is complete?
+    validations:
+      required: true
