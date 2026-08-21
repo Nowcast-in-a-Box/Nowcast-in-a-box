@@ -168,12 +168,17 @@ async function ensureProjectItem(issue) {
       }`,
       { projectId: project.id, contentId: issue.node_id },
     );
-    item = { id: mutation.addProjectV2ItemById.item.id, content: { id: issue.node_id } };
-    project = await projectQuery();
-    item = project.items.find((candidate) => candidate.id === item.id) || item;
+    const addedItemId = mutation.addProjectV2ItemById.item.id;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      project = await projectQuery();
+      item = project.items.find((candidate) => candidate.id === addedItemId);
+      if (item) break;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+    if (!item) throw new Error(`Project item ${addedItemId} was not visible after creation`);
   }
   const statusField = project.fields.find((field) => field.name === "Workflow Status");
-  const statusValue = item.fieldValues.find((value) => value.field?.id === statusField?.id);
+  const statusValue = (item.fieldValues || []).find((value) => value.field?.id === statusField?.id);
   return {
     itemId: item.id,
     status: statusValue?.name || null,
