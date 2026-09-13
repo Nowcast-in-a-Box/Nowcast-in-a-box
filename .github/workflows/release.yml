@@ -1,15 +1,19 @@
 name: release
 
+# Parked. Does not run on tags until we turn it on.
+# Restore the trigger below when the first real release is ready:
+#   push:
+#     tags:
+#       - "v*"
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

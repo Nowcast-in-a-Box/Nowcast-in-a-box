@@ -1,9 +1,12 @@
 name: ci
 
+# Parked. Does not run on pull requests or push until we turn it on.
+# Restore the triggers below when tests and binaries are ready:
+#   pull_request:
+#   push:
+#     branches: [main]
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,6 +40,7 @@ jobs:
         run: go build -o "nib-handler$(go env GOEXE)" .
 
   cross-build:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -57,8 +61,8 @@ jobs:
           if-no-files-found: error
 
   ci:
+    if: false
     needs: [cross-build]
-    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Require cross-build
