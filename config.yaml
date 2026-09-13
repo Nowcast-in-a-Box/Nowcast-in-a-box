@@ -1,0 +1,15 @@
+# Local runtime settings. The handler reads this at startup.
+# Command-line flags (-host, -port, -config) override values here.
+
+handler:
+  host: 127.0.0.1
+  port: 8765
+
+# Evaluation + visualization page. The handler starts this on the host.
+review:
+  host: 127.0.0.1
+  port: 8766
+
+paths:
+  # Downloaded weights and docker files. Relative to this file.
+  artifacts: artifacts

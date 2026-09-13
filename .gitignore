@@ -1,0 +1,44 @@
+.venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.codegraph/
+.opencode/
+.claude/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+workspace/
+tmp/
+.env
+
+handler/nib-handler
+handler/nib-handler.exe
+handler/dist/
+
+# Downloaded weights and docker files. Keep the directory.
+artifacts/*
+!artifacts/.gitkeep
+
+# Weights and observations never belong in git. See docs/weights.md.
+*.onnx
+*.ckpt
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.safetensors
+
+# Design drafts stay on disk. Git keeps markdown.
+*.pdf
+*.doc
+*.docx
+*.docm
+*.vsdx
+~$*
+
+.DS_Store
