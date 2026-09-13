@@ -1,0 +1,38 @@
+name: Bug
+description: Something is wrong in the local runtime.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      description: Where you ran the handler.
+      options:
+        - linux
+        - macos
+        - windows
+        - more than one
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Repro
+      description: Commands, OS, Go version, Docker version if relevant.
+    validations:
+      required: true

@@ -1,0 +1,71 @@
+name: ci
+
+# Parked. Does not run on pull requests or push until we turn it on.
+# Restore the triggers below when tests and binaries are ready:
+#   pull_request:
+#   push:
+#     branches: [main]
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Parked until handler tests are ready to gate merges.
+  # Re-enable: delete `if: false` and add `test` back to the `ci` job's needs.
+  test:
+    if: false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: handler
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build native
+        run: go build -o "nib-handler$(go env GOEXE)" .
+
+  cross-build:
+    if: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Cross-compile
+        run: scripts/cross-build.sh
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: nib-handler
+          path: handler/dist/nib-handler-*
+          if-no-files-found: error
+
+  ci:
+    if: false
+    needs: [cross-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require cross-build
+        run: |
+          set -euo pipefail
+          test "${{ needs.cross-build.result }}" = success

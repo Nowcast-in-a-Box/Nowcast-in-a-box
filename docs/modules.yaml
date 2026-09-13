@@ -1,0 +1,301 @@
+# Planning map of the system. Git does not use these letter-ids.
+# Branches, commits, and PRs use the GitHub issue number (#12).
+#
+# The host program is the handler (Linux, macOS, Windows). Model code
+# runs inside Docker images. Evaluation and visualization run on the
+# host from review/, started by the handler. Adapters are packaging-time.
+#
+# status: exists | design | planned
+
+version: 1
+
+modules:
+  - id: E1
+    workstream: runtime
+    role: platform
+    name: Handler
+    purpose: Host daemon on Linux, macOS, and Windows. Users download and run this. No Python on the host.
+    paths: [handler/]
+    do:
+      - Loopback HTTP, Docker preflight, job lifecycle.
+      - URI scheme from the Hub (nib://) in a later slice.
+      - Start Compose for Model Containers and postprocess; never accept Docker args from the browser.
+    done_when: A machine with the binary and Docker can show /health and /v1/status without installing Python.
+    does_not_own:
+      - Inference
+      - Metric formulas
+      - Hub UI
+    depends_on: []
+    status: exists
+    mvp: true
+    owner: null
+
+  - id: E5
+    workstream: runtime
+    role: platform
+    name: Compose
+    purpose: Files the handler passes to the local Docker engine. One container per algorithm.
+    paths: [artifacts/]
+    do:
+      - Compose snippets or generate them from manifests.
+      - Localhost-only published ports. Read-only data mount. Persistent workspace volume.
+    done_when: The handler can start a Model Container without the user typing docker compose.
+    does_not_own:
+      - Handler HTTP
+      - Adapter logic
+    depends_on: [E1]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: A3
+    workstream: contracts
+    role: interface
+    name: Shared contracts
+    purpose: Manifest and run YAML shapes. Implemented inside containers; declared in git as schemas, not a host library.
+    paths: [contracts/]
+    do:
+      - JSON/YAML schemas for data, model, and run config.
+      - Field names, dtypes, frame counts, cadence.
+    done_when: A new container can implement the schema without editing the handler.
+    does_not_own:
+      - Docker
+      - Native file decoding
+    depends_on: []
+    status: design
+    mvp: true
+    owner: null
+
+  - id: A1
+    workstream: contracts
+    role: interface
+    name: Task profiles
+    purpose: Name the sample a model family consumes. Today precip-nowcast.v1.
+    paths: []
+    do:
+      - Field list for precip-nowcast.v1.
+      - Versioning rule for a later second profile.
+    done_when: A data package can declare offers without this owner decoding files.
+    does_not_own:
+      - Native file decoding
+      - Model normalisation
+    depends_on: [A3]
+    status: design
+    mvp: true
+    owner: null
+
+  - id: A2
+    workstream: contracts
+    role: interface
+    name: Matcher
+    purpose: Decide if a data package may run with a model package. No array conversion.
+    paths: []
+    do:
+      - Shape, cadence, frame counts; later offers ∩ requires.
+      - Runs in the Hub at selection time and in the handler at preflight.
+    done_when: Incompatible pairs never reach a container; the reason is readable.
+    does_not_own:
+      - Loading data
+      - Running models
+    depends_on: [A1, A3]
+    status: design
+    mvp: true
+    owner: null
+
+  - id: B1
+    workstream: data
+    role: interface
+    name: Data adapter interface
+    purpose: Packaging-time conversion to the NiB data spec. Not a runtime stage.
+    paths: []
+    do:
+      - Contract a data package must satisfy (list/load sample).
+      - Tests a fake package in its image must pass.
+    done_when: A new dataset ships as data/PACKAGE_ID/ without editing B1 or the handler.
+    does_not_own:
+      - SEVIR HDF5 details
+      - Handler HTTP
+    depends_on: [A3]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: B2
+    workstream: data
+    role: implementation
+    name: SEVIR VIL
+    purpose: Example data package. Observations stay on the host under NIB_DATA_ROOT.
+    paths: []
+    do:
+      - manifest.json plus adapter code that runs in the ingestion/container path.
+    done_when: Matcher accepts SEVIR with the first model.
+    does_not_own:
+      - Other datasets
+      - The data interface
+    depends_on: [B1, B3]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: B3
+    workstream: data
+    role: platform
+    name: Data catalog mount
+    purpose: Read-only NIB_DATA_ROOT into containers at /inputs/data.
+    paths: []
+    do:
+      - Handler validates the host path. Never invent a path.
+    done_when: Several data packages coexist under one mount.
+    does_not_own:
+      - Decoding
+    depends_on: [E1]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: C1
+    workstream: models
+    role: interface
+    name: Model adapter interface
+    purpose: Packaging-time / in-container inference contract. Not WADEPre.
+    paths: []
+    do:
+      - predict(sample) contract. Context-frame selection belongs to the model image.
+    done_when: A new model ships as models/PACKAGE_ID/ without editing C1 or the handler.
+    does_not_own:
+      - Native file I/O
+      - Handler job API
+    depends_on: [A3]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: W1
+    workstream: models
+    role: platform
+    name: Hugging Face artifacts
+    purpose: Pin and fetch weights into artifacts/. Git never stores blobs.
+    paths: [artifacts/, docs/weights.md]
+    do:
+      - Manifest pointer (repo, revision, path, sha256).
+      - Fetch the pinned file into artifacts/.
+    done_when: A pinned Hub revision is on disk under artifacts/ with a matching digest.
+    does_not_own:
+      - Adapter logic
+    depends_on: [C1]
+    status: design
+    mvp: true
+    owner: null
+
+  - id: C2
+    workstream: models
+    role: implementation
+    name: WADEPre
+    purpose: First Model Container. One image, one algorithm.
+    paths: []
+    do:
+      - Dockerfile, adapter, manifest. ONNX mounted from artifacts/.
+    done_when: The handler can start this image and get a NiB-compliant forecast.
+    does_not_own:
+      - Other models
+      - Evaluation
+    depends_on: [C1, W1, E5]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: C3
+    workstream: models
+    role: implementation
+    name: NowcastNet
+    purpose: One Model Container implementing C1.
+    paths: []
+    do:
+      - Same bar as C2.
+    done_when: Same bar as C2.
+    does_not_own:
+      - Other models' normalisation
+    depends_on: [C1, W1, E5]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: C4
+    workstream: models
+    role: implementation
+    name: SimVP
+    purpose: One Model Container implementing C1.
+    paths: []
+    do:
+      - Same bar as C2.
+    done_when: Same bar as C2.
+    does_not_own:
+      - Other models' normalisation
+    depends_on: [C1, W1, E5]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: C5
+    workstream: models
+    role: implementation
+    name: exPreCast
+    purpose: One Model Container implementing C1.
+    paths: []
+    do:
+      - Same bar as C2.
+    done_when: Same bar as C2.
+    does_not_own:
+      - Other models' normalisation
+    depends_on: [C1, W1, E5]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: D1
+    workstream: products
+    role: platform
+    name: Evaluation
+    purpose: Host-side metrics from saved prediction and truth. Lives in review/ with visualization.
+    paths: [review/]
+    do:
+      - MAE, RMSE, CSI. Outside Model Containers.
+    done_when: Changing a CSI threshold does not start inference again.
+    does_not_own:
+      - Inference
+    depends_on: [A3, D3]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: D2
+    workstream: products
+    role: platform
+    name: Visualization
+    purpose: Host-side frame PNGs and comparisons. Lives in review/ with evaluation.
+    paths: [review/]
+    do:
+      - Renderer registry. vil-frames is one renderer.
+    done_when: A new variable can register a renderer without editing SEVIR.
+    does_not_own:
+      - Data decoding
+    depends_on: [A3, D3]
+    status: planned
+    mvp: true
+    owner: null
+
+  - id: D3
+    workstream: products
+    role: platform
+    name: Artifacts
+    purpose: Host download cache for pinned weights and docker config. Run outputs stay in workspace/.
+    paths: [artifacts/]
+    do:
+      - Fetch pinned Hub files into artifacts/. Keep failed-run metadata inspectable.
+    done_when: A failed run is still inspectable.
+    does_not_own:
+      - Writing back into model or data packages
+    depends_on: [A3]
+    status: planned
+    mvp: true
+    owner: null
