@@ -10,29 +10,31 @@ body:
       label: OS
       description: Where you ran the handler.
       options:
-        - linux
-        - macos
-        - windows
+        - Linux (Ubuntu, Debian, etc.)
+        - macOS
+        - Windows
         - more than one
         - not sure
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
       label: Actual
+      description: What happened during the run, describe the error message or unexpected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expectation
+      description: What is your expectation, what should have happened instead?
     validations:
       required: true
   - type: textarea
     id: repro
     attributes:
-      label: Repro
-      description: Commands, OS, Go version, Docker version if relevant.
+      label: Reproduction details
+      description: Procedure to reproduce the bug, if possible. Include commands, OS, Docker version if relevant.
     validations:
       required: true
