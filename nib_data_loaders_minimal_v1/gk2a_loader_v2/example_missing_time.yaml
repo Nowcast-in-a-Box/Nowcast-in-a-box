@@ -1,0 +1,15 @@
+source: gk2a_ami
+
+data_dir: "C:/dataloader/nib_data_loaders_minimal/gk2a_loader_v2/example_data_input"
+
+# Deliberately set to a time without local data
+initial_time: "2022-01-01T00:10:00Z"
+history_steps: 1
+interval_minutes: 10
+
+channels:
+  - sw038
+
+# [west, south, east, north]
+region:
+  bbox: [100.0, 10.0, 145.0, 55.0]

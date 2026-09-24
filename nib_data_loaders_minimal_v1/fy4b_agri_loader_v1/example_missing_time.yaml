@@ -1,0 +1,13 @@
+source: fy4b_agri
+
+data_dir: "C:/dataloader/nib_data_loaders_minimal/fy4b_agri/example_data_input"
+
+initial_time: "2024-09-16T05:00:00Z"
+history_steps: 1
+interval_minutes: 15
+
+channels:
+  - C13
+
+region:
+  bbox: [100.0, 10.0, 145.0, 55.0]
