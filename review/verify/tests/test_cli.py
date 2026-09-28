@@ -86,10 +86,11 @@ def test_missing_config_file_is_reported(capsys):
 
 
 # ----------------------------------------------------------------------
-def test_run_needs_an_init_time(config_file, tmp_path, capsys):
+def test_run_with_no_init_and_no_runs_does_nothing_happily(config_file, tmp_path, capsys):
+    """"There was nothing to do" is a success, not a failure."""
     code = main(["run", "--config", str(config_file), "--root", str(tmp_path / "r"), *MOCK])
-    assert code == EXIT_USAGE
-    assert "--init" in capsys.readouterr().err
+    assert code == EXIT_OK
+    assert "nothing to do" in capsys.readouterr().out
 
 
 def test_run_then_query_end_to_end(config_file, tmp_path, capsys):
