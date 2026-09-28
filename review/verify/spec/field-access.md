@@ -189,6 +189,20 @@ independent of one another, that a query never calls the provider, that
 re-running a completed task reads nothing, and that five thresholds cost the
 same number of prediction reads as two.
 
+Those tests need a forecast that equals the truth, and they are not a good way to
+look at an interface: every CSI comes back `1.0` and a display that prints `1.0`
+forever looks correct. So the generator also knows how to be *interesting* —
+several advected cells, a lagging forecast, models of different skill, coverage
+gaps, runs that produced nothing. That is bundled into named scenarios in
+`nib_verify/access/scenario.py` and reached with `--scenario`:
+
+```bash
+python -m nib_verify datafeed serve --access mock --scenario convective
+```
+
+Every knob defaults to off, so the bare generator is unchanged and the acceptance
+tests above still run against a perfect forecast.
+
 ---
 
 ## Conformance checklist

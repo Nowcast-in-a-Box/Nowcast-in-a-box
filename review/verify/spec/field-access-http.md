@@ -178,6 +178,9 @@ and does not attempt to police what is underneath it.
 # serve the generator
 python -m nib_verify datafeed serve --access mock --port 8770
 
+# ... or a named bundle of settings that produces something worth looking at
+python -m nib_verify datafeed serve --access mock --scenario convective --port 8770
+
 # serve files on disk (see nib_verify/access/replay.py for the layout)
 python -m nib_verify datafeed serve --access replay --mock root=/data/samples
 
@@ -195,6 +198,22 @@ python -m nib_verify task run --config cfg.json --root .store \
 `datafeed check` runs the conformance checklist from `field-access.md` against
 whatever is at the address. It is meant to be usable as a gate before a long run,
 and against the platform's provider once it exists.
+
+### What the mock serves
+
+`--access mock` alone is one drifting blob with a forecast that equals the truth,
+which is what the acceptance tests need and a poor thing to develop an interface
+against. `--scenario` names a bundle of settings that fixes that:
+
+| | |
+|---|---|
+| `simple` | one blob on the VIL scale, a perfect forecast, nothing missing |
+| `convective` | discrete cells on a flow, two models of different skill, radar coverage gaps |
+| `widespread` | smooth stratiform rain over most of the domain |
+| `patchy` | every third run produces nothing, one lead is missing, a fifth of the grid is a hole |
+
+Each is constructor keyword arguments, so `--mock` overrides any of it. See
+`nib_verify/access/scenario.py`.
 
 `--access real` is an alias for `--access http`. It **fails without
 `--data-url`** — this module does not guess an address, the same way it does not

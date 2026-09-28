@@ -13,7 +13,7 @@ as an RFC; this directory is the implementation that follows it.
 ```bash
 cd review/verify
 pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
-python -m pytest                   # 382 tests, no GPU, no network, no data
+python -m pytest                   # 414 tests, no GPU, no network, no data
 ```
 
 The command line:
@@ -103,7 +103,7 @@ still there, unaggregated.
 | `nib_verify/query/` | the read path |
 | `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 382 tests, all synthetic |
+| `tests/` | 414 tests, all synthetic |
 
 ---
 
@@ -149,6 +149,47 @@ the generator — which is why it is also the reference a platform team can copy
 
 Running the same config through `--access real` and `--access mock` gives
 identical readings, and a test asserts it: the client is meant to be transparent.
+
+### What the mock actually generates, and why it had to change
+
+The generator's defaults are one drifting blob with a forecast that **equals the
+truth**. That is exactly what the acceptance tests need, and it is the worst
+possible thing to develop an interface against: every CSI comes back `1.0`, every
+threshold looks identical, and a display that prints `1.0` forever looks correct.
+
+So there are named scenarios, reachable in one flag:
+
+```bash
+python -m nib_verify datafeed serve --access mock --scenario convective
+python -m nib_verify task run  --access mock --scenario convective ...
+```
+
+| Scenario | What it is |
+|---|---|
+| `simple` | one blob on the VIL scale, a perfect forecast, nothing missing |
+| `convective` | discrete cells on a flow, two models of different skill, radar coverage gaps |
+| `widespread` | smooth stratiform rain over most of the domain |
+| `patchy` | every third run produces nothing, one lead is missing, a fifth of the grid is a hole |
+
+Each is a bundle of constructor settings rather than a separate generator, and an
+explicit `--mock` value wins over the bundle, so `--scenario convective --mock
+peak=300` works. Leaving `--scenario` off gives the constructor's own defaults,
+which is what every existing test uses — the new knobs are strictly additive and
+`cells=1, drift=0` is still the same field to the last bit.
+
+The knobs earn their place by making a specific mistake visible:
+
+| Knob | What it turns on |
+|---|---|
+| `cells`, `drift`, `background` | a field with a distribution — cores, edges and a floor — so thresholds have something to disagree about |
+| `forecast_lag_minutes` | a forecast that is the field from **earlier**, not a blurred one. Structure right, position wrong: a high threshold loses it entirely, a low threshold barely notices |
+| `skill_spread` | models in the order declared, getting worse. A comparison needs a winner |
+| `missing_kind=range` | a coverage gap that is *contiguous*, next to random speckle. A large hole catches a resampler that fills; scattered points catch one that smears |
+| `missing_runs_every`, `drop_leads` | runs that produced nothing and leads that are missing, so the planner's rejections and the run's `unavailable` count do something instead of being read about |
+
+With `convective`, CSI runs from about `0.93` at 16 down to `0.67` at 219, and
+the better model wins at every threshold. Which is the point: numbers you can be
+wrong about.
 
 ### What the wire format had to decide
 
@@ -298,6 +339,7 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_http_access.py` | the client against the service, over a real socket |
 | `tests/test_conformance.py` | the checklist, and proof that broken providers fail it |
 | `tests/test_cli_datafeed.py` | the datafeed commands, and that `real` still cannot be a hole |
+| `tests/test_scenario.py` | the named scenarios, and that they are not a perfect forecast |
 
 Nothing here needs a GPU, a network, or a data file. The browser tests skip unless
 playwright can find a browser; with Edge or Chrome installed no download is
@@ -316,8 +358,11 @@ caught by the browser.
 
 Deliberately out of scope so far:
 
-- the platform's own field provider — the contract, the client and a working
-  reference service are done, and pointing at theirs is a URL;
+- the platform's own field provider — the contract, the client, a working
+  reference service and simulated data good enough to develop against are all
+  done, and pointing at theirs is a URL;
+- **real sample files.** There are none yet, so `ReplayAccess` is unexercised
+  beyond its own tests. `--scenario convective` is what stands in for them;
 - deriving `extent` and `resolution` from the data (they are entered by hand);
 - inserting a verification task into the platform's own scheduler;
 - charts — the results table is a table.

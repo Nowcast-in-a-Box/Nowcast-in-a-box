@@ -4,3 +4,4 @@ _tmp/
 *.sqlite-wal
 *.sqlite-shm
 _shot/
+_demo/
