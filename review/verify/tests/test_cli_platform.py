@@ -16,7 +16,12 @@ from nib_verify.cli import EXIT_FAILURE, EXIT_OK, main
 from nib_verify.config import dump, load
 from nib_verify.store import Store
 
-from .conftest import MODEL_MANIFEST, make_config, write_json
+from .conftest import MODEL_MANIFEST, make_config, write_json, write_yaml
+
+EXPOSED_YAML = """review:
+  host: 0.0.0.0
+  port: 8766
+"""
 
 MOCK = [
     "--access", "mock",
@@ -329,3 +334,89 @@ def test_config_delete_on_a_missing_file(config_file, tmp_path, capsys):
     assert main(["config", "delete", str(tmp_path / "nope.json"),
                  "--root", str(tmp_path)]) == EXIT_FAILURE
     assert "does not exist" in capsys.readouterr().err
+
+
+# ======================================================================
+# serve
+# ======================================================================
+def _serve_args(platform, tmp_path):
+    return [
+        "serve", "--root", str(tmp_path / "verify-root"),
+        "--configs", str(tmp_path / "configs"),
+        "--host-config", str(platform.config_path),
+        *MOCK,
+        *[x for r in platform.packages for x in ("--packages", str(r))],
+        "--runs", str(platform.runs_root),
+    ]
+
+
+def test_serve_takes_its_bind_address_from_config_yaml(platform, tmp_path, monkeypatch, capsys):
+    """AGENTS.md puts the review page on loopback, at a port config.yaml owns."""
+    import uvicorn
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run",
+                        lambda app, host, port, log_level: seen.update(host=host, port=port))
+
+    code = main(_serve_args(platform, tmp_path))
+    assert code == EXIT_OK, capsys.readouterr().err
+    assert seen == {"host": "127.0.0.1", "port": 8766}
+    assert "127.0.0.1:8766" in capsys.readouterr().out
+
+
+def test_serve_refuses_a_non_loopback_address(platform, tmp_path, monkeypatch, capsys):
+    """Obeying config.yaml off loopback is the one thing not to do quietly."""
+    import uvicorn
+
+    started = []
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: started.append(True))
+
+    exposed = platform.root / "exposed.yaml"
+    write_yaml(exposed, EXPOSED_YAML)
+
+    args = _serve_args(platform, tmp_path)
+    args[args.index("--host-config") + 1] = str(exposed)
+    code = main(args)
+
+    assert code == EXIT_FAILURE
+    assert started == []
+    assert "not loopback" in capsys.readouterr().err
+
+
+def test_serve_can_be_told_to_expose_itself_anyway(platform, tmp_path, monkeypatch, capsys):
+    import uvicorn
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run",
+                        lambda app, host, port, log_level: seen.update(host=host, port=port))
+
+    exposed = platform.root / "exposed.yaml"
+    write_yaml(exposed, EXPOSED_YAML)
+
+    args = _serve_args(platform, tmp_path)
+    args[args.index("--host-config") + 1] = str(exposed)
+    args.append("--allow-remote")
+    assert main(args) == EXIT_OK
+    assert seen["host"] == "0.0.0.0"
+
+
+def test_serve_can_override_the_port(platform, tmp_path, monkeypatch, capsys):
+    import uvicorn
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run",
+                        lambda app, host, port, log_level: seen.update(port=port))
+    assert main(_serve_args(platform, tmp_path) + ["--port", "9000"]) == EXIT_OK
+    assert seen["port"] == 9000
+
+
+def test_serve_starts_even_when_the_provider_is_unavailable(platform, tmp_path, monkeypatch, capsys):
+    """The page should come up and say so, rather than refusing to start."""
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda app, host, port, log_level: None)
+
+    args = _serve_args(platform, tmp_path)
+    args[args.index("--access") + 1] = "real"          # deliberately not implemented
+    assert main(args) == EXIT_OK
+    assert "unavailable" in capsys.readouterr().out

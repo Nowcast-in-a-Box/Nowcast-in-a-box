@@ -1,0 +1,145 @@
+"""The page and the API must agree.
+
+The interface is written in plain JavaScript with no build step, so nothing
+checks at compile time that the paths it calls exist. These tests do that
+instead: every ``/api/...`` the page mentions must be a route the service
+registers, and every file the page loads must be served. A typo in either
+direction is a blank screen in a browser, which is exactly the kind of failure
+that is expensive to find by hand and cheap to find here.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+from nib_verify.catalog.hostconfig import load as load_host
+from nib_verify.server import create_app
+
+from .conftest import make_access, make_config
+
+STATIC = Path(__file__).resolve().parents[1] / "nib_verify" / "server" / "static"
+
+#: the page writes a call either literally or as a template string with an id
+#: interpolated into it, so the match has to allow the interpolated expression
+API_CALL = re.compile(r"/api/[A-Za-z0-9_\-/$(){}.:]+")
+
+PLAIN_SEGMENT = re.compile(r"[a-z][a-z0-9_\-]*")
+
+
+def normalise(raw: str) -> str:
+    """``/api/configs/${encodeURIComponent(id)}/roster`` -> ``/api/configs/{x}/roster``."""
+    parts = [piece for piece in raw.rstrip("/").split("/") if piece]
+    return "/" + "/".join(
+        piece if PLAIN_SEGMENT.fullmatch(piece) else "{x}" for piece in parts
+    )
+
+
+@pytest.fixture
+def app(platform, tmp_path):
+    return create_app(
+        root=tmp_path / "root",
+        configs=tmp_path / "configs",
+        packages=platform.packages,
+        runs=[platform.runs_root],
+        host=load_host(platform.config_path),
+        access=make_access(),
+    )
+
+
+def registered_paths(app) -> set[str]:
+    return {getattr(route, "path", "") for route in app.routes}
+
+
+def page_calls() -> set[str]:
+    text = (STATIC / "app.js").read_text(encoding="utf-8")
+    return {normalise(match.group(0)) for match in API_CALL.finditer(text)}
+
+
+# ======================================================================
+def test_the_page_exists_and_is_not_empty():
+    for name in ("index.html", "app.js", "style.css"):
+        path = STATIC / name
+        assert path.is_file(), f"{name} is missing"
+        assert path.stat().st_size > 500, f"{name} looks truncated"
+
+
+def test_every_api_path_the_page_calls_is_registered(app):
+    """The guard that would have caught a typo in a fetch URL."""
+    available = {normalise(p) for p in registered_paths(app) if "/api/" in p}
+    missing = sorted(call for call in page_calls() if call not in available)
+    assert not missing, (
+        f"the page calls {missing}, which the service does not serve. "
+        f"Registered: {sorted(available)}"
+    )
+
+
+def test_the_page_uses_the_endpoints_it_was_given(app):
+    """A regex that matched nothing would make the test above useless.
+
+    Not every route has to be used — some exist for scripts — but the page is
+    expected to reach for the ones it is built on.
+    """
+    calls = page_calls()
+    assert len(calls) >= 10, sorted(calls)
+    for expected in ("/api/configs", "/api/catalog", "/api/metrics",
+                     "/api/plan", "/api/runs", "/api/scores"):
+        assert expected in calls, expected
+
+
+def test_every_static_file_the_page_loads_is_served(app):
+    from fastapi.testclient import TestClient
+
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    referenced = set(re.findall(r'(?:src|href)="(/static/[^"]+)"', html))
+    referenced |= set(re.findall(r'(/api/[A-Za-z0-9_\-/]*)', html))
+
+    with TestClient(app) as client:
+        for path in sorted(referenced):
+            response = client.get(path)
+            assert response.status_code == 200, f"{path} -> {response.status_code}"
+
+
+def test_the_page_declares_no_remote_dependencies(app):
+    """The host may have no internet. Everything must come from this process."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert "http://" not in html and "https://" not in html
+    assert "cdn." not in html
+
+
+def test_the_locale_is_declared():
+    """A missing charset turns a non-ASCII config name into mojibake."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert '<meta charset="utf-8">' in html
+    assert '<html lang="en">' in html
+
+
+# ======================================================================
+def test_the_form_fields_the_page_reads_are_the_ones_it_has():
+    """``buildSpec`` reads a fixed set of element ids out of index.html."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    ids = set(re.findall(r'id="([^"]+)"', html))
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    # some elements are built by the page rather than written in the markup
+    ids |= set(re.findall(r'id: "([A-Za-z0-9_\-]+)"', js))
+
+    read = set(re.findall(r'\$\("#([A-Za-z0-9_\-]+)"', js))
+    read |= set(re.findall(r"\$\('#([A-Za-z0-9_\-]+)'", js))
+    missing = sorted(i for i in read if i not in ids)
+    assert not missing, f"the page reads #{missing}, which nothing defines"
+
+
+def test_the_wizard_has_the_five_blocks_the_design_calls_for():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    steps = re.findall(r'<span class="step">(\d)</span>', html)
+    assert steps == ["1", "2", "3", "4", "5"]
+
+
+def test_every_static_file_on_disk_is_reachable():
+    """A file nothing loads is either dead weight or a broken reference."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    for path in sorted(STATIC.iterdir()):
+        if path.is_file() and path.name != "index.html":
+            assert path.name in html, f"{path.name} is never loaded by index.html"
