@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NiB verification</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>NiB verification</h1>
+    <div class="sub">Metrics from saved prediction and truth. Changing a threshold does not start inference again.</div>
+  </div>
+  <nav id="tabs">
+    <button data-tab="configs" aria-selected="true">Configs</button>
+    <button data-tab="create">New config</button>
+    <button data-tab="results">Results</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ==================================================== configs -->
+<section id="tab-configs">
+  <div class="card">
+    <h2>Verification configs</h2>
+    <p class="hint">
+      One config fixes three things: the <strong>ruler</strong> (what is compared, on which
+      grid, at what step), the <strong>roster</strong> (which members, over which dates),
+      and the <strong>metrics</strong>. The ruler cannot be edited — a change to it needs a
+      new config, because the numbers before and after would not be comparable.
+    </p>
+    <div class="row">
+      <button class="act ghost" id="btn-reload-configs">Refresh</button>
+      <span class="spacer"></span>
+      <span class="muted tiny" id="configs-source"></span>
+    </div>
+    <div id="configs-list"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div id="config-detail" hidden></div>
+</section>
+
+<!-- ==================================================== create -->
+<section id="tab-create" hidden>
+  <div class="card">
+    <h2><span class="step">1</span>Identity</h2>
+    <p class="hint">A name for the config, and a note about why it exists.</p>
+    <div class="grid">
+      <div class="field">
+        <label for="c-id">Group id</label>
+        <input id="c-id" placeholder="vil-east-china" autocomplete="off">
+        <span class="note">Becomes the file name. Letters, digits, dashes, underscores.</span>
+      </div>
+      <div class="field">
+        <label for="c-name">Display name</label>
+        <input id="c-name" placeholder="VIL, east China, 2026 season" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="c-notes">Notes</label>
+        <input id="c-notes" placeholder="optional" autocomplete="off">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">2</span>The ruler</h2>
+    <p class="hint">
+      Fixed for the life of the config. The truth source, the grid, the step and the
+      unit together decide the denominator and the mask, so changing any of them
+      changes what the numbers mean.
+    </p>
+    <div class="grid">
+      <div class="field">
+        <label for="c-truth">Truth source</label>
+        <input id="c-truth" list="truth-options" placeholder="radar-composite" autocomplete="off">
+        <datalist id="truth-options"></datalist>
+        <span class="note" id="truth-note"></span>
+      </div>
+      <div class="field">
+        <label for="c-variable">Variable</label>
+        <input id="c-variable" placeholder="vil" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="c-unit">Unit</label>
+        <input id="c-unit" placeholder="kg m-2" autocomplete="off">
+        <span class="note">Must match every member, or nothing is computed.</span>
+      </div>
+      <div class="field">
+        <label for="c-step">Time step (minutes)</label>
+        <input id="c-step" list="step-options" type="number" min="1" placeholder="10" autocomplete="off">
+        <datalist id="step-options"></datalist>
+        <span class="note">Not interpolated at run time — the cadence is fixed.</span>
+      </div>
+    </div>
+    <div class="grid tight" style="margin-top:12px">
+      <div class="field"><label for="c-lon0">lon min</label><input id="c-lon0" type="number" step="any" placeholder="110"></div>
+      <div class="field"><label for="c-lat0">lat min</label><input id="c-lat0" type="number" step="any" placeholder="25"></div>
+      <div class="field"><label for="c-lon1">lon max</label><input id="c-lon1" type="number" step="any" placeholder="125"></div>
+      <div class="field"><label for="c-lat1">lat max</label><input id="c-lat1" type="number" step="any" placeholder="42"></div>
+      <div class="field"><label for="c-res">Resolution (°)</label><input id="c-res" type="number" step="any" placeholder="0.05"></div>
+    </div>
+    <input type="hidden" id="c-fingerprint">
+  </div>
+
+  <div class="card">
+    <h2><span class="step">3</span>The roster</h2>
+    <p class="hint">
+      Which members this config verifies, and over which dates. Membership is what
+      changes over time — a member is added or has a last day, and the record is kept
+      either way.
+    </p>
+    <div id="members"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="act quiet" id="btn-add-member">Add member</button>
+      <span class="muted tiny" id="member-hint"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">4</span>The metrics</h2>
+    <p class="hint">
+      Grouped by family, because everything in a family shares one set of parameters
+      and is accumulated in the same pass. Levels and windows are parameters, not
+      separate metrics: adding a threshold adds rows, adding a metric does not.
+    </p>
+    <div id="metric-groups"></div>
+    <div class="groupbox" style="background:#fafbfe">
+      <div class="grid">
+        <div class="field">
+          <label for="m-family">Family</label>
+          <select id="m-family"></select>
+        </div>
+        <div class="field">
+          <label for="m-levels">Levels</label>
+          <input id="m-levels" placeholder="181, 219" autocomplete="off">
+          <span class="note">Comma separated. Only the families that need them.</span>
+        </div>
+        <div class="field">
+          <label for="m-windows">Half windows</label>
+          <input id="m-windows" placeholder="2, 4" autocomplete="off">
+          <span class="note">In grid cells, for the neighbourhood metrics.</span>
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>Metrics in this family</label>
+        <div class="chips" id="m-items"></div>
+      </div>
+      <div class="row end" style="margin-top:10px">
+        <button class="act ghost" id="btn-add-metric-group">Add this group</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">5</span>Preview, then save</h2>
+    <p class="hint">
+      The preview plans against the runs this server can see. It does not read a single
+      field, so it is cheap; switch on <em>probe the provider</em> to also ask which
+      frames actually exist.
+    </p>
+    <div class="row">
+      <button class="act" id="btn-preview">Preview plan</button>
+      <label class="row tiny"><input type="checkbox" id="c-probe"> probe the provider</label>
+      <label class="row tiny"><input type="checkbox" id="c-strict" checked> refuse on catalog warnings</label>
+      <span class="spacer"></span>
+      <button class="act ghost" id="btn-save">Create config</button>
+    </div>
+    <div id="preview"></div>
+  </div>
+</section>
+
+<!-- ==================================================== results -->
+<section id="tab-results" hidden>
+  <div class="card">
+    <h2>Query stored quantities</h2>
+    <p class="hint">
+      This reads counts and sums from the store. It never opens a field, so a new
+      threshold over an existing level set costs nothing — which is the whole point.
+    </p>
+    <div class="grid">
+      <div class="field">
+        <label for="q-config">Config</label>
+        <select id="q-config"></select>
+      </div>
+      <div class="field">
+        <label for="q-method">Metric</label>
+        <select id="q-method"></select>
+      </div>
+      <div class="field">
+        <label for="q-g">Expand by</label>
+        <select id="q-g" multiple size="4"></select>
+        <span class="note">Order matters: the last becomes the x-axis.</span>
+      </div>
+    </div>
+    <div class="grid tight" style="margin-top:10px">
+      <div class="field"><label for="q-lead">Lead minutes</label><input id="q-lead" placeholder="all" autocomplete="off"></div>
+      <div class="field"><label for="q-level">Levels</label><input id="q-level" placeholder="all" autocomplete="off"></div>
+      <div class="field"><label for="q-window">Half windows</label><input id="q-window" placeholder="all" autocomplete="off"></div>
+      <div class="field"><label for="q-time-from">Valid from</label><input id="q-time-from" placeholder="2026-01-01T00:00:00Z" autocomplete="off"></div>
+      <div class="field"><label for="q-time-to">Valid to</label><input id="q-time-to" placeholder="2026-01-02T00:00:00Z" autocomplete="off"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="act" id="btn-query">Run query</button>
+      <span class="muted tiny" id="query-hint"></span>
+    </div>
+    <div id="query-result"></div>
+  </div>
+
+  <div class="card">
+    <h2>Coverage</h2>
+    <p class="hint">What has been verified, and what is missing.</p>
+    <div id="coverage"><div class="empty">Run a query, or pick a config above.</div></div>
+  </div>
+</section>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
