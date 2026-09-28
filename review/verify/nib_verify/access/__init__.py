@@ -30,6 +30,7 @@ from .base import (
 from .conformance import Check, Report, check_provider
 from .factory import PROVIDERS, build_access
 from .http import HttpAccess, HttpAccessError
+from . import scenario
 from .probe import AccessLog, CountingAccess
 from .synthetic import SyntheticAccess
 from .wire import PROTOCOL, WireError
@@ -54,6 +55,7 @@ __all__ = [
     "check_provider",
     "coords_from_extent",
     "describe_capabilities",
+    "scenario",
 ]
 
 

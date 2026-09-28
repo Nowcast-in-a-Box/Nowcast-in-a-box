@@ -41,8 +41,14 @@ def build_access(kind: str = "mock", **kwargs) -> FieldAccess:
     kind = (kind or "mock").lower()
 
     if kind == "mock":
+        from .scenario import settings as scenario_settings
         from .synthetic import SyntheticAccess
-        return SyntheticAccess(**kwargs)
+
+        # A scenario is a starting point, not a fixed menu: explicit settings win
+        # over the bundle, so --scenario convective --mock peak=300 works.
+        name = kwargs.pop("scenario", None)
+        base = scenario_settings(name) if name else {}
+        return SyntheticAccess(**{**base, **kwargs})
 
     if kind == "replay":
         from .replay import ReplayAccess
