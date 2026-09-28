@@ -3,3 +3,4 @@ _tmp/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+_shot/
