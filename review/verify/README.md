@@ -12,7 +12,7 @@ as an RFC; this directory is the implementation that follows it.
 
 ```bash
 cd review/verify
-python -m pytest                 # 106 tests, no GPU, no network, no data
+python -m pytest                 # 192 tests, no GPU, no network, no data
 ```
 
 The command line:
@@ -21,18 +21,27 @@ The command line:
 # what can be computed
 python -m nib_verify metrics list
 
+# what the platform already has
+python -m nib_verify host show                  # its config.yaml, resolved
+python -m nib_verify catalog packages           # manifests it ships
+python -m nib_verify catalog runs               # runs it has done
+python -m nib_verify catalog match              # which data/model pairs are legal
+
 # check a config against the provider before running anything
 python -m nib_verify config validate cfg.json --access mock
 
+# what this config would do, and what it cannot
+python -m nib_verify task plan --config cfg.json --runs <RUNS> --probe
+
 # run, then read
-python -m nib_verify run --config cfg.json --root .store \
-    --access mock --init 2026-01-01T00:00Z
+python -m nib_verify task run --config cfg.json --root .store --runs <RUNS>
 python -m nib_verify query --method ts --config cfg.json --root .store \
     -s level=181,219 -g lead_minutes -g level
 ```
 
-Everything takes `--root`. The root holds one SQLite file and one lock file;
-nothing else is written outside it.
+`--root` is where we write: one SQLite file and one lock file, nothing else.
+Where the platform's paths are involved we read its own `config.yaml` rather
+than guessing — see [spec/catalog.md](spec/catalog.md).
 
 ---
 
@@ -66,20 +75,26 @@ still there, unaggregated.
 |---|---|
 | `spec/field-access.md` | the contract we build against, and its five guarantees |
 | `spec/verification-config.md` | the config format and its mutability rules |
+| `spec/catalog.md` | how we read the platform, and what we refuse to assume |
 | `nib_verify/access/` | the field contract, and the mock providers |
+| `nib_verify/catalog/` | the host's config, package manifests, run configs, matching |
 | `nib_verify/config/` | the config, validation, and change detection |
-| `nib_verify/core/` | regridding, additive quantities, metric formulas |
+| `nib_verify/core/` | regridding, additive quantities, metric formulas, planning |
 | `nib_verify/store/` | SQLite: quantities and task state |
 | `nib_verify/runner/` | task execution, progress, the single-instance lock |
 | `nib_verify/query/` | the read path |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 106 tests, all synthetic |
+| `tests/` | 192 tests, all synthetic |
 
 ---
 
 ## Where the data comes from
 
-**It does not exist yet.** The platform's field provider is specified in
+Two separate questions, with two separate answers.
+
+### Fields
+
+**The provider does not exist yet.** It is specified in
 `spec/field-access.md` and not built, so this module ships two substitutes:
 
 | Provider | Reads | Use |
@@ -93,6 +108,19 @@ against generated numbers would be worse than one that refuses to start.
 
 The rest of this module only knows the interface, so switching to the platform's
 provider later is one flag.
+
+### Packages and runs
+
+These *do* exist, and `AGENTS.md` is explicit that we must not assume a layout
+for them:
+
+> Do not invent a catalog tree for data and models until that layout is designed.
+
+The host's paths are read from its own `config.yaml`, the way `handler/config.go`
+reads them. Package manifests and run configs are found by walking a root the
+caller names and recognising files **by what they contain** — a manifest by its
+`offers`/`requires`, a run config by its `data`/`model`/`run` sections. Move every
+package somewhere else and discovery still works. See `spec/catalog.md`.
 
 ### What the mock buys
 
@@ -124,6 +152,9 @@ These are the invariants the design rests on. Each one has a test.
 | The ruler is immutable; changing it needs a new config | `config/schema.py` |
 | Metrics are append-only | `config/schema.py` |
 | A failure in one task never stops the run, and never propagates | `runner/executor.py` |
+| A missing data root is a refusal, not a default | `catalog/hostconfig.py` |
+| A package is identified by what it declares, not where it sits | `catalog/packages.py`, `catalog/runs.py` |
+| An empty plan caused by rejections is an error, not a quiet success | `cli.py` |
 
 The unit rule is worth calling out, because its absence would be invisible. Every
 threshold in a config is written in the ruler's unit. If a provider hands back a
@@ -164,7 +195,10 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_regrid.py` | alignment, missing-data propagation, unit and time guards |
 | `tests/test_config.py` | the three mutability rules |
 | `tests/test_runner.py` | isolation, gaps, task state, the lock |
+| `tests/test_catalog.py` | host config, content-based discovery, the Matcher's rules |
+| `tests/test_planner.py` | every rejection reason, probing, several members |
 | `tests/test_cli.py` | exit codes, progress modes, end-to-end run and query |
+| `tests/test_cli_platform.py` | the platform-facing commands, end to end |
 
 Nothing here needs a GPU, a network, or a data file.
 
@@ -172,7 +206,7 @@ Nothing here needs a GPU, a network, or a data file.
 
 ## Not done yet
 
-Deliberately out of scope for this pass:
+Deliberately out of scope so far:
 
 - the web interface and the resident query service;
 - the real field provider;
