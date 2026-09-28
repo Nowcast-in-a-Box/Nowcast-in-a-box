@@ -6,6 +6,7 @@ Everything here is synthetic and deterministic: no files, no network, no GPU.
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -242,3 +243,57 @@ def platform(tmp_path) -> PlatformTree:
         packages=[root / "bundle-a", root / "bundle-b"],
         runs_root=runs_root,
     )
+
+
+# ======================================================================
+# the field service, for tests that need a real socket
+# ======================================================================
+@contextmanager
+def serve_data(access, *, host: str = "127.0.0.1"):
+    """Run the reference field service on a free port, for the duration.
+
+    A real socket rather than a test transport, on purpose: the client's whole
+    job is to be a client, and a fake transport would test everything about it
+    except the part that can be wrong — what happens when a server closes an idle
+    connection, or is not there at all.
+
+    ``access`` is captured as given, so a caller that passes a
+    :class:`~nib_verify.access.probe.CountingAccess` can read back what the
+    client actually asked for.
+    """
+    pytest.importorskip("fastapi", reason="the field service needs fastapi")
+    import threading
+    import time
+
+    import uvicorn
+
+    from nib_verify.access.mockfeed import create_data_app
+
+    config = uvicorn.Config(
+        create_data_app(access), host=host, port=0, log_level="error", access_log=False
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    for _ in range(400):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:  # pragma: no cover
+        raise RuntimeError("the reference field service did not start")
+
+    port = server.servers[0].sockets[0].getsockname()[1]
+    try:
+        yield f"http://{host}:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+
+
+@pytest.fixture
+def data_service():
+    """The reference service, with a counter in front of the provider."""
+    counted = CountingAccess(make_access(missing_points=150))
+    with serve_data(counted) as url:
+        yield url, counted

@@ -2,7 +2,8 @@
 
 **Status:** the contract we build against. **No platform implementation exists
 yet.** A deterministic reference implementation ships with this module so work
-does not have to wait — see [Providers](#providers) below.
+does not have to wait — see [Providers](#providers) below. The wire binding is in
+[field-access-http.md](field-access-http.md).
 
 **Scope:** how the verification module asks for a field of numbers. One
 observation at one valid time, or one prediction at one lead. Nothing else.
@@ -130,27 +131,46 @@ time, `capabilities().retrospective` says so and the planner plans around it.
 
 ## Providers
 
-Two implementations ship with this module. Neither is a standard; they exist so
-the module can be built and tested before the platform's provider arrives.
+Three implementations ship with this module. None of them is a standard; they
+exist so the module can be built and tested before the platform's provider
+arrives.
 
 | Provider | Source | Purpose |
 |---|---|---|
 | `SyntheticAccess` | generated, seeded | unit tests, CI, metric correctness |
 | `ReplayAccess` | `.npy` / `.npz` on disk | integration runs against real sample files |
-| *(the platform's)* | TBD | production |
+| `HttpAccess` | a service, over HTTP | **the one the platform will provide** |
 
 Selection is a single switch, because everything above this line treats the
 provider as an interface:
 
 ```
---field-access mock     # default while the platform one does not exist
---field-access replay
---field-access real     # raises until it is implemented
+--access mock                        # generated, in process (the default)
+--access replay --mock root=DIR      # .npy on disk, in process
+--access http --data-url URL         # a service speaking field-access-http.md
+--access real --data-url URL         # the same thing, spelled the other way
 ```
 
-`--field-access real` deliberately raises rather than falling back to generated
-data. A build that silently verifies against made-up numbers would be worse than
-a build that refuses to start.
+`--access http` and `--access real` are the same provider. `real` used to raise,
+and the reason was good: a build that silently verifies against made-up numbers
+would be worse than a build that refuses to start. That reason still holds, and
+is now kept a different way — there is an address to supply and this module will
+not invent one, so `--access real` with no `--data-url` fails with
+
+> the field provider needs an address and this module does not guess one.
+
+There is exactly one way to verify against generated data, and it is to type
+`--access mock`.
+
+[field-access-http.md](field-access-http.md) is the wire binding: the addresses,
+the encoding, and the error shapes. `nib_verify/access/mockfeed.py` implements it
+and wraps *any* provider, so it is both the thing this module is developed
+against and the reference the platform can copy:
+
+```bash
+python -m nib_verify datafeed serve --access mock --port 8770
+python -m nib_verify datafeed check --url http://127.0.0.1:8770
+```
 
 ### Why the mock matters
 
@@ -173,7 +193,16 @@ same number of prediction reads as two.
 
 ## Conformance checklist
 
-A provider is usable when all of these hold.
+A provider is usable when all of these hold. They are not a paragraph to hold in
+your head: `check_provider` runs them, and
+
+```bash
+python -m nib_verify datafeed check --access mock      # or --url http://host:port
+```
+
+prints the answer and exits non-zero on a failure. A skip is not a pass — a
+provider with nothing missing cannot demonstrate that missing data survives, and
+the report says so rather than claiming conformance.
 
 - [ ] `capabilities()` returns a cadence, and every time it serves is on it.
 - [ ] `get_observation` / `get_prediction` raise `FieldUnavailable` for an
@@ -184,6 +213,14 @@ A provider is usable when all of these hold.
 - [ ] `list_predictions` returns only leads that `get_prediction` can serve.
 - [ ] Times are timezone-aware and in UTC.
 - [ ] Historical times work, or `retrospective` is `False`.
+
+One item on that list cannot be checked from outside, and it is worth naming
+rather than pretending otherwise. **"No missing point is written as `0`" is not
+decidable** by a consumer: a mask makes any fill value legal, including zero, so
+"a hole filled with 0" and "a real 0, correctly masked" are the same bytes. What
+is checkable is the half that matters to a metric — nothing outside the mask may
+be non-finite, and every masked point must read as NaN. Both are checked, and
+what a provider keeps *under* the mask is reported rather than judged.
 
 ---
 

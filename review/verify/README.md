@@ -13,7 +13,7 @@ as an RFC; this directory is the implementation that follows it.
 ```bash
 cd review/verify
 pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
-python -m pytest                   # 260 tests, no GPU, no network, no data
+python -m pytest                   # 382 tests, no GPU, no network, no data
 ```
 
 The command line:
@@ -21,6 +21,10 @@ The command line:
 ```bash
 # what can be computed
 python -m nib_verify metrics list
+
+# the simulated data interface: serve a provider, and check one
+python -m nib_verify datafeed serve --access mock --port 8770
+python -m nib_verify datafeed check --url http://127.0.0.1:8770
 
 # what the platform already has
 python -m nib_verify host show                  # its config.yaml, resolved
@@ -87,9 +91,10 @@ still there, unaggregated.
 | Path | What lives there |
 |---|---|
 | `spec/field-access.md` | the contract we build against, and its five guarantees |
+| `spec/field-access-http.md` | the wire binding, and the simulated data interface |
 | `spec/verification-config.md` | the config format and its mutability rules |
 | `spec/catalog.md` | how we read the platform, and what we refuse to assume |
-| `nib_verify/access/` | the field contract, and the mock providers |
+| `nib_verify/access/` | the field contract, the wire format, the client, the reference service |
 | `nib_verify/catalog/` | the host's config, package manifests, run configs, matching |
 | `nib_verify/config/` | the config, validation, and change detection |
 | `nib_verify/core/` | regridding, additive quantities, metric formulas, planning |
@@ -98,7 +103,7 @@ still there, unaggregated.
 | `nib_verify/query/` | the read path |
 | `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 260 tests, all synthetic |
+| `tests/` | 382 tests, all synthetic |
 
 ---
 
@@ -108,20 +113,55 @@ Two separate questions, with two separate answers.
 
 ### Fields
 
-**The provider does not exist yet.** It is specified in
-`spec/field-access.md` and not built, so this module ships two substitutes:
+The platform's provider does not exist yet. It is specified in
+`spec/field-access.md`, the wire binding is in `spec/field-access-http.md`, and
+this module builds and tests against **a service of our own that speaks it**:
 
 | Provider | Reads | Use |
 |---|---|---|
-| `mock` (default) | nothing — a seeded Gaussian blob | tests, CI, development |
-| `replay` | `.npy` / `.npz` on disk | integration runs against real samples |
-| `real` | — | raises, deliberately |
+| `mock` (default) | nothing — a seeded Gaussian blob, in process | tests, CI, development |
+| `replay` | `.npy` / `.npz` on disk, in process | integration runs against real samples |
+| `http` | a service over a socket | **the shape the platform's provider will have** |
+| `real` | the same as `http` | spelled the other way |
 
-`--access real` raises rather than falling back. A build that silently verified
-against generated numbers would be worse than one that refuses to start.
+`--access real` needs a `--data-url` and refuses without one. Inventing an
+address would be the same mistake as inventing a host path, and there is exactly
+one way to verify against generated numbers: type `--access mock`.
 
-The rest of this module only knows the interface, so switching to the platform's
-provider later is one flag.
+So the simulated data interface is two files, and between them they close the
+gap:
+
+```bash
+# the service: any provider, at the contract's addresses
+python -m nib_verify datafeed serve --access mock --port 8770
+
+# is what is at that address actually a field provider?
+python -m nib_verify datafeed check --url http://127.0.0.1:8770
+
+# and then verify through it, exactly as we will through the platform's
+python -m nib_verify task run --config cfg.json --root .store \
+    --access real --data-url http://127.0.0.1:8770
+```
+
+`access/wire.py` is imported by **both halves**, so they cannot disagree about
+the format. `access/mockfeed.py` wraps any provider rather than special-casing
+the generator — which is why it is also the reference a platform team can copy.
+
+Running the same config through `--access real` and `--access mock` gives
+identical readings, and a test asserts it: the client is meant to be transparent.
+
+### What the wire format had to decide
+
+Arrays travel as base64 of raw little-endian bytes, not as JSON text. A 200×200
+field is 40,000 numbers — around 400 kB of text and a float-to-text round trip
+per point. The bytes are exact and about a tenth of the size.
+
+One decision was not about size. A payload can say "nothing is missing" while
+carrying NaN, and NaN compared against a threshold is `False`, so it lands in the
+correct-negative column and flatters every categorical score. **The decoder treats
+undeclared NaN as missing** and records a warning: the numbers stay right, and
+the provider's mistake becomes a line in `datafeed check` instead of a quiet
+improvement in the scores. `tests/test_wire.py` is where that is pinned down.
 
 ### Packages and runs
 
@@ -254,6 +294,10 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_server.py` | the API, and the three rules it refuses to break |
 | `tests/test_web_page.py` | every path and file the page calls actually exists |
 | `tests/test_page_in_browser.py` | the page, driven in a real browser (skips without one) |
+| `tests/test_wire.py` | the encoding, both ways, including the undeclared-NaN rule |
+| `tests/test_http_access.py` | the client against the service, over a real socket |
+| `tests/test_conformance.py` | the checklist, and proof that broken providers fail it |
+| `tests/test_cli_datafeed.py` | the datafeed commands, and that `real` still cannot be a hole |
 
 Nothing here needs a GPU, a network, or a data file. The browser tests skip unless
 playwright can find a browser; with Edge or Chrome installed no download is
@@ -272,7 +316,8 @@ caught by the browser.
 
 Deliberately out of scope so far:
 
-- the real field provider;
+- the platform's own field provider — the contract, the client and a working
+  reference service are done, and pointing at theirs is a URL;
 - deriving `extent` and `resolution` from the data (they are entered by hand);
 - inserting a verification task into the platform's own scheduler;
 - charts — the results table is a table.
