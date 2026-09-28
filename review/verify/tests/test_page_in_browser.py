@@ -1,0 +1,387 @@
+"""The page, in a real browser.
+
+The other page tests are static: they read ``app.js`` and check that the paths and
+element ids it mentions exist. That catches a typo in a URL, and it does not catch
+a call to a function that was renamed — which is exactly the bug that got past
+them once, and showed up as a red box in the page instead of a failing test.
+
+So this module drives the page in a browser when one is available, and skips when
+it is not. It is a real check, and it degrades to nothing rather than to a
+false pass. Install with ``pip install -e '.[dev]'`` and ``playwright install`` to
+run it; on a machine with Edge or Chrome installed, no download is needed.
+
+What it asserts is deliberately shallow: no console errors, no page errors, and
+content that actually rendered. Anything more specific belongs in the static
+tests, which do not need a browser at all.
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+
+import pytest
+
+from nib_verify.catalog.hostconfig import load as load_host
+from nib_verify.server import create_app
+
+from .conftest import make_access, make_config
+
+playwright_api = pytest.importorskip(
+    "playwright.sync_api", reason="playwright is not installed"
+)
+
+
+# ======================================================================
+@pytest.fixture
+def live_server(platform, tmp_path):
+    """The app on a real port, in a background thread."""
+    import uvicorn
+
+    app = create_app(
+        root=tmp_path / "verify-root",
+        configs=tmp_path / "configs",
+        packages=platform.packages,
+        runs=[platform.runs_root],
+        host=load_host(platform.config_path),
+        access=make_access(),
+    )
+    # a config to look at, so the table is not empty
+    from nib_verify.server.library import ConfigLibrary
+
+    ConfigLibrary(tmp_path / "configs").create(make_config())
+
+    config = uvicorn.Config(app, host="127.0.0.1", port=0,
+                            log_level="error", access_log=False)
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    for _ in range(300):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:  # pragma: no cover
+        pytest.skip("uvicorn did not start")
+
+    port = server.servers[0].sockets[0].getsockname()[1]
+    yield f"http://127.0.0.1:{port}"
+
+    server.should_exit = True
+    thread.join(timeout=10)
+
+
+@pytest.fixture
+def browser():
+    """An installed browser, or a skip. Edge and Chrome are tried first."""
+    with playwright_api.sync_playwright() as p:
+        for attempt in ("msedge", "chrome", None):
+            try:
+                instance = p.chromium.launch(channel=attempt) if attempt else p.chromium.launch()
+            except Exception:  # noqa: BLE001 - any failure means "try the next one"
+                continue
+            try:
+                yield instance
+            finally:
+                instance.close()
+            return
+        pytest.skip("no browser is available to playwright")
+
+
+class Page:
+    """A loaded page, plus everything it complained about."""
+
+    def __init__(self, page):
+        self.page = page
+        self.errors: list[str] = []
+        page.on("pageerror", lambda exc: self.errors.append(f"pageerror: {exc}"))
+        page.on("console", lambda msg: self.errors.append(f"console.{msg.type}: {msg.text}")
+                if msg.type == "error" else None)
+
+    def load(self, url: str) -> "Page":
+        self.page.goto(url, wait_until="networkidle")
+        self.page.wait_for_timeout(400)
+        return self
+
+    def tab(self, name: str) -> "Page":
+        self.page.click(f'#tabs button[data-tab="{name}"]')
+        self.page.wait_for_timeout(400)
+        return self
+
+    def text(self) -> str:
+        return self.page.inner_text("body")
+
+
+@pytest.fixture
+def page(browser, live_server):
+    context = browser.new_context(viewport={"width": 1400, "height": 1000})
+    p = Page(context.new_page())
+    yield p
+    context.close()
+
+
+def seed_run(base_url: str, group_id: str = "vil-test") -> dict:
+    """Run the verification over HTTP, so the results tab has numbers to show.
+
+    Deliberately not done through the interface: these tests are about reading
+    stored quantities, and driving the wizard to produce them would make a
+    failure ambiguous.
+    """
+    import json
+    import urllib.request
+
+    body = json.dumps({"config": group_id,
+                       "init": ["2026-01-01T00:00:00Z"]}).encode()
+    request = urllib.request.Request(
+        f"{base_url}/api/runs", data=body,
+        headers={"Content-Type": "application/json"}, method="POST")
+    started = json.loads(urllib.request.urlopen(request, timeout=30).read())
+    assert started["started"], started
+
+    for _ in range(200):
+        with urllib.request.urlopen(f"{base_url}/api/jobs/{started['job']}", timeout=10) as r:
+            view = json.loads(r.read())
+        if view["state"] != "running":
+            assert view["state"] == "done", view.get("error")
+            return view
+        time.sleep(0.1)
+    raise AssertionError("the run never finished")
+
+
+# ======================================================================
+def test_the_configs_tab_renders_the_config_and_says_nothing_unhappy(page, live_server):
+    page.load(live_server)
+
+    body = page.text()
+    assert "NiB verification" in body
+    assert "vil-test" in body, "the config table did not render"
+    assert "57649a4d7be4acdc" in body, "the ruler fingerprint did not render"
+    assert "Could not read" not in body
+    assert page.errors == []
+
+
+def test_the_wizard_renders_all_five_blocks(page, live_server):
+    page.load(live_server).tab("create")
+
+    body = page.text()
+    for block in ("Identity", "The ruler", "The roster", "The metrics", "Preview"):
+        assert block in body, f"the wizard is missing {block!r}"
+    assert page.errors == []
+
+
+def test_the_wizard_offers_what_the_catalog_found(page, live_server):
+    """A datalist's options are not page text, so they are counted directly."""
+    page.load(live_server).tab("create")
+
+    assert "radar-composite" in page.page.eval_on_selector_all(
+        "#truth-options option", "els => els.map(e => e.value)")
+    assert page.page.locator("#step-options option").count() >= 1
+
+    # the roster suggests the model ids, once a row exists to suggest them for
+    page.page.click("#btn-add-member")
+    page.page.wait_for_timeout(200)
+    assert "mlcast-det" in page.text()
+
+
+def test_opening_a_config_shows_its_ruler_roster_and_metrics(page, live_server):
+    page.load(live_server)
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(700)
+
+    body = page.text()
+    assert "The ruler" in body
+    assert "locked" in body
+    assert "Roster" in body
+    assert "append-only" in body
+    assert page.errors == []
+
+
+def test_a_preview_plans_and_reports(page, live_server):
+    page.load(live_server).tab("create")
+    page.page.fill("#c-id", "shot-config")
+    page.page.fill("#c-name", "A config from the wizard")
+    page.page.fill("#c-truth", "radar-composite")
+    page.page.fill("#c-variable", "vil")
+    page.page.fill("#c-unit", "kg m-2")
+    page.page.fill("#c-step", "10")
+    for element, value in (("#c-lon0", "110"), ("#c-lat0", "30"),
+                           ("#c-lon1", "120"), ("#c-lat1", "42"), ("#c-res", "0.5")):
+        page.page.fill(element, value)
+
+    page.page.click("#btn-add-member")
+    page.page.wait_for_timeout(200)
+    page.page.fill("#members input >> nth=0", "mlcast-det")
+    page.page.fill("#members input >> nth=1", "10, 20, 30")
+
+    # levels are required for this family, and the page says so before asking
+    assert page.page.locator("#m-levels").is_enabled()
+    page.page.fill("#m-levels", "181, 219")
+    page.page.click("#btn-add-metric-group")
+    page.page.wait_for_timeout(200)
+    page.page.click("#btn-preview")
+    page.page.wait_for_timeout(900)
+
+    body = page.text()
+    assert "tasks" in body
+    assert "Every run was rejected" not in body
+    assert page.errors == []
+
+
+def test_a_parameter_a_family_does_not_use_is_not_carried_over(page, live_server):
+    """A disabled input keeps its text, so it must not be read.
+
+    Adding a categorical group fills in the levels box. Switching to continuous
+    disables it — and the old text is still there, one keystroke away from being
+    attached to a family that has no threshold at all.
+    """
+    page.load(live_server).tab("create")
+    page.page.wait_for_timeout(400)
+
+    page.page.fill("#m-levels", "181, 219")
+    page.page.click("#btn-add-metric-group")
+    page.page.wait_for_timeout(300)
+    assert "levels 181, 219" in page.text()
+
+    page.page.select_option("#m-family", "continuous")
+    page.page.wait_for_timeout(200)
+    page.page.click("#btn-add-metric-group")
+    page.page.wait_for_timeout(300)
+
+    blocks = page.page.eval_on_selector_all(
+        "#metric-groups .groupbox",
+        "els => els.map(e => e.innerText.replace(/\\s+/g, ' ').trim())")
+    assert len(blocks) == 2
+    assert "levels" in blocks[0], blocks
+    assert "levels" not in blocks[1], f"continuous inherited a threshold: {blocks[1]}"
+    assert "mae" in blocks[1]
+    assert page.errors == []
+
+
+def test_the_wizard_marks_a_parameter_the_family_needs(page, live_server):
+    """Found at the field, not after five blocks and a round trip."""
+    page.load(live_server).tab("create")
+    page.page.wait_for_timeout(300)
+
+    assert page.page.locator("#m-levels").is_enabled(), "categorical needs levels"
+    assert page.page.locator("#m-windows").is_disabled(), "categorical needs no window"
+    assert "*" in page.page.inner_text("#m-levels >> xpath=../label")
+
+    page.page.select_option("#m-family", "continuous")
+    page.page.wait_for_timeout(200)
+    assert page.page.locator("#m-levels").is_disabled()
+
+    page.page.select_option("#m-family", "spatial")
+    page.page.wait_for_timeout(200)
+    assert page.page.locator("#m-windows").is_enabled()
+
+
+def test_the_results_tab_answers_a_query(page, live_server):
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+
+    # the config, and the metrics that config carries, are offered
+    assert page.page.eval_on_selector("#q-config", "e => e.value") == "vil-test"
+    methods = page.page.eval_on_selector_all("#q-method option", "e => e.map(x => x.value)")
+    assert methods[:3] == ["ts", "bias", "ets"]
+    assert "pod" not in methods, "a metric the config does not carry is not offered"
+
+    page.page.click("#q-g .chip:has-text('lead_minutes')")
+    page.page.wait_for_timeout(200)
+    assert "1. lead_minutes" in page.text(), "the expansion order is shown"
+
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(900)
+
+    body = page.text()
+    assert "THREAT SCORE" in body, "the result table did not render"
+    assert "lead_minutes" in body
+    assert "valid samples" in body
+    assert page.errors == []
+
+
+def test_a_new_threshold_over_stored_numbers_needs_no_rerun(page, live_server):
+    """The done_when condition, through the interface.
+
+    The run stored five levels. Asking for a sixth the config never named must
+    come straight out of the stored table — so the query succeeds even though
+    nothing has been computed for it.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+
+    page.page.click("#q-g .chip:has-text('level')")
+    page.page.fill("#q-level", "133")
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(900)
+
+    body = page.text()
+    assert "THREAT SCORE" in body
+    assert "LEVEL" in body, "the threshold is a column"
+    assert "133" in body, "a level the config never named came out of the store"
+    assert "1 record(s)" in body
+    assert page.errors == []
+
+
+def test_the_results_tab_says_so_when_nothing_matches(page, live_server):
+    """An empty answer is an answer. It must not look like a failure.
+
+    A filter that matches nothing still produces one row of zeroes, which the
+    page must recognise as nothing rather than render as a blank table.
+    """
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+    page.page.fill("#q-time-from", "2030-01-01T00:00:00Z")
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(900)
+
+    body = page.text()
+    assert "No stored quantities match" in body
+    assert "THREAT SCORE" not in body, "a table of nothing is not a table"
+    assert page.errors == []
+
+
+def test_the_page_reports_a_run_to_completion(page, live_server):
+    """The one path that touches the executor, the lock and the job registry."""
+    page.load(live_server)
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(700)
+
+    page.page.fill("#run-init", "2026-01-01T00:00:00Z")
+    page.page.click("#btn-run")
+
+    # poll until the verdict appears, rather than guessing at a sleep
+    for _ in range(60):
+        if "task(s):" in page.page.inner_text("#run-verdict"):
+            break
+        page.page.wait_for_timeout(200)
+    else:
+        pytest.fail(f"the run never reported: {page.page.inner_text('body')[-400:]}")
+
+    body = page.text()
+    assert "3 task(s): 3 ran" in body
+    assert "0 failed" in body
+    assert "done: 3" in body, "the stored counts were not refreshed"
+    assert page.errors == []
+
+
+def test_a_run_twice_over_skips_the_second_time(page, live_server):
+    """Reaching the store, and proving a finished task is not recomputed."""
+    page.load(live_server)
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(700)
+    page.page.fill("#run-init", "2026-01-01T00:00:00Z")
+
+    previous = ""
+    for expected in ("3 task(s): 3 ran", "0 ran, 3 skipped"):
+        page.page.click("#btn-run")
+        for _ in range(80):
+            text = page.page.inner_text("#run-verdict")
+            if "task(s):" in text and text != previous:
+                break
+            page.page.wait_for_timeout(200)
+        else:
+            pytest.fail(f"the run never reported {expected!r}")
+        previous = text
+        assert expected in text, text

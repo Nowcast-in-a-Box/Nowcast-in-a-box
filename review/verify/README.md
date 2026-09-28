@@ -13,7 +13,7 @@ as an RFC; this directory is the implementation that follows it.
 ```bash
 cd review/verify
 pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
-python -m pytest                   # 248 tests, no GPU, no network, no data
+python -m pytest                   # 260 tests, no GPU, no network, no data
 ```
 
 The command line:
@@ -98,7 +98,7 @@ still there, unaggregated.
 | `nib_verify/query/` | the read path |
 | `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 248 tests, all synthetic |
+| `tests/` | 260 tests, all synthetic |
 
 ---
 
@@ -253,8 +253,18 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_cli_platform.py` | the platform-facing commands, end to end |
 | `tests/test_server.py` | the API, and the three rules it refuses to break |
 | `tests/test_web_page.py` | every path and file the page calls actually exists |
+| `tests/test_page_in_browser.py` | the page, driven in a real browser (skips without one) |
 
-Nothing here needs a GPU, a network, or a data file.
+Nothing here needs a GPU, a network, or a data file. The browser tests skip unless
+playwright can find a browser; with Edge or Chrome installed no download is
+needed, and without one they degrade to a skip rather than to a false pass.
+
+They earn that place. The static tests read `app.js` and check that the paths and
+ids it mentions exist — which catches a typo in a URL and does *not* catch a call
+to a renamed function, a helper that stringifies an array instead of rendering
+it, or a required field whose value gets sent anyway because a disabled input
+still holds its text. All three of those shipped past the static tests and were
+caught by the browser.
 
 ---
 
