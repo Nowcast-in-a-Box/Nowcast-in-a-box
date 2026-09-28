@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nib-verify"
+version = "0.1.0"
+description = "NiB verification module (D1): metrics from stored arrays"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary until the project declares one" }
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "PyYAML>=6.0"]
+web = ["fastapi>=0.110", "uvicorn>=0.27", "PyYAML>=6.0"]
+
+[tool.setuptools.packages.find]
+include = ["nib_verify*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = ["error::RuntimeWarning"]
