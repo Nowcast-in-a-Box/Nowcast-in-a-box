@@ -248,6 +248,24 @@ class Store:
                 found.append(family)
         return found
 
+    def delete_group(self, group_id: str) -> dict[str, int]:
+        """Remove every trace of one config, and nothing else.
+
+        Deleting the whole store file would take every other config's numbers
+        with it, so this is scoped by ``group_id``.
+        """
+        removed: dict[str, int] = {}
+        for family, table in TABLE_OF.items():
+            cur = self.conn.execute(f"DELETE FROM {table} WHERE group_id = ?", (group_id,))
+            if cur.rowcount:
+                removed[family] = cur.rowcount
+        for table in ("task", "obs_gap"):
+            cur = self.conn.execute(f"DELETE FROM {table} WHERE group_id = ?", (group_id,))
+            if cur.rowcount:
+                removed[table] = cur.rowcount
+        self.conn.commit()
+        return removed
+
 
 # ----------------------------------------------------------------------
 # helpers
