@@ -265,6 +265,10 @@ class VerificationConfig:
             "metrics": [
                 {
                     "family": g.family,
+                    # the family a config names, and the family the store uses.
+                    # Two vocabularies, because a config groups metrics by what
+                    # they mean and the store groups them by how they accumulate.
+                    "storage_family": g.storage_family,
                     "items": list(g.items),
                     "levels": list(g.levels),
                     "half_windows": list(g.half_windows),
