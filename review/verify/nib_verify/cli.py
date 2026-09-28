@@ -29,6 +29,8 @@ from pathlib import Path
 
 from .access.base import describe_capabilities
 from .access.factory import NO_ADDRESS, PROVIDERS, build_access
+from .access.scenario import catalogue as scenario_catalogue
+from .access.scenario import names as scenario_names
 from .catalog.hostconfig import HostConfigError, load as load_host
 from .catalog.matching import check_pair
 from .catalog.packages import Catalog, discover as discover_packages
@@ -647,6 +649,9 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="which field provider to use: mock (generated), "
                              "replay (.npy on disk), http/real (a service). "
                              "Default: mock")
+        sp.add_argument("--scenario", metavar="NAME",
+                        help="a named bundle of mock settings, for --access mock:\n"
+                             + scenario_catalogue(sep="; "))
         sp.add_argument("--data-url", metavar="URL",
                         help="address of a field service speaking the HTTP "
                              "contract; required by --access http/real")
@@ -893,7 +898,7 @@ def _resolve_roots(explicit, args, label: str, *, required: bool = True) -> list
 
 def _make_access(args):
     kind = getattr(args, "access", "mock")
-    kwargs = _mock_kwargs(getattr(args, "mock", None) or [])
+    kwargs = _mock_kwargs(getattr(args, "mock", None) or [], kind)
     if kind == "replay" and "root" not in kwargs:
         raise ConfigError("the replay provider needs --mock root=DIR")
     if kind in ("http", "real"):
@@ -901,22 +906,39 @@ def _make_access(args):
         if not url:
             raise ConfigError(NO_ADDRESS)
         kwargs["base_url"] = url
-    return build_access(kind, **kwargs)
+
+    name = getattr(args, "scenario", None)
+    if name:
+        if kind != "mock":
+            raise ConfigError(
+                f"--scenario {name!r} is a bundle of mock settings, and this run "
+                f"uses --access {kind}. Drop the scenario, or pass its settings "
+                f"through --mock."
+            )
+        kwargs["scenario"] = name
+
+    try:
+        return build_access(kind, **kwargs)
+    except ValueError as exc:
+        # A bad scenario name, a bad --mock value: both are the caller's typo,
+        # and neither should reach the user as a traceback.
+        raise ConfigError(str(exc)) from exc
 
 
-def _mock_kwargs(pairs: list[str]) -> dict:
+def _mock_kwargs(pairs: list[str], kind: str = "mock") -> dict:
     """Turn ``--mock key=value`` pairs into constructor arguments.
 
     Types come from the constructor's own defaults, so the CLI never has to keep
-    a second list of what each option means.
+    a second list of what each option means. The constructor is the *selected
+    provider's*: checking every key against the synthetic one meant the help
+    could say "replay takes --mock root=DIR" while `root` was rejected before it
+    could ever be used.
     """
     if not pairs:
         return {}
     import inspect
 
-    from .access.synthetic import SyntheticAccess
-
-    params = dict(inspect.signature(SyntheticAccess.__init__).parameters)
+    params = dict(inspect.signature(_provider_class(kind).__init__).parameters)
     params.pop("self", None)
     out: dict = {}
     for pair in pairs:
@@ -926,9 +948,20 @@ def _mock_kwargs(pairs: list[str]) -> dict:
             raise ConfigError(f"expected KEY=VALUE, got {pair!r}")
         if key not in params:
             known = ", ".join(sorted(params))
-            raise ConfigError(f"unknown --mock option {key!r}; known: {known}")
+            raise ConfigError(
+                f"unknown --mock option {key!r} for --access {kind}; known: {known}"
+            )
         out[key] = _coerce_like(raw, params[key].default)
     return out
+
+
+def _provider_class(kind: str):
+    """The class ``--mock`` is validating against."""
+    from .access.http import HttpAccess
+    from .access.replay import ReplayAccess
+    from .access.synthetic import SyntheticAccess
+
+    return {"mock": SyntheticAccess, "replay": ReplayAccess}.get(kind, HttpAccess)
 
 
 def _coerce_like(raw: str, default):
