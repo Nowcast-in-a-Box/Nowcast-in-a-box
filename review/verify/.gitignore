@@ -1,0 +1,5 @@
+# Local run state: the store, the lock, and scratch output.
+_tmp/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
