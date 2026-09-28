@@ -37,7 +37,18 @@ function h(tag, props, ...kids) {
 }
 
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-function mount(node, ...kids) { clear(node); node.append(...kids.filter(Boolean).map(k => k instanceof Node ? k : document.createTextNode(String(k)))); return node; }
+
+/// Replace a node's children.
+///
+/// Flattening is not cosmetic. ``mount(select, xs.map(...))`` is the natural way
+/// to write a list, and without it the array is stringified into one text node —
+/// which produces an empty dropdown rather than an error.
+function mount(node, ...kids) {
+  clear(node);
+  const flat = kids.flat(4).filter(k => k !== null && k !== undefined && k !== false);
+  node.append(...flat.map(k => k instanceof Node ? k : document.createTextNode(String(k))));
+  return node;
+}
 function notice(kind, text, list) {
   return h("div", { class: `notice ${kind || ""}` }, text,
     list && list.length ? h("ul", {}, list.map(x => h("li", { text: x }))) : null);
@@ -104,7 +115,8 @@ async function loadConfigs() {
     state.configs = data.configs;
     $("#configs-source").textContent = `${data.configs.length} config(s) in the config directory`;
     mount(target, renderConfigTable(data.configs, data.broken));
-    fillConfigSelectors();
+    // The results tab offers the same configs, so it has to be told they moved.
+    await loadConfigsIntoSelect();
   } catch (error) {
     mount(target, notice("bad", `Could not read the configs: ${error.message}`));
   }
@@ -167,8 +179,8 @@ function renderConfigDetail(cfg) {
   const rosterRows = cfg.members.map(m => h("tr", {},
     h("td", {}, h("code", { text: m.name })),
     h("td", { text: m.leads.join(", ") }),
-    h("td", { text: m.active_from || "…" }),
-    h("td", { text: m.active_to || "…" }),
+    h("td", { text: m.active_from || "anytime" }),
+    h("td", { text: m.active_to || "ongoing" }),
     h("td", {}, h("button", {
       class: "link danger", text: "Retire",
       onclick: () => retireMember(cfg, m.name),
@@ -202,18 +214,39 @@ function renderConfigDetail(cfg) {
     h("div", {}, metricBlocks),
     renderMetricAdder(cfg, (group) => appendMetrics(cfg, group)));
 
-  const stored = cfg.stored || {};
-  const counts = Object.entries(stored.tasks || {});
   const storedCard = h("div", { class: "card" },
     h("h2", {}, "Stored"),
+    h("div", { id: "stored-body" }, renderStored(cfg)));
+
+  return h("div", {}, rulerCard, rosterCard, metricsCard, runCard(cfg), storedCard);
+}
+
+function renderStored(cfg) {
+  const stored = cfg.stored || {};
+  const counts = Object.entries(stored.tasks || {});
+  return h("div", {},
     counts.length
       ? h("div", { class: "chips" }, counts.map(([state, n]) => pill(`${state}: ${num(n)}`, state === "failed" ? "bad" : state === "done" ? "ok" : "")))
       : empty("Nothing verified under this config yet."),
     (stored.families || []).length
       ? h("p", { class: "tiny muted", style: "margin-top:8px" }, `families populated: ${stored.families.join(", ")}`) : null,
     stored.missing_obs_times ? h("p", { class: "tiny muted" }, `${stored.missing_obs_times} observation time(s) recorded as missing`) : null);
+}
 
-  return h("div", {}, rulerCard, rosterCard, metricsCard, runCard(cfg), storedCard);
+/// Refresh only what a run changed.
+///
+/// Rebuilding the whole panel would be simpler and wrong: it would throw away
+/// the verdict the run just produced, so the page would go quiet at exactly the
+/// moment it had something to say.
+async function refreshStored(groupId) {
+  const host = $("#stored-body");
+  if (!host) return;
+  try {
+    mount(host, renderStored(await api(`/api/configs/${encodeURIComponent(groupId)}`)));
+  } catch (error) {
+    mount(host, notice("bad", error.message));
+  }
+  await loadConfigs();
 }
 
 // ---------------------------------------------------------------- running
@@ -224,15 +257,16 @@ function renderConfigDetail(cfg) {
 // more ways to be wrong than simply asking again.
 function runCard(cfg) {
   const init = h("input", {
+    id: "run-init",
     placeholder: "2026-01-01T00:00:00Z — blank takes them from the runs found",
   });
-  const force = h("input", { type: "checkbox" });
-  const log = h("pre", { class: "log", hidden: true });
-  const verdict = h("div");
-  const status = h("span", { class: "muted tiny" });
+  const force = h("input", { id: "run-force", type: "checkbox" });
+  const log = h("pre", { id: "run-log", class: "log", hidden: true });
+  const verdict = h("div", { id: "run-verdict" });
+  const status = h("span", { id: "run-status", class: "muted tiny" });
 
   const button = h("button", {
-    class: "act", text: "Run",
+    id: "btn-run", class: "act", text: "Run",
     onclick: () => startRun(cfg, { init: init.value.trim(), force: force.checked, button, log, verdict, status }),
   });
 
@@ -313,8 +347,7 @@ async function startRun(cfg, ui) {
         `${num(stats.total || 0)} task(s): ${num(stats.ran || 0)} ran, ` +
         `${num(stats.skipped || 0)} skipped, ${num(stats.unavailable || 0)} unavailable, ` +
         `${num(stats.failed || 0)} failed.`));
-      await loadConfigs();
-      await openConfig(cfg.group_id);
+      await refreshStored(cfg.group_id);
     }
   };
   state.poll = setTimeout(poll, 200);
@@ -420,13 +453,13 @@ function paramsForFamily(family) {
 
 function renderItemChips() {
   const family = $("#m-family").value;
-  const host = $("#m-items");
+  const host = "#m-items";
   const items = (state.metrics.metrics || []).filter(m => m.family === family).map(m => m.method);
   state.chosenItems = new Set(items);           // default: the whole family
   const needs = paramsForFamily(family);
-  $("#m-levels").disabled = !needs.has("level");
-  $("#m-windows").disabled = !needs.has("half_window");
-  mount(host, items.map(item => h("button", {
+  markRequired($("#m-levels"), needs.has("level"));
+  markRequired($("#m-windows"), needs.has("half_window"));
+  mount($(host), items.map(item => h("button", {
     class: "chip", type: "button", "aria-pressed": "true", text: item,
     onclick: (event) => {
       const button = event.currentTarget;
@@ -435,6 +468,21 @@ function renderItemChips() {
       if (on) state.chosenItems.add(item); else state.chosenItems.delete(item);
     },
   })));
+}
+
+/// Show that a parameter is required *before* the user asks for a preview.
+///
+/// The service would refuse either way; finding out at the last step, after
+/// filling in five blocks, is the part worth avoiding.
+///
+/// Tolerates a detached input: the metric adder builds its fields and then
+/// refreshes them, so at that instant ``closest`` finds nothing.
+function markRequired(input, needed) {
+  input.disabled = !needed;
+  input.required = needed;
+  const field = input.closest(".field");
+  const label = field ? field.querySelector("label") : null;
+  if (label) label.textContent = label.textContent.replace(/ \*$/, "") + (needed ? " *" : "");
 }
 
 function emptyMember() {
@@ -481,8 +529,8 @@ function renderMetricAdder(cfg, onAdd) {
   function refresh() {
     const itemRows = (state.metrics.metrics || []).filter(m => m.family === family.value);
     const needs = paramsForFamily(family.value);
-    levels.disabled = !needs.has("level");
-    windows.disabled = !needs.has("half_window");
+    markRequired(levels, needs.has("level"));
+    markRequired(windows, needs.has("half_window"));
     chosen.clear();
     mount(chips, itemRows.map(m => h("button", {
       class: "chip", type: "button", "aria-pressed": "false", text: m.method,
@@ -497,6 +545,7 @@ function renderMetricAdder(cfg, onAdd) {
   family.addEventListener("change", refresh);
   refresh();
 
+  const needs = paramsForFamily(family.value);
   return h("div", { class: "groupbox", style: "background:#fafbfe" },
     h("div", { class: "grid" },
       h("div", { class: "field" }, h("label", { text: "family" }), family),
@@ -508,11 +557,14 @@ function renderMetricAdder(cfg, onAdd) {
         class: "act ghost", text: "Add this group",
         onclick: () => {
           if (!chosen.size) return window.alert("Pick at least one metric.");
+          const needed = paramsForFamily(family.value);
           onAdd({
             family: family.value,
             items: Array.from(chosen),
-            levels: numbers(levels.value),
-            half_windows: numbers(windows.value).map(Number),
+            // A disabled input keeps its text. Reading it anyway is how a
+            // continuous group ends up carrying thresholds it cannot use.
+            levels: needed.has("level") ? numbers(levels.value) : [],
+            half_windows: needed.has("half_window") ? numbers(windows.value).map(Number) : [],
           });
         },
       })));
@@ -677,7 +729,7 @@ async function onMethodPicked() {
 
 function renderExpandChips(dimensions) {
   mount($("#q-g"),
-    h("div", { class: "chips" }, dimensions.map(d => {
+    dimensions.map(d => {
       const at = state.expand.indexOf(d);
       return h("button", {
         class: "chip", type: "button", "aria-pressed": String(at >= 0),
@@ -688,9 +740,9 @@ function renderExpandChips(dimensions) {
           onMethodPicked();
         },
       });
-    })),
-    h("p", { class: "tiny muted" }, state.expand.length
-      ? `order: ${state.expand.join(" → ")}` : "click to set the order"));
+    }),
+    h("span", { class: "tiny muted" }, state.expand.length
+      ? `order: ${state.expand.join(" → ")}` : "nothing selected: one total"));
 }
 
 function renderCoverage(cfg) {
@@ -726,21 +778,31 @@ async function runQuery() {
 }
 
 function renderScores(result) {
-  if (!result.records.length) return empty("No stored quantities match.");
+  // The store always answers, even when nothing matched: an ungrouped query
+  // returns one row of zeroes. That row is a real answer to "was there
+  // anything?" and a useless row to show, so it is filtered out — and the
+  // count of what was filtered is reported rather than swallowed.
+  const usable = result.records.filter(r => r.n_valid > 0);
+  const dropped = result.records.length - usable.length;
+  if (!usable.length) return empty("No stored quantities match.");
+
   const dims = result.dims;
   const head = h("tr", {},
     dims.map(d => h("th", { text: d })),
     h("th", { class: "num", text: result.meta.label }),
     h("th", { class: "num", text: "samples" }));
-  const body = result.records.map(r => h("tr", {},
+  const body = usable.map(r => h("tr", {},
     dims.map(d => h("td", { class: d === "valid_time" || d === "init_time" ? "mono" : "", text: r[d] == null ? "—" : String(r[d]) })),
     h("td", { class: "num", text: r.value == null ? "—" : Number(r.value).toFixed(4) }),
     h("td", { class: "num", text: num(r.n_valid) })));
 
   return h("div", {},
     h("div", { class: "row", style: "margin-top:12px" },
-      pill(`${result.sample.n_records} records`), pill(`${num(result.sample.n_valid)} valid samples`),
+      pill(`${usable.length} record(s)`),
+      pill(`${num(usable.reduce((a, r) => a + r.n_valid, 0))} valid samples`),
       pill(`ruler ${result.meta.group ? result.meta.group.ruler.fingerprint : "—"}`)),
+    dropped ? h("p", { class: "tiny muted" },
+      `${dropped} group(s) had no samples and are not shown.`) : null,
     h("div", { class: "scroll", style: "margin-top:10px" },
       h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
 }
@@ -753,11 +815,16 @@ $("#btn-add-member").addEventListener("click", () => { state.memberRows.push(emp
 $("#btn-add-metric-group").addEventListener("click", () => {
   const family = $("#m-family").value;
   if (!state.chosenItems.size) return window.alert("Pick at least one metric.");
+  const needed = paramsForFamily(family);
   state.metricGroups.push({
     family,
     items: Array.from(state.chosenItems),
-    levels: numbers($("#m-levels").value),
-    half_windows: numbers($("#m-windows").value).map(Number),
+    // Only read a parameter the family actually has. ``markRequired`` disables
+    // the other field but a disabled input still holds whatever was typed into
+    // it before the family changed.
+    levels: needed.has("level") ? numbers($("#m-levels").value) : [],
+    half_windows: needed.has("half_window")
+      ? numbers($("#m-windows").value).map(Number) : [],
   });
   renderMetricGroups();
 });
