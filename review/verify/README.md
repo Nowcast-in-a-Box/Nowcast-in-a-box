@@ -12,7 +12,8 @@ as an RFC; this directory is the implementation that follows it.
 
 ```bash
 cd review/verify
-python -m pytest                 # 192 tests, no GPU, no network, no data
+pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
+python -m pytest                   # 248 tests, no GPU, no network, no data
 ```
 
 The command line:
@@ -42,6 +43,18 @@ python -m nib_verify query --method ts --config cfg.json --root .store \
 `--root` is where we write: one SQLite file and one lock file, nothing else.
 Where the platform's paths are involved we read its own `config.yaml` rather
 than guessing — see [spec/catalog.md](spec/catalog.md).
+
+The review page:
+
+```bash
+python -m nib_verify serve --root .store --configs ./configs \
+    --packages <PACKAGES> --runs <RUNS> --access mock
+# then open http://127.0.0.1:8766
+```
+
+It binds `review.host`:`review.port` from `config.yaml`, refuses a non-loopback
+address, and comes up even when the field provider cannot — saying so rather than
+failing to start.
 
 ---
 
@@ -83,8 +96,9 @@ still there, unaggregated.
 | `nib_verify/store/` | SQLite: quantities and task state |
 | `nib_verify/runner/` | task execution, progress, the single-instance lock |
 | `nib_verify/query/` | the read path |
+| `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 192 tests, all synthetic |
+| `tests/` | 248 tests, all synthetic |
 
 ---
 
@@ -138,6 +152,42 @@ condition is **testable today** — no model, no GPU, no data.
 
 ---
 
+## The review page
+
+The page is three tabs — configs, a wizard, results — over a JSON API. It is
+plain JavaScript with no framework and no build step, because the repository root
+has no `pyproject` and no `node_modules`, and a reviewer should be able to read
+the whole interface in one sitting.
+
+| | |
+|---|---|
+| `GET /api/health` | whether the process is up, and where it thinks it is |
+| `GET /api/host` | the resolved `config.yaml` |
+| `GET /api/catalog` | packages, runs, and which pairs the Matcher allows |
+| `GET /api/metrics`, `/api/metrics/{m}/dimensions` | what can be computed, and how it can be split |
+| `GET/POST/DELETE /api/configs[/{id}]` | the configs |
+| `POST /api/configs/{id}/roster[...]` | add a member, or retire one |
+| `POST /api/configs/{id}/metrics` | append a metric group |
+| `POST /api/plan` | what a config would do, and what it cannot |
+| `POST /api/runs`, `GET /api/jobs/{id}` | start a run, then watch it |
+| `GET /api/scores` | aggregate stored quantities |
+
+FastAPI publishes the same thing as OpenAPI at `/docs`.
+
+**The page holds no rules of its own.** The three invariants are enforced in the
+service, not in the browser, so the wizard cannot be talked into breaking them by
+a crafted request:
+
+* a config change touching the ruler is refused, not written;
+* metrics are appended, and one already present is refused rather than duplicated;
+* an empty plan caused by rejections comes back as such, with reasons.
+
+Run progress is polled rather than streamed. A run is short and the page is
+served by the same process, so reconnection semantics would be more code and
+more ways to be wrong than asking again.
+
+---
+
 ## Rules the code enforces
 
 These are the invariants the design rests on. Each one has a test.
@@ -154,7 +204,9 @@ These are the invariants the design rests on. Each one has a test.
 | A failure in one task never stops the run, and never propagates | `runner/executor.py` |
 | A missing data root is a refusal, not a default | `catalog/hostconfig.py` |
 | A package is identified by what it declares, not where it sits | `catalog/packages.py`, `catalog/runs.py` |
-| An empty plan caused by rejections is an error, not a quiet success | `cli.py` |
+| An empty plan caused by rejections is an error, not a quiet success | `cli.py`, `server/app.py` |
+| The interface enforces nothing; the service enforces everything | `server/app.py`, `server/library.py` |
+| A failure in the background is data on a job, never a 500 | `server/jobs.py` |
 
 The unit rule is worth calling out, because its absence would be invisible. Every
 threshold in a config is written in the ruler's unit. If a provider hands back a
@@ -199,6 +251,8 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_planner.py` | every rejection reason, probing, several members |
 | `tests/test_cli.py` | exit codes, progress modes, end-to-end run and query |
 | `tests/test_cli_platform.py` | the platform-facing commands, end to end |
+| `tests/test_server.py` | the API, and the three rules it refuses to break |
+| `tests/test_web_page.py` | every path and file the page calls actually exists |
 
 Nothing here needs a GPU, a network, or a data file.
 
@@ -208,10 +262,10 @@ Nothing here needs a GPU, a network, or a data file.
 
 Deliberately out of scope so far:
 
-- the web interface and the resident query service;
 - the real field provider;
 - deriving `extent` and `resolution` from the data (they are entered by hand);
-- inserting a verification task into the platform's own scheduler.
+- inserting a verification task into the platform's own scheduler;
+- charts — the results table is a table.
 
 `spec/*.md` closes with the open questions that are still genuinely open rather
 than merely unimplemented.
