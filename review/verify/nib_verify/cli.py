@@ -486,6 +486,83 @@ def cmd_expansions(args) -> int:
 
 
 # ======================================================================
+# serve
+# ======================================================================
+def cmd_serve(args) -> int:
+    """Start the review page where ``config.yaml`` says it belongs.
+
+    `AGENTS.md`: the review page runs on the host, binds loopback only, and
+    reads its bind address from ``config.yaml``. So the address is not chosen
+    here — it is read, and a non-loopback address is refused rather than
+    quietly obeyed.
+    """
+    try:
+        import uvicorn  # noqa: F401
+    except ModuleNotFoundError:
+        print("error: the web service needs fastapi and uvicorn: "
+              "pip install -e '.[web]'", file=sys.stderr)
+        return EXIT_FAILURE
+
+    from .server import create_app
+
+    host_cfg = load_host(args.host_config)
+    bind_host, bind_port = host_cfg.review_address
+    if args.port:
+        bind_port = args.port
+
+    if not _is_loopback(bind_host) and not args.allow_remote:
+        print(
+            f"error: review.host is {bind_host}, which is not loopback. "
+            "config.yaml and AGENTS.md both put the review page on 127.0.0.1; "
+            "pass --allow-remote if you really mean to expose it.",
+            file=sys.stderr,
+        )
+        return EXIT_FAILURE
+
+    access = None
+    access_error = None
+    try:
+        access = _make_access(args)
+    except (ConfigError, HostConfigError, NotImplementedError) as exc:
+        access_error = str(exc)
+
+    app = create_app(
+        root=args.root,
+        configs=args.configs,
+        packages=args.packages or [],
+        runs=args.runs or [],
+        host=host_cfg,
+        access=access,
+        access_error=access_error,
+    )
+
+    if args.progress != "quiet":
+        print(f"NiB verification on http://{bind_host}:{bind_port}")
+        print(f"  configs   {Path(args.configs).resolve()}")
+        print(f"  root      {Path(args.root).resolve()}")
+        print(f"  packages  {[str(p) for p in (args.packages or [])] or '(none)'}")
+        print(f"  runs      {[str(p) for p in (args.runs or [])] or '(none)'}")
+        print(f"  provider  {'ready' if access else f'unavailable: {access_error}'}")
+
+    import uvicorn
+
+    uvicorn.run(app, host=bind_host, port=bind_port,
+                log_level=args.log_level or "info")
+    return EXIT_OK
+
+
+def _is_loopback(host: str) -> bool:
+    if host in ("localhost", "::1"):
+        return True
+    try:
+        import ipaddress
+
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+# ======================================================================
 # parser
 # ======================================================================
 def _build_parser() -> argparse.ArgumentParser:
@@ -644,6 +721,25 @@ def _build_parser() -> argparse.ArgumentParser:
     e = sub.add_parser("expansions", help="which dimensions a metric can expand by")
     e.add_argument("--method", required=True)
     e.set_defaults(handler=cmd_expansions)
+
+    # -- serve ----------------------------------------------------------
+    s = sub.add_parser("serve", help="start the review page")
+    s.add_argument("--root", required=True, help="verification root: store and lock")
+    s.add_argument("--configs", required=True, metavar="DIR",
+                   help="directory holding the verification configs")
+    s.add_argument("--packages", action="append", metavar="DIR",
+                   help="root to scan for package manifests; repeatable")
+    s.add_argument("--runs", action="append", metavar="DIR",
+                   help="root to scan for run configs; repeatable")
+    add_host(s)
+    add_access(s)
+    s.add_argument("--port", type=int, help="override review.port from config.yaml")
+    s.add_argument("--allow-remote", action="store_true",
+                   help="bind a non-loopback address (config.yaml says loopback)")
+    s.add_argument("--log-level", dest="log_level",
+                   choices=("critical", "error", "warning", "info", "debug"))
+    s.add_argument("--progress", choices=("quiet", "plain"), default="plain")
+    s.set_defaults(handler=cmd_serve)
 
     return p
 
