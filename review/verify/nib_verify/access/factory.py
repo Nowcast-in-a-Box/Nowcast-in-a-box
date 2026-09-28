@@ -1,15 +1,39 @@
 """Provider selection.
 
-``--field-access mock`` (the default) builds the synthetic provider.
-``--field-access real`` is reserved for the platform implementation; it raises
-for now, deliberately, so nobody ships a build that silently uses mock data.
+Four names, and only one of them is a provider anybody chose:
+
+``mock``    the synthetic generator. The default, because until the platform
+            ships a field service there is nothing else to point at, and a
+            module that refuses to run at all is a module nobody can review.
+``replay``  ``.npy`` files on disk. For integration runs against real samples.
+``http``    a service speaking ``spec/field-access-http.md``. This is the one the
+            platform will provide.
+``real``    an alias for ``http``.
+
+Why ``real`` is an alias and not a hole that raises: it used to raise, and the
+reason was good — a build that silently verifies against made-up numbers is worse
+than one that refuses to start. That reason is still honoured, just differently.
+``http`` cannot fall back to anything: it needs an address, and this module will
+not invent one. ``--access real`` without ``--data-url`` fails, loudly, with the
+same words the missing-data-root error uses.
+
+That leaves exactly one way to verify against generated data, and it is to type
+``--access mock``.
 """
 
 from __future__ import annotations
 
 from .base import FieldAccess
 
-PROVIDERS = ("mock", "replay", "real")
+PROVIDERS = ("mock", "replay", "http", "real")
+
+#: Keys accepted for the service address, most specific first.
+URL_KEYS = ("base_url", "data_url", "url")
+
+NO_ADDRESS = (
+    "the field provider needs an address and this module does not guess one. "
+    "Pass --data-url http://host:port (or --access mock for generated data)."
+)
 
 
 def build_access(kind: str = "mock", **kwargs) -> FieldAccess:
@@ -24,10 +48,17 @@ def build_access(kind: str = "mock", **kwargs) -> FieldAccess:
         from .replay import ReplayAccess
         return ReplayAccess(**kwargs)
 
-    if kind == "real":
-        raise NotImplementedError(
-            "the platform field provider does not exist yet; see "
-            "spec/field-access.md. Use --field-access mock until it does."
-        )
+    if kind in ("http", "real"):
+        from .http import HttpAccess
+
+        url = None
+        for key in URL_KEYS:
+            if kwargs.get(key):
+                url = kwargs.pop(key)
+                break
+            kwargs.pop(key, None)
+        if not url:
+            raise ValueError(NO_ADDRESS)
+        return HttpAccess(url, **kwargs)
 
     raise ValueError(f"unknown field access {kind!r}; expected one of {PROVIDERS}")

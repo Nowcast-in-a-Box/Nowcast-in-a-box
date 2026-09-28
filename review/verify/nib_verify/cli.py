@@ -27,7 +27,8 @@ from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from .access.factory import build_access
+from .access.base import describe_capabilities
+from .access.factory import NO_ADDRESS, PROVIDERS, build_access
 from .catalog.hostconfig import HostConfigError, load as load_host
 from .catalog.matching import check_pair
 from .catalog.packages import Catalog, discover as discover_packages
@@ -488,6 +489,78 @@ def cmd_expansions(args) -> int:
 # ======================================================================
 # serve
 # ======================================================================
+def cmd_datafeed_serve(args) -> int:
+    """Serve the selected provider at the contract's addresses.
+
+    Loopback by default, and no refusal-to-start when the provider is unhappy:
+    the service comes up and answers ``/health`` so whoever started it can see
+    what it is serving. A data service that refuses to bind tells you less than
+    one that binds and reports.
+    """
+    try:
+        import uvicorn  # noqa: F401
+    except ModuleNotFoundError:
+        print("error: the field service needs fastapi and uvicorn: "
+              "pip install -e '.[web]'", file=sys.stderr)
+        return EXIT_FAILURE
+
+    from .access.mockfeed import create_data_app
+
+    try:
+        access = _make_access(args)
+    except (ConfigError, HostConfigError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_FAILURE
+
+    app = create_data_app(access)
+    if args.progress != "quiet":
+        caps = access.capabilities()
+        print(f"serving {describe_capabilities(caps)}")
+        print(f"on http://{args.host}:{args.port}  —  try "
+              f"http://{args.host}:{args.port}/capabilities")
+
+    import uvicorn
+
+    uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)
+    return EXIT_OK
+
+
+def cmd_datafeed_check(args) -> int:
+    """Run the checklist in spec/field-access.md against a provider.
+
+    Either a local one (``--access mock``) or a running service (``--url``).
+    The exit code is the answer: this is meant to be usable as a gate before a
+    long run, or in CI against the platform's provider once it exists.
+    """
+    from .access.conformance import check_provider
+
+    url = getattr(args, "url", None)
+    if url:
+        access = build_access("http", base_url=url)
+    else:
+        try:
+            access = _make_access(args)
+        except (ConfigError, HostConfigError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_FAILURE
+
+    try:
+        report = check_provider(access)
+    finally:
+        close = getattr(access, "close", None)
+        if close:
+            close()
+
+    if args.json:
+        print(json.dumps(report.as_dict(), indent=2, default=str))
+    else:
+        print(report.render())
+
+    if url:
+        print(f"\nsource: {url}")
+    return EXIT_OK if report.ok else EXIT_FAILURE
+
+
 def cmd_serve(args) -> int:
     """Start the review page where ``config.yaml`` says it belongs.
 
@@ -570,8 +643,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     def add_access(sp):
-        sp.add_argument("--access", default="mock", choices=("mock", "replay", "real"),
-                        help="which field provider to use (default: mock)")
+        sp.add_argument("--access", default="mock", choices=PROVIDERS,
+                        help="which field provider to use: mock (generated), "
+                             "replay (.npy on disk), http/real (a service). "
+                             "Default: mock")
+        sp.add_argument("--data-url", metavar="URL",
+                        help="address of a field service speaking the HTTP "
+                             "contract; required by --access http/real")
         sp.add_argument("--mock", action="append", metavar="KEY=VALUE",
                         help="option for the mock provider, e.g. "
                              "--mock peak=250 --mock unit='kg m-2' "
@@ -722,6 +800,33 @@ def _build_parser() -> argparse.ArgumentParser:
     e.add_argument("--method", required=True)
     e.set_defaults(handler=cmd_expansions)
 
+    # -- datafeed -------------------------------------------------------
+    # The simulated data interface. Serves any provider at the addresses in
+    # spec/field-access-http.md, so the client can be built and tested before
+    # the platform's own service exists -- and so a team implementing it has
+    # something running to compare against.
+    df = sub.add_parser("datafeed", help="the field service, and its conformance")
+    dfs = df.add_subparsers(dest="subcommand", required=True)
+
+    dfs_serve = dfs.add_parser("serve", help="serve a provider over HTTP")
+    add_access(dfs_serve)
+    dfs_serve.add_argument("--host", default="127.0.0.1",
+                           help="bind address (default: 127.0.0.1)")
+    dfs_serve.add_argument("--port", type=int, default=8770,
+                           help="bind port (default: 8770)")
+    dfs_serve.add_argument("--log-level", dest="log_level", default="info",
+                           choices=("critical", "error", "warning", "info", "debug"))
+    dfs_serve.add_argument("--progress", choices=("quiet", "plain"), default="plain")
+    dfs_serve.set_defaults(handler=cmd_datafeed_serve)
+
+    dfs_check = dfs.add_parser(
+        "check", help="run the contract's conformance checklist")
+    dfs_check.add_argument("--url", metavar="URL",
+                           help="check a running service instead of a local provider")
+    add_access(dfs_check)
+    dfs_check.add_argument("--json", action="store_true")
+    dfs_check.set_defaults(handler=cmd_datafeed_check)
+
     # -- serve ----------------------------------------------------------
     s = sub.add_parser("serve", help="start the review page")
     s.add_argument("--root", required=True, help="verification root: store and lock")
@@ -791,6 +896,11 @@ def _make_access(args):
     kwargs = _mock_kwargs(getattr(args, "mock", None) or [])
     if kind == "replay" and "root" not in kwargs:
         raise ConfigError("the replay provider needs --mock root=DIR")
+    if kind in ("http", "real"):
+        url = getattr(args, "data_url", None)
+        if not url:
+            raise ConfigError(NO_ADDRESS)
+        kwargs["base_url"] = url
     return build_access(kind, **kwargs)
 
 
