@@ -105,6 +105,11 @@ Members are the forecast models being scored.
 | `variable` | the model's own output field; from the ground truth package |
 | `unit` | must match the ruler's unit |
 | `leads` | which lead times, in minutes, to verify |
+
+`leads` is **proposed from the model's own run configs**: `forecast_horizon` is a
+frame count, so it becomes `[1..horizon] × time_step_minutes`. The proposal is a
+starting point, not a fence — the box is editable, and at planning time each run
+clips to what its own horizon reaches, reporting the leads it dropped.
 | `active_from`, `active_to` | the window in which this member is on the roster |
 
 Members are **added and retired, never deleted**. Retiring sets `active_to`, so
