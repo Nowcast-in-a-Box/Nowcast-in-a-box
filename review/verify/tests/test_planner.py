@@ -171,11 +171,28 @@ def test_a_pair_the_matcher_refuses_is_refused_here_too(platform):
     assert "something-else.v1" in result.rejections[0].detail
 
 
-def test_an_unknown_package_is_not_a_verdict(platform):
-    """If the catalog has not heard of a package, that is not a mismatch."""
-    result = plan(make_config(), _runbook(_run_dict(data="never-seen")),
+def test_a_run_from_another_source_is_refused_by_name(platform):
+    """The ruler names the observation source. A prediction made from a different
+    one is not what the config asked for, and scoring it against the ruler's truth
+    would produce a number about an experiment nobody described."""
+    result = plan(make_config(), _runbook(_run_dict(data="satellite-vil")),
                   catalog=platform.catalog())
-    assert len(result.tasks) == 3
+    assert not result.tasks
+    assert result.reasons() == {"other-source": 1}
+    assert "satellite-vil" in result.rejections[0].detail
+
+
+def test_an_unknown_package_is_not_a_verdict(platform):
+    """If the catalog has not heard of a package, that is not a mismatch.
+
+    Asked of the pair check directly: the planner has an earlier reason to refuse
+    a run that used a different source, and it would answer first.
+    """
+    from nib_verify.catalog.runs import RunConfig
+    from nib_verify.core.planner import _pair_problem
+
+    run = RunConfig.from_mapping(_run_dict(data="never-seen"))
+    assert _pair_problem(platform.catalog(), run) is None
 
 
 # ======================================================================
@@ -207,7 +224,8 @@ def test_probe_counts_frames_the_observations_do_not_cover():
 def test_probe_reports_a_provider_that_cannot_answer_at_all():
     cfg = make_config()
     cfg = replace(cfg, ruler=replace(cfg.ruler, ground_truth="not-a-thing"))
-    result = plan(cfg, _runbook(_run_dict()), access=make_access(), probe=True)
+    result = plan(cfg, _runbook(_run_dict(data="not-a-thing")),
+                  access=make_access(), probe=True)
     assert result.coverage["available"] == 0
     assert "error" in result.coverage
 

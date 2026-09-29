@@ -34,6 +34,7 @@ UTC = timezone.utc
 
 #: why a requested task is not in the plan
 NOT_ON_ROSTER = "not-on-roster"
+OTHER_SOURCE = "other-source"
 INACTIVE = "inactive"
 NO_START_TIME = "no-start-time"
 BEYOND_HORIZON = "beyond-horizon"
@@ -41,6 +42,7 @@ INCOMPATIBLE = "incompatible-pair"
 
 REASON_TEXT = {
     NOT_ON_ROSTER: "the run's model is not on this config's roster",
+    OTHER_SOURCE: "the run used a different observation source than the ruler names",
     INACTIVE: "the member was not on the roster on that date",
     NO_START_TIME: "the run has no start_time (it is identified by sample_id)",
     BEYOND_HORIZON: "no requested lead falls inside the run's forecast horizon",
@@ -168,6 +170,18 @@ def plan(
         if member is None:
             result.rejections.append(_reject(run, NOT_ON_ROSTER,
                                              f"{run.model_id} is not on the roster"))
+            continue
+
+        # The ruler names *the* observation source. A prediction made from a
+        # different one is not what this config asked for, and quietly scoring it
+        # against the ruler's truth would produce a number about an experiment
+        # nobody described.
+        if run.data_id and run.data_id != cfg.ruler.ground_truth:
+            result.rejections.append(_reject(
+                run, OTHER_SOURCE,
+                f"the run used {run.data_id}, but this config verifies against "
+                f"{cfg.ruler.ground_truth}",
+            ))
             continue
 
         if run.start_time is None:

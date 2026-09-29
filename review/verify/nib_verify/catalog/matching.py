@@ -130,6 +130,23 @@ def check_pair(data: PackageManifest, model: PackageManifest) -> MatchResult:
             f"{data.id} does not declare {missing}, which {model.id} requires"
         )
 
+    # 7. unit — the one property that cannot be worked around
+    #
+    #    Everything else here is about interfaces, and an interface can be
+    #    adapted. A unit cannot: every member of a config has to be in the
+    #    ruler's unit or the thresholds mean nothing, so a pair whose units
+    #    differ can never be verified together. Calling that pair compatible
+    #    would put it in front of a person who could only get a refusal out of it.
+    data_unit = _unit_of(data.fields or data.output_fields)
+    model_unit = _unit_of(model.output_fields or model.fields)
+    if data_unit and model_unit and data_unit != model_unit:
+        result.errors.append(
+            f"unit differs: {data.id} serves {data_unit}, "
+            f"{model.id} produces {model_unit}"
+        )
+    elif not (data_unit and model_unit):
+        result.warnings.append("unit not declared by both sides; not checked")
+
     # warnings only
     _dtype_notes(data, model, result)
     _domain_notes(data, model, result)
@@ -195,6 +212,14 @@ def _shape_of(package: PackageManifest, specs) -> tuple[int, ...] | None:
                 return None
             out.append(value)
         return tuple(out) or None
+    return None
+
+
+def _unit_of(specs) -> str | None:
+    """The unit of the first named field that declares one."""
+    for spec in specs:
+        if spec.name and spec.unit:
+            return spec.unit
     return None
 
 

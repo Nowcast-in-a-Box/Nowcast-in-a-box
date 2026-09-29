@@ -454,3 +454,24 @@ def test_every_package_in_a_catalog_carries_its_defaults(platform):
     package, not only on the one you happened to test."""
     for package in platform.catalog().packages:
         assert "ruler_defaults" in package.as_dict(), package.id
+
+
+def test_units_that_differ_are_a_hard_error():
+    """Everything else in the matcher is about interfaces, and an interface can
+    be adapted. A unit cannot: every member of a config has to be in the ruler's
+    unit or the thresholds mean nothing, so this pair can never be verified
+    together. Saying it is compatible would offer somebody a pair whose only
+    possible outcome is a refusal."""
+    model = _model(output=[{**MODEL_MANIFEST["output"][0], "unit": "dBZ"}])
+    result = check_pair(_data(), model)
+    assert not result.ok
+    assert any("unit differs" in e for e in result.errors), result.errors
+
+
+def test_a_unit_only_one_side_declares_is_a_warning():
+    """Refusing over a missing manifest field would make an incomplete manifest
+    unusable, and the schema is not final."""
+    model = _model(output=[{**MODEL_MANIFEST["output"][0], "unit": ""}])
+    result = check_pair(_data(), model)
+    assert result.ok, result.errors
+    assert any("unit not declared" in w for w in result.warnings), result.warnings
