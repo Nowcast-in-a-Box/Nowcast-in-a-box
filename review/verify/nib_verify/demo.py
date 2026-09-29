@@ -41,12 +41,99 @@ UTC = timezone.utc
 CONFIG_ID = "vil-demo"
 DEMO_NAME = "VIL verification, demonstration"
 
-#: Two models, in order of skill: the generator makes the second one worse, which
-#: is what makes a comparison worth showing.
-MODELS = ("mlcast-det", "mlcast-alt")
-DATA_ID = "radar-composite"
-VARIABLE = "vil"
-UNIT = "kg m-2"
+
+@dataclass(frozen=True)
+class Product:
+    """One fabricated observation product: what it is called, and what it is.
+
+    Several products of one storm are not several storms. They are the same
+    weather on different scales, with their own instrument noise and their own
+    coverage — which is what a multi-source evaluation has to cope with, and
+    what makes the ground-truth picker in the wizard worth having.
+
+    Two of these are in ``kg m-2`` and one is not, on purpose: a unit is the
+    ruler's business, so a product in another unit is another config.
+    """
+
+    id: str
+    variable: str
+    unit: str
+    scale: float
+    vmin: float
+    vmax: float
+    noise: float
+    missing_kind: str
+    missing_points: int
+
+
+@dataclass(frozen=True)
+class Forecast:
+    """One fabricated model, and the product it nowcasts.
+
+    Declaration order is skill order: the generator makes each one worse than
+    the one before, which is what makes a comparison worth showing.
+    """
+
+    id: str
+    source: str
+
+
+#: The observation products the fabricated platform serves.
+SOURCES: tuple[Product, ...] = (
+    Product("radar-composite", "vil", "kg m-2", scale=1.0, vmin=0.0, vmax=255.0,
+            noise=4.0, missing_kind="range", missing_points=60),
+    Product("radar-dbz-hires", "dbz", "dBZ", scale=0.25, vmin=-10.0, vmax=70.0,
+            noise=1.0, missing_kind="none", missing_points=0),
+    Product("satellite-vil", "vil", "kg m-2", scale=0.9, vmin=0.0, vmax=255.0,
+            noise=9.0, missing_kind="random", missing_points=120),
+)
+
+#: The forecast models. The last one is for the other unit, which is why it is
+#: not on the demonstration config's roster: it is verifiable, just not against
+#: a ``kg m-2`` ruler.
+FORECASTS: tuple[Forecast, ...] = (
+    Forecast("mlcast-det", "radar-composite"),
+    Forecast("mlcast-alt", "radar-composite"),
+    Forecast("simvp-lag", "radar-composite"),
+    Forecast("mlcast-dbz", "radar-dbz-hires"),
+)
+
+#: The product the demonstration config is built on, and the models it verifies.
+CONFIG_SOURCE = "radar-composite"
+
+
+def pairs() -> tuple[tuple[Forecast, Product], ...]:
+    """Every (model, product) the fabricated platform has run.
+
+    A model runs against any product in its own unit, which is what makes more
+    than one observation source worth having: the same model, fed two different
+    views of the storm, verified against the same truth. A product in another
+    unit is another config, and it has a run too.
+    """
+    return tuple(
+        (forecast, source)
+        for forecast in FORECASTS
+        for source in SOURCES
+        if source.unit == source_of(forecast.source).unit
+    )
+
+
+def source_of(product: str) -> Product:
+    for one in SOURCES:
+        if one.id == product:
+            return one
+    raise KeyError(f"no such product {product!r}")
+
+
+DATA_ID = CONFIG_SOURCE
+VARIABLE = source_of(CONFIG_SOURCE).variable
+UNIT = source_of(CONFIG_SOURCE).unit
+MODELS = tuple(f.id for f in FORECASTS if f.source == CONFIG_SOURCE)
+
+#: How much worse each model is than the one before it. Part of the catalogue
+#: rather than of the weather: it has to be re-tuned when the roster grows, or
+#: the fifth model lags the truth by an hour.
+SKILL_SPREAD = 0.4
 
 #: The 0-255 VIL scale. Five thresholds, chosen so that the answers differ at
 #: each one — a single threshold would make the whole exercise look like a
@@ -110,14 +197,14 @@ class Demo:
 # ======================================================================
 # what gets written
 # ======================================================================
-def data_manifest() -> dict:
+def data_manifest(source: Product) -> dict:
     return {
-        "id": DATA_ID,
+        "id": source.id,
         "offers": ["precip-nowcast.v1"],
         "region": "east-china",
         "fields": [{
-            "name": VARIABLE,
-            "unit": UNIT,
+            "name": source.variable,
+            "unit": source.unit,
             "dtype": "float32",
             "shape": [48, 64],
             "cadence_minutes": CADENCE_MINUTES,
@@ -127,17 +214,17 @@ def data_manifest() -> dict:
     }
 
 
-def model_manifest(model_id: str) -> dict:
+def model_manifest(forecast: Forecast, source: Product) -> dict:
     return {
-        "id": model_id,
+        "id": forecast.id,
         "requires": "precip-nowcast.v1",
         "region": "east-china",
         "context_frames": {"required_count": CONTEXT_FRAMES, "mode": "latest"},
-        "input": [{"name": VARIABLE, "unit": UNIT, "dtype": "float32",
+        "input": [{"name": source.variable, "unit": source.unit, "dtype": "float32",
                    "shape": [48, 64]}],
         "output": [{
-            "name": VARIABLE,
-            "unit": UNIT,
+            "name": source.variable,
+            "unit": source.unit,
             "dtype": "float32",
             "shape": [48, 64],
             "cadence_minutes": CADENCE_MINUTES,
@@ -146,16 +233,45 @@ def model_manifest(model_id: str) -> dict:
     }
 
 
-def run_config_text(model_id: str, start: str) -> str:
+def run_config_text(forecast: Forecast, source: Product, start: str) -> str:
     """A run config, byte for byte the shape ``contracts/README.md`` describes."""
     return (
         "version: 1\n"
-        f"data:\n  id: {DATA_ID}\n"
-        f"model:\n  id: {model_id}\n"
+        f"data:\n  id: {source.id}\n"
+        f"model:\n  id: {forecast.id}\n"
         "run:\n"
         f"  start_time: \"{start}\"\n"
         f"  forecast_horizon: {FORECAST_HORIZON_FRAMES}\n"
     )
+
+
+def catalogue(scenario: str) -> dict:
+    """The provider's settings: the scenario's weather, this catalogue's names.
+
+    Two things kept apart on purpose. The scenario says what the weather *does* —
+    cells, drift, how wrong a forecast gets. This table says what *exists* — which
+    products and which models, in which units. The manifests written into the
+    workspace describe the second, so they are written from the same table, and
+    the service and the tree cannot disagree about what is out there.
+    """
+    from .access.scenario import settings as scenario_settings
+
+    return {
+        **scenario_settings(scenario),
+        "observation_names": tuple(s.id for s in SOURCES),
+        "model_ids": tuple(f.id for f in FORECASTS),
+        "skill_spread": SKILL_SPREAD,
+        "sources": {
+            s.id: {
+                "variable": s.variable, "unit": s.unit, "scale": s.scale,
+                "vmin": s.vmin, "vmax": s.vmax, "noise": s.noise,
+                "missing_kind": s.missing_kind,
+                "missing_points": s.missing_points,
+            }
+            for s in SOURCES
+        },
+        "model_sources": {f.id: f.source for f in FORECASTS},
+    }
 
 
 def host_config_text(review_port: int) -> str:
@@ -180,7 +296,7 @@ def verification_config():
         group_id=CONFIG_ID,
         name=DEMO_NAME,
         ruler=Ruler(
-            ground_truth=DATA_ID, unit=UNIT,
+            ground_truth=CONFIG_SOURCE, unit=UNIT,
             time_step_minutes=CADENCE_MINUTES, extent=EXTENT, resolution=RESOLUTION,
         ),
         members=tuple(
@@ -267,31 +383,41 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
     say("         config.yaml         review 127.0.0.1:%d, data root inputs/data"
         % review_port)
 
-    # Three manifests in three unrelated places, on purpose.
-    writes = {
-        root / "packages" / "bundle-a" / "radar-composite" / "manifest.json": data_manifest(),
-        root / "packages" / "bundle-b" / "mlcast-det" / "manifest.json": model_manifest(MODELS[0]),
-        root / "packages" / "deep" / "nested" / "down" / "here" / "manifest.json":
-            model_manifest(MODELS[1]),
-    }
-    for path, payload in writes.items():
+    # Manifests in unrelated directories, on purpose: they are found by what they
+    # declare, not by where they were put, and the tree says so by not looking
+    # like a catalogue.
+    places = [root / "packages" / "bundle-a",
+              root / "packages" / "bundle-b",
+              root / "packages" / "deep" / "nested" / "down" / "here"]
+    writes: list[tuple[Path, dict]] = []
+    for index, source in enumerate(SOURCES):
+        writes.append((places[index % len(places)] / source.id / "manifest.json",
+                       data_manifest(source)))
+    for index, forecast in enumerate(FORECASTS):
+        writes.append((places[(index + 1) % len(places)] / forecast.id / "manifest.json",
+                       model_manifest(forecast, source_of(forecast.source))))
+    for path, payload in writes:
         _json(path, payload)
     demo.packages = [root / "packages"]
-    say("         packages            %d manifests, in unrelated directories" % len(writes))
+    say("         packages            %d manifests (%d products, %d models), "
+        "in unrelated directories" % (len(writes), len(SOURCES), len(FORECASTS)))
+    for source in SOURCES:
+        say("         %-18s %s [%s]" % (source.id, source.variable, source.unit))
 
     demo.runs_root = root / "workspace" / "jobs"
     start = datetime(2026, 1, 1, tzinfo=UTC)
     count = 0
     for hour in range(INIT_TIMES):
         moment = (start + timedelta(hours=hour)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        for model_id in MODELS:
+        for forecast, source in pairs():
             _write(
-                demo.runs_root / f"{moment.replace(':', '')}-{model_id}" / "run.yaml",
-                run_config_text(model_id, moment),
+                demo.runs_root
+                / f"{moment.replace(':', '')}-{source.id}-{forecast.id}" / "run.yaml",
+                run_config_text(forecast, source, moment),
             )
             count += 1
     say(f"         run configs         {count} runs ({INIT_TIMES} init times x "
-        f"{len(MODELS)} models)")
+        f"{len(pairs())} model/source pairs)")
 
     demo.configs.mkdir(parents=True, exist_ok=True)
     _json(demo.config_file, verification_config().to_dict())
@@ -361,7 +487,7 @@ def datafeed(demo: Demo, *, say: Callable[[str], None] = print, port: int = 0):
     from .access import build_access
     from .access.mockfeed import serve_in_thread
 
-    access = build_access("mock", scenario=demo.scenario)
+    access = build_access("mock", **catalogue(demo.scenario))
     caps = access.capabilities()
     say("  4/6  datafeed     serving the %r scenario" % demo.scenario)
     say("         %s" % _describe(caps))
@@ -374,10 +500,14 @@ def datafeed(demo: Demo, *, say: Callable[[str], None] = print, port: int = 0):
 
 
 def _describe(caps) -> str:
+    seen: list[str] = []
+    for name in caps.observation_names:
+        unit = caps.unit_of(name) or "?"
+        seen.append(f"{name} [{unit}]")
     return (
         f"{caps.cadence_minutes}-minute cadence, "
-        f"observations {list(caps.observation_names)}, "
-        f"models {list(caps.model_ids)}"
+        f"observations {', '.join(seen)}, "
+        f"{len(caps.model_ids)} models"
     )
 
 
@@ -509,7 +639,7 @@ def serve_review(demo: Demo, *, data_url: str, access: str = "real",
         runs=[demo.runs_root],
         host=load_host(demo.config_path),
         access=build_access(access, base_url=data_url) if access == "real" else
-        build_access(access, scenario=demo.scenario),
+        build_access(access, **catalogue(demo.scenario)),
     )
     # From config.yaml, the same way ``serve`` does it. The demo would otherwise
     # be the one place that quietly does the thing AGENTS.md forbids.

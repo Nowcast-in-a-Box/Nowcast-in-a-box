@@ -37,22 +37,40 @@ def built(tmp_path):
 # ======================================================================
 def test_every_pair_the_demo_puts_together_passes_the_matcher(built):
     """The one that matters. A fabricated platform that contradicts itself does
-    not raise — it plans nothing, on stage."""
+    not raise — it plans nothing, on stage.
+
+    The pairs it must *refuse* matter as much: an observation product and a model
+    in different units cannot be verified together, so offering that pair would
+    put it in front of somebody who could only get a refusal out of it.
+    """
     catalog = discover_packages(built.packages)
-    assert len(catalog.data_packages) == 1
-    assert len(catalog.model_packages) == 2
+    assert len(catalog.data_packages) == len(demo_module.SOURCES)
+    assert len(catalog.model_packages) == len(demo_module.FORECASTS)
 
     for data in catalog.data_packages:
         for model in catalog.model_packages:
             result = check_pair(data, model)
-            assert result.ok, f"{data.id} x {model.id}: {result.errors}"
+            same_unit = data.as_dict()["ruler_defaults"]["unit"] ==                 model.as_dict()["ruler_defaults"]["unit"]
+            if same_unit:
+                assert result.ok, f"{data.id} x {model.id}: {result.errors}"
+            else:
+                assert not result.ok, f"{data.id} x {model.id} should not be compatible"
+                assert any("unit differs" in e for e in result.errors), result.errors
+
+
+def test_every_source_is_reachable_by_some_model(built):
+    """A product with no model is a dropdown entry leading nowhere."""
+    catalog = discover_packages(built.packages)
+    paired = {source.id for _, source in demo_module.pairs()}
+    assert set(catalog.data_ids) == paired
+    assert set(catalog.model_ids) == {f.id for f, _ in demo_module.pairs()}
 
 
 def test_every_run_config_names_a_model_the_catalog_has(built):
     catalog = discover_packages(built.packages)
     book = discover_runs([built.runs_root])
     assert set(book.model_ids) <= set(catalog.model_ids)
-    assert book.data_ids == {demo_module.DATA_ID}
+    assert book.data_ids == set(catalog.data_ids)
 
 
 def test_the_run_horizon_reaches_the_longest_lead_the_config_asks_for(built):
@@ -93,15 +111,15 @@ def test_the_manifests_are_found_wherever_they_were_put(built):
     """Three unrelated directories, found by content. A demo that only worked on
     a tidy catalog tree would be a demo of the tree."""
     catalog = discover_packages(built.packages)
-    assert len(catalog) == 3
+    assert len(catalog) == len(demo_module.SOURCES) + len(demo_module.FORECASTS)
     assert not catalog.problems()
-    assert {p.id for p in catalog.data_packages} == {demo_module.DATA_ID}
-    assert set(catalog.model_ids) == set(demo_module.MODELS)
+    assert set(catalog.data_ids) == {s.id for s in demo_module.SOURCES}
+    assert set(catalog.model_ids) == {f.id for f in demo_module.FORECASTS}
 
 
 def test_the_run_configs_are_read_as_run_configs(built):
     book = discover_runs([built.runs_root])
-    assert len(book) == len(demo_module.MODELS) * demo_module.INIT_TIMES
+    assert len(book) == len(demo_module.pairs()) * demo_module.INIT_TIMES
     assert not book.skipped
 
 
@@ -171,10 +189,16 @@ def test_the_survey_reports_what_it_found(built, capsys):
     demo_module.survey(built, say=lines.append)
     text = "\n".join(lines)
     assert "read by content" in text
-    assert demo_module.DATA_ID in text
+    for source in demo_module.SOURCES:
+        assert source.id in text, source.id
     for model in demo_module.MODELS:
-        assert model in text
-    assert "2 of 2 pass the Matcher" in text
+        assert model in text, model
+    # the dBZ model is out there too, and is named by the catalogue
+    assert "mlcast-dbz" in text
+    # every combination is listed, and only the ones in the same unit pass
+    every = {(s.id, f.id) for s in demo_module.SOURCES for f in demo_module.FORECASTS}
+    same = {(s.id, f.id) for f, s in demo_module.pairs()}
+    assert "%d of %d pass the Matcher" % (len(same), len(every)) in text
 
 
 def test_the_headline_is_not_a_perfect_score(tmp_path, capsys):

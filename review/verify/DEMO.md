@@ -29,31 +29,36 @@ python -m nib_verify demo --open
 ```
   1/6  platform     fabricating a workspace in ...\nib-demo
          config.yaml         review 127.0.0.1:8766, data root inputs/data
-         packages            3 manifests, in unrelated directories
-         run configs         12 runs (6 init times x 2 models)
+         packages            7 manifests (3 products, 4 models), in unrelated directories
+         radar-composite    vil [kg m-2]
+         radar-dbz-hires    dbz [dBZ]
+         satellite-vil      vil [kg m-2]
+         run configs         42 runs (6 init times x 7 model/source pairs)
 
   2/6  catalog      read by content, not by layout
-         data packages       1   radar-composite
-         model packages       2   mlcast-det, mlcast-alt
-         compatible pairs    2 of 2 pass the Matcher
+         data packages       3   radar-dbz-hires, radar-composite, satellite-vil
+         model packages       4   mlcast-det, mlcast-dbz, simvp-lag, mlcast-alt
+         compatible pairs    7 of 12 pass the Matcher   <- 不同单位的 5 对被拒
 
   3/6  config       vil-demo  ruler 256416deac63ca02
-         radar-composite, 2 members mlcast-det/mlcast-alt, leads [10, 20, 30, 60], 5 thresholds
+         radar-composite, 3 members mlcast-det/mlcast-alt/simvp-lag, leads [10, 20, 30, 60], 5 thresholds
          4 metric families: yes_or_no, continuous, moments, spatial
 
   4/6  datafeed     serving the 'convective' scenario
-         10-minute cadence, observations ['radar-composite'], models ['mlcast-det', 'mlcast-alt']
+         10-minute cadence, observations radar-composite [kg m-2], radar-dbz-hires [dBZ],
+         satellite-vil [kg m-2], 4 models
          http://127.0.0.1:49141   <- a real service on a real socket
 
   5/6  verify       through that service, over HTTP -- not in process
-         planned             48 tasks over 6 init time(s)
-         ran                 40 done, 8 unavailable, 0 failed, 0 skipped
-         fetches             48 observation, 48 prediction, over the socket
+         planned             72 tasks over 6 init time(s)
+         ran                 60 done, 12 unavailable, 0 failed, 0 skipped
+         fetches             72 observation, 72 prediction, over the socket
 
          CSI at 181, by lead time
                 10     20     30     60
-         mlcast-alt   0.863  0.688  0.658  0.776
+         mlcast-alt   0.890  0.727  0.786  0.841
          mlcast-det   0.890  0.727  0.864  0.883
+         simvp-lag    0.863  0.696  0.694  0.776
 
   6/6  review       http://127.0.0.1:8766/
 ```
