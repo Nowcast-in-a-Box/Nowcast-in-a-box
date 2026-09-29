@@ -219,7 +219,57 @@ def test_a_forecast_already_on_the_roster_is_not_offered_again(page, live_server
     page.page.wait_for_timeout(300)
 
     assert page.page.eval_on_selector("#member-pick", "e => e.disabled") is True
-    assert "every model the catalog found is on the roster" in page.text()
+    assert "every model in this unit is on the roster" in page.text()
+
+
+def test_only_models_in_the_rulers_unit_are_offered(page, live_server):
+    """A model whose output is in another unit cannot join this config: every
+    member has to be in the ruler's unit or the thresholds mean nothing. Offering
+    it and then declaring it in the ruler's unit would build a config that says
+    something untrue about the model and then verifies nothing."""
+    page.load(live_server).tab("create")
+    page.page.fill("#c-truth", "radar-composite")
+    page.page.dispatch_event("#c-truth", "change")
+    page.page.wait_for_timeout(400)
+
+    before = page.page.eval_on_selector_all("#member-pick option", "e => e.map(o => o.value)")
+    assert "mlcast-det" in before
+
+    # a model in another unit, exactly as the catalog would report one
+    page.page.evaluate("""() => {
+      state.catalog.packages.packages.push({
+        id: "satcast-det", kind: "model",
+        ruler_defaults: {variable: "rain_rate", unit: "mm h-1"},
+      });
+      renderMemberPicker();
+    }""")
+    page.page.wait_for_timeout(200)
+    after = page.page.eval_on_selector_all("#member-pick option", "e => e.map(o => o.value)")
+    assert "mlcast-det" in after
+    assert "satcast-det" not in after
+    assert page.errors == []
+
+
+def test_a_member_carries_its_own_units_not_the_rulers(page, live_server):
+    """Taken from the model's package. Taken from the ruler it would be the same
+    string by construction, and a model in another unit would arrive looking
+    correct."""
+    page.load(live_server).tab("create")
+    page.page.fill("#c-id", "u-test")
+    page.page.fill("#c-name", "unit test")
+    page.page.fill("#c-truth", "radar-composite")
+    page.page.dispatch_event("#c-truth", "change")
+    page.page.wait_for_timeout(300)
+    page.page.click("#btn-add-member")
+    page.page.wait_for_timeout(300)
+    page.page.evaluate("""() => {
+      const pkg = state.catalog.packages.packages.find(p => p.id === "mlcast-det");
+      pkg.ruler_defaults.variable = "reflectivity";
+      pkg.ruler_defaults.unit = "dBZ";
+    }""")
+    members = page.page.evaluate("() => buildSpec().members")
+    assert members[0]["unit"] == "dBZ", members
+    assert members[0]["variable"] == "reflectivity", members
 
 
 def test_removing_a_forecast_puts_it_back_in_the_list(page, live_server):

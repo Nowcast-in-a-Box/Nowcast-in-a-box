@@ -469,6 +469,7 @@ function applyGroundTruth() {
                               ["extent", "extent"], ["resolution", "resolution"]]) {
     if (derived[key] !== null && derived[key] !== undefined) have.push(label);
   }
+  renderMemberPicker();
   $("#truth-note").textContent = have.length
     ? `filled from the package: ${have.join(", ")}`
     : "this package declares none of these, so fill them in yourself";
@@ -576,13 +577,21 @@ function emptyMember() {
 
 // The dropdown offers the models this server can see, minus the ones already on
 // the roster: adding the same forecast twice is not a thing.
+// Only models whose output is in the ruler's unit. A model in another unit
+// cannot join this config -- every member has to be in the ruler's unit or the
+// thresholds mean nothing -- and declaring a radar model in mm h-1 would produce
+// a config that says something untrue about it and then verifies nothing.
 function modelChoices() {
   const packages = state.catalog && state.catalog.packages;
+  const truth = groundTruth($("#c-truth").value.trim());
+  const unit = truth && truth.unit;
   const known = packages
     ? (packages.packages || []).filter(p => p.kind === "model").map(p => p.id)
     : [];
   const chosen = new Set(state.memberRows.map(r => r.name));
-  return known.filter(id => !chosen.has(id));
+  return known
+    .filter(id => !chosen.has(id))
+    .filter(id => !unit || (groundTruth(id) || {}).unit === unit);
 }
 
 // The leads a model's own run configs allow: the horizon it asked for, in the
@@ -599,18 +608,26 @@ function cadenceLabel() {
   return all && all.cadence_minutes ? `${all.cadence_minutes} min` : "the source step";
 }
 
-function renderMembers() {
+function renderMemberPicker() {
   const pick = $("#member-pick");
   clear(pick);
   const choices = modelChoices();
+  const truth = groundTruth($("#c-truth").value.trim());
   for (const id of choices.length ? choices : [""]) {
     pick.append(h("option", { value: id, text: id || (state.memberRows.length
-      ? "every model the catalog found is on the roster"
-      : "the catalog found no models") }));
+      ? "every model in this unit is on the roster"
+      : truth && truth.unit
+        ? `no model the catalog found produces ${truth.unit}`
+        : "pick a ground truth first") }));
   }
   pick.disabled = !choices.length;
+}
 
-  const rows = state.memberRows.map((row) => h("div", { class: "grid", style: "margin-bottom:8px" },
+function renderMembers() {
+  renderMemberPicker();
+
+  const rows = state.memberRows.map((row) => h("div", { class: "grid",
+    style: "margin-bottom:8px" },
     h("div", { class: "field" }, h("label", { text: "forecast" }),
       h("input", { value: row.name, readonly: true })),
     h("div", { class: "field" }, h("label", { text: "leads (minutes)" }),
@@ -694,15 +711,20 @@ function buildSpec() {
   if (!id) throw new Error("A group id is required.");
   if (!name) throw new Error("A display name is required.");
 
-  // The member's own output field, taken from what the ground truth declares.
-  // It is a per-model fact, not a question for the person filling the form.
+  // The member's own output field, from the model's own package. Falling back to
+  // the ruler would let a model be declared in a unit it does not produce: the
+  // config would then be a true-looking lie about it, and the run would be turned
+  // away for the wrong reason.
   const derived = groundTruth($("#c-truth").value.trim()) || {};
-  const members = state.memberRows.filter(r => r.name).map(r => ({
-    name: r.name.trim(),
-    variable: derived.variable || "",
-    unit: $("#c-unit").value.trim(),
-    leads: numbers(r.leads).map(Number),
-  }));
+  const members = state.memberRows.filter(r => r.name).map(r => {
+    const own = groundTruth(r.name) || {};
+    return {
+      name: r.name.trim(),
+      variable: own.variable || derived.variable || "",
+      unit: own.unit || $("#c-unit").value.trim(),
+      leads: numbers(r.leads).map(Number),
+    };
+  });
 
   if (!members.length) throw new Error("At least one member is required.");
   if (!state.metricGroups.length) throw new Error("At least one metric group is required.");
