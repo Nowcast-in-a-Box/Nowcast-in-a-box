@@ -15,7 +15,6 @@ One config is **one ruler, one roster, one metric list**.
   "group": { "id": "vil-radar-v1", "name": "VIL verification, radar composite" },
   "ruler": {
     "ground_truth": "radar-composite",
-    "variable": "vil",
     "unit": "kg m-2",
     "time_step_minutes": 10,
     "extent": [110.0, 30.0, 120.0, 42.0],
@@ -48,11 +47,24 @@ The ruler decides the **denominator and the mask** of every metric.
 | Field | Meaning |
 |---|---|
 | `ground_truth` | which observation source is the truth |
-| `variable` | what is being measured |
 | `unit` | the unit of the numbers and of every threshold |
 | `time_step_minutes` | the one time step; no interpolation, ever |
 | `extent` | `[lon_min, lat_min, lon_max, lat_max]` |
 | `resolution` | grid spacing of the verification grid |
+
+There is **no `variable`**. The ground truth package already names the field it
+serves, so a second place to write it down is a second place to get it wrong —
+and nothing ever compared the two.
+
+`unit`, `time_step_minutes`, `extent` and `resolution` are **derived from the
+ground truth package** wherever the manifest declares them, and left empty where
+it does not. A package usually names a *region* rather than a grid, so the extent
+and the resolution are often the caller's to supply: they decide the mask, and a
+guess here would silently decide which samples the numbers are made of. The unit
+is not editable (every member has to agree with it); the other three are.
+
+The manifest is the source of the derivation, so the form and the service read
+the same values — see [catalog.md](catalog.md) for `ruler_defaults`.
 
 ### The ruler is immutable
 
@@ -90,7 +102,8 @@ Members are the forecast models being scored.
 | Field | Meaning |
 |---|---|
 | `name` | the model id, as the provider knows it |
-| `variable`, `unit` | must match the ruler's unit |
+| `variable` | the model's own output field; from the ground truth package |
+| `unit` | must match the ruler's unit |
 | `leads` | which lead times, in minutes, to verify |
 | `active_from`, `active_to` | the window in which this member is on the roster |
 

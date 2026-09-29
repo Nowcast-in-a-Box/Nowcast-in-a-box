@@ -37,7 +37,7 @@ python -m nib_verify demo --open
          model packages       2   mlcast-det, mlcast-alt
          compatible pairs    2 of 2 pass the Matcher
 
-  3/6  config       vil-demo  ruler 57649a4d7be4acdc
+  3/6  config       vil-demo  ruler 256416deac63ca02
          radar-composite, 2 members mlcast-det/mlcast-alt, leads [10, 20, 30, 60], 5 thresholds
          4 metric families: categorical, continuous, moments, spatial
 

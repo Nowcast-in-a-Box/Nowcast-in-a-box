@@ -274,3 +274,38 @@ def test_a_stray_notes_key_in_an_old_file_is_ignored():
     cfg = VerificationConfig.from_dict(raw)
     assert cfg.group_id == "vil-test"
     assert cfg.name == make_config().name
+
+
+# ======================================================================
+# the ruler has no variable
+# ======================================================================
+def test_the_ruler_does_not_carry_a_variable():
+    """It was never compared to anything: the unit guard looks at the unit and
+    regrid looks at the space. The ground truth package already names its field."""
+    assert not hasattr(make_config().ruler, "variable")
+    assert "variable" not in make_config().to_dict()["ruler"]
+
+
+def test_a_ruler_written_with_a_variable_still_loads():
+    raw = make_config().to_dict()
+    raw["ruler"]["variable"] = "vil"
+    cfg = VerificationConfig.from_dict(raw)
+    assert cfg.ruler.ground_truth == "radar-composite"
+    assert cfg.ruler.unit == "kg m-2"
+
+
+def test_the_fingerprint_covers_the_five_things_that_are_left():
+    """The fingerprint is what makes two configs' numbers comparable, so it has
+    to change when the ruler changes and not when anything else does."""
+    from dataclasses import replace
+
+    from nib_verify.config.schema import Ruler
+
+    base = Ruler(ground_truth="a", unit="kg m-2", time_step_minutes=10,
+                 extent=(110.0, 30.0, 120.0, 42.0), resolution=0.5)
+    assert len(base.fingerprint) == 16
+    assert replace(base).fingerprint == base.fingerprint
+    for field, value in (("ground_truth", "b"), ("unit", "dBZ"),
+                         ("time_step_minutes", 5), ("resolution", 1.0),
+                         ("extent", (0.0, 0.0, 1.0, 1.0))):
+        assert replace(base, **{field: value}).fingerprint != base.fingerprint, field

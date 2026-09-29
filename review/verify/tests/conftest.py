@@ -58,7 +58,6 @@ def make_config(levels=LEVELS_FULL, *, group_id: str = "vil-test") -> Verificati
         name="VIL verification, synthetic",
         ruler=Ruler(
             ground_truth="radar-composite",
-            variable="vil",
             unit="kg m-2",
             time_step_minutes=10,
             extent=(110.0, 30.0, 120.0, 42.0),

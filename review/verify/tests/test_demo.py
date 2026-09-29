@@ -69,7 +69,6 @@ def test_the_demo_config_can_be_loaded_and_is_a_complete_ruler(built):
     cfg = load(built.config_file)
     assert cfg.group_id == demo_module.CONFIG_ID
     assert cfg.ruler.unit == demo_module.UNIT
-    assert cfg.ruler.variable == demo_module.VARIABLE
     assert cfg.ruler.time_step_minutes == demo_module.CADENCE_MINUTES
     assert {m.name for m in cfg.members} == set(demo_module.MODELS)
     # every family, so the review page has something in each tab of the picker

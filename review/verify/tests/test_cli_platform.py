@@ -252,7 +252,7 @@ def test_config_list_shows_the_ruler_fingerprint(config_file, capsys):
     out = capsys.readouterr().out
     assert "vil-test" in out
     assert "ruler" in out
-    assert "57649a4d7be4acdc" in out
+    assert make_config().ruler.fingerprint in out
 
 
 def test_config_roster_add_then_retire(config_file, capsys):

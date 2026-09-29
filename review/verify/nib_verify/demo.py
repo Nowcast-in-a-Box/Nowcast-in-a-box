@@ -179,7 +179,7 @@ def verification_config():
         group_id=CONFIG_ID,
         name=DEMO_NAME,
         ruler=Ruler(
-            ground_truth=DATA_ID, variable=VARIABLE, unit=UNIT,
+            ground_truth=DATA_ID, unit=UNIT,
             time_step_minutes=CADENCE_MINUTES, extent=EXTENT, resolution=RESOLUTION,
         ),
         members=tuple(
