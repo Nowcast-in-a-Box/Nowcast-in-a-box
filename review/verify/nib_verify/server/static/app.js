@@ -164,7 +164,7 @@ function renderConfigDetail(cfg) {
   const ruler = cfg.ruler;
 
   const rulerCard = h("div", { class: "card" },
-    h("h2", {}, "The ruler ", pill("locked", "ok")),
+    h("h2", {}, "Basic set ", pill("locked", "ok")),
     h("p", { class: "hint" }, "These fields decide the denominator and the mask. To change one, make a new config."),
     h("div", { class: "grid tight" },
       fact("truth source", ruler.ground_truth),
@@ -188,7 +188,7 @@ function renderConfigDetail(cfg) {
     })),
   ));
   const rosterCard = h("div", { class: "card" },
-    h("h2", {}, "Roster"),
+    h("h2", {}, "Forecasts"),
     h("p", { class: "hint" }, "Add a member, or give one a last day. Membership records are never rewritten — a retired member keeps its numbers."),
     h("div", { class: "scroll" }, h("table", {},
       h("thead", {}, h("tr", {},
@@ -595,7 +595,6 @@ function buildSpec() {
 
   return {
     group: { id, name },
-    notes: $("#c-notes").value.trim(),
     ruler: {
       ground_truth: $("#c-truth").value.trim(),
       variable: $("#c-variable").value.trim(),

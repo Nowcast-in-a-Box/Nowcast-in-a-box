@@ -160,12 +160,18 @@ def test_the_configs_tab_renders_the_config_and_says_nothing_unhappy(page, live_
     assert page.errors == []
 
 
-def test_the_wizard_renders_all_five_blocks(page, live_server):
+def test_the_wizard_renders_its_four_sections(page, live_server):
+    """Four, and numbered 1 to 4. The preview is an action, not a section — it
+    sits in the sticky bar at the bottom so it is reachable from any of them."""
     page.load(live_server).tab("create")
 
     body = page.text()
-    for block in ("Identity", "The ruler", "The roster", "The metrics", "Preview"):
+    for block in ("Identity", "Basic set", "Forecasts", "Metrics"):
         assert block in body, f"the wizard is missing {block!r}"
+    assert "Preview plan" in body
+    steps = page.page.eval_on_selector_all("#tab-create .card > h2 .step",
+                                           "els => els.map(e => e.textContent.trim())")
+    assert steps == ["1", "2", "3", "4"], steps
     assert page.errors == []
 
 
@@ -189,9 +195,9 @@ def test_opening_a_config_shows_its_ruler_roster_and_metrics(page, live_server):
     page.page.wait_for_timeout(700)
 
     body = page.text()
-    assert "The ruler" in body
+    assert "Basic set" in body
     assert "locked" in body
-    assert "Roster" in body
+    assert "Forecasts" in body
     assert "append-only" in body
     assert page.errors == []
 

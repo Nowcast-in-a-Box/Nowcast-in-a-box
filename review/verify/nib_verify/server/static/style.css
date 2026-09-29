@@ -70,6 +70,15 @@ main { padding: 22px; max-width: 1180px; margin: 0 auto; }
   padding: 18px;
   margin-bottom: 16px;
 }
+/* The wizard's action bar. Sticky, because with four sections to fill in the
+   buttons would otherwise be a scroll away from wherever you are. */
+.card.create-foot {
+  position: sticky;
+  bottom: 10px;
+  z-index: 3;
+  box-shadow: 0 -2px 12px rgba(28, 35, 49, .06);
+}
+
 .card > h2 {
   font-size: 14px;
   margin: 0 0 4px;

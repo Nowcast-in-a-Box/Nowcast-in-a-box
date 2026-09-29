@@ -131,10 +131,28 @@ def test_the_form_fields_the_page_reads_are_the_ones_it_has():
     assert not missing, f"the page reads #{missing}, which nothing defines"
 
 
-def test_the_wizard_has_the_five_blocks_the_design_calls_for():
+def test_the_wizard_has_four_numbered_sections():
+    """Four, and the numbers are the sections. The preview bar carries no step
+    number, because it is an action rather than a fifth thing to fill in."""
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     steps = re.findall(r'<span class="step">(\d)</span>', html)
-    assert steps == ["1", "2", "3", "4", "5"]
+    assert steps == ["1", "2", "3", "4"]
+    assert 'id="btn-preview"' in html and 'id="btn-save"' in html
+
+
+def test_the_wizard_sections_are_named_what_they_are():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    headings = re.findall(r'<h2><span class="step">\d</span>([^<]+)</h2>', html)
+    assert headings == ["Identity", "Basic set", "Forecasts", "Metrics"], headings
+
+
+def test_the_detail_panel_uses_the_same_four_names():
+    """The wizard and the panel are two views of one config; two vocabularies
+    for the same four things would be worse than either."""
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    for heading in ('"Basic set "', '"Forecasts"', '"Metrics "'):
+        assert f'h("h2", {{}}, {heading}' in app, heading
+    assert '"The ruler "' not in app and '"Roster"' not in app
 
 
 def test_every_static_file_on_disk_is_reachable():
@@ -169,3 +187,12 @@ def test_the_chart_follows_the_expansion_order_that_was_chosen():
     assert 'dims[dims.length - 1]' in body, "the last expansion is the x axis"
     assert "dims.slice(0, -1)" in body, "the ones before it separate the lines"
     assert "chart.delete(\"g\")" in body, "g is the table's grouping, not the chart's"
+
+
+def test_the_config_form_does_not_ask_for_notes():
+    """What the form asks for is what the config carries. A field nobody reads
+    is a question with no answer path."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert 'id="c-notes"' not in html
+    assert "c-notes" not in app

@@ -59,15 +59,11 @@
         <label for="c-name">Display name</label>
         <input id="c-name" placeholder="VIL, east China, 2026 season" autocomplete="off">
       </div>
-      <div class="field">
-        <label for="c-notes">Notes</label>
-        <input id="c-notes" placeholder="optional" autocomplete="off">
-      </div>
     </div>
   </div>
 
   <div class="card">
-    <h2><span class="step">2</span>The ruler</h2>
+    <h2><span class="step">2</span>Basic set</h2>
     <p class="hint">
       Fixed for the life of the config. The truth source, the grid, the step and the
       unit together decide the denominator and the mask, so changing any of them
@@ -107,11 +103,10 @@
   </div>
 
   <div class="card">
-    <h2><span class="step">3</span>The roster</h2>
+    <h2><span class="step">3</span>Forecasts</h2>
     <p class="hint">
-      Which members this config verifies, and over which dates. Membership is what
-      changes over time — a member is added or has a last day, and the record is kept
-      either way.
+      Which forecast models this config verifies, and over which dates. A model is
+      added or has a last day, and the record is kept either way.
     </p>
     <div id="members"></div>
     <div class="row" style="margin-top:10px">
@@ -121,7 +116,7 @@
   </div>
 
   <div class="card">
-    <h2><span class="step">4</span>The metrics</h2>
+    <h2><span class="step">4</span>Metrics</h2>
     <p class="hint">
       Grouped by family, because everything in a family shares one set of parameters
       and is accumulated in the same pass. Levels and windows are parameters, not
@@ -155,13 +150,7 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2><span class="step">5</span>Preview, then save</h2>
-    <p class="hint">
-      The preview plans against the runs this server can see. It does not read a single
-      field, so it is cheap; switch on <em>probe the provider</em> to also ask which
-      frames actually exist.
-    </p>
+  <div class="card create-foot">
     <div class="row">
       <button class="act" id="btn-preview">Preview plan</button>
       <label class="row tiny"><input type="checkbox" id="c-probe"> probe the provider</label>
