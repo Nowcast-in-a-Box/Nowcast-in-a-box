@@ -1,0 +1,15 @@
+source: mtg_fci
+
+data_dir: "C:/dataloader/nib_data_loaders_minimal/mtg_fci/example_data_input"
+
+# EUMETSAT RC72 test case: nominal cycle starts at 11:50 UTC.
+initial_time: "2024-01-13T11:50:00Z"
+history_steps: 1
+interval_minutes: 10
+
+channels:
+  - ir_105
+
+# [west, south, east, north]
+region:
+  bbox: [-20.0, 20.0, 30.0, 65.0]
