@@ -187,7 +187,8 @@ def verification_config():
             for model_id in MODELS
         ),
         metrics=(
-            MetricGroup(family="categorical", items=("ts", "bias", "ets", "pod", "far"),
+            MetricGroup(family="categorical",
+                        items=("ts", "bias", "ets", "pod", "far", "dts"),
                         levels=LEVELS),
             MetricGroup(family="continuous", items=("me", "mae", "rmse")),
             MetricGroup(family="moments", items=("corr",)),

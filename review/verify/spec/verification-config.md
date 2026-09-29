@@ -127,7 +127,7 @@ parameters and one row of stored quantities.
 
 | Family | Metrics | Parameters |
 |---|---|---|
-| `categorical` | `ts` (alias `csi`), `bias`, `ets`, `pod`, `far` | `levels` |
+| `categorical` | `ts` (alias `csi`), `bias`, `ets`, `pod`, `far`, `dts` | `levels` |
 | `continuous` | `me`, `mae`, `rmse` | — |
 | `moments` | `corr` | — |
 | `spatial` | `fss` | `levels`, `half_windows` |
@@ -138,6 +138,10 @@ nothing to tick. The only things to fill in are the parameters: `levels` for the
 categorical family, and `levels` plus `half_windows` for `fss`. `moments` stays
 a valid family (hand-written configs may carry it), but it is not among the
 defaults.
+
+On screen the families are named for the question each one answers — `Yes or no`,
+`Continuous`, `Special` — because a family outlives the first metric that landed
+in it.
 
 ### Metrics are append-only
 
@@ -197,6 +201,20 @@ recomputing a period overwrites it, never appends to it.
 
 `fss` is stored as the three sums that define it, `pob`, `pfo`, `fbs`, because
 `FSS = 1 - fbs / (pob + pfo)`. Storing the score would make it unaggregatable.
+
+`dts` is the same: a formula over `H`, `F`, `M`, `C` — **the block `ts` already
+uses**, so adding it to a config costs a query and nothing else.
+
+```
+DTS = ( H/(H+F+M) + C/(M+F+C) ) / 2
+```
+
+The event's threat score and the no-event's, averaged. `ts` alone only asks how
+well the event was found; `dts` also asks how the negatives came out, which is
+what separates two forecasts that `ts` calls equal. When either denominator is
+zero the score is **undefined** — a gap, not MetEva's `IV = 999999`, because a
+number that means "not a number" is how an average gets taken over a value that
+does not exist.
 
 ---
 

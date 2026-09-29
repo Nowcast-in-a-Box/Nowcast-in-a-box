@@ -84,7 +84,9 @@ def test_the_metric_catalogue_is_grouped_by_family(client):
     families = {f["family"] for f in body["families"]}
     assert "categorical" in families
     methods = {m["method"] for m in body["metrics"]}
-    assert {"ts", "me", "corr", "fss"} <= methods
+    assert {"ts", "dts", "me", "corr", "fss"} <= methods
+    # dts sits with the other thresholded metrics, and is asked for by name
+    assert next(m for m in body["metrics"] if m["method"] == "dts")["params"] == ["level"]
 
 
 def test_dimensions_come_from_the_metric(client):
