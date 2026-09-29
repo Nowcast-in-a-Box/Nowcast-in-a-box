@@ -22,6 +22,7 @@ Three rules the API enforces rather than trusts the page to respect:
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timezone
@@ -30,7 +31,9 @@ from typing import Any
 
 from ..catalog.hostconfig import HostConfig, HostConfigError
 from ..catalog.matching import check_pair
-from ..catalog.packages import ManifestError, discover as discover_packages
+from ..catalog.packages import (
+    ManifestError, discover as discover_packages, ruler_defaults,
+)
 from ..catalog.runs import RunConfigError, discover as discover_runs
 from ..config.schema import (
     FAMILY_TABLE,
@@ -246,6 +249,7 @@ def create_app(
     def create_config(body: dict = Body(...)):
         spec = _strip_fingerprints(body.get("spec") or body)
         spec.setdefault("group", {})
+        spec = fill_ruler_from_ground_truth(spec, package_roots)
         cfg = VerificationConfig.from_dict(spec)
 
         problems = _validate_against_catalog(cfg, package_roots)
@@ -277,7 +281,7 @@ def create_app(
             )
         member = Member(
             name=_required(body, "name"),
-            variable=body.get("variable") or cfg.ruler.variable,
+            variable=body.get("variable") or "",
             unit=unit,
             leads=tuple(_int_list(body.get("leads"))),
             active_from=_parse_date(body.get("active_from")),
@@ -472,6 +476,42 @@ def _catalog_or_none(roots):
         return None
     catalog = discover_packages(roots)
     return catalog or None
+
+
+def fill_ruler_from_ground_truth(spec: dict, roots) -> dict:
+    """Fill in the ruler fields the ground truth package can answer for.
+
+    The page fills these boxes as soon as a ground truth is picked; this applies
+    the same rule where the config is actually built, so a caller that posts
+    nothing but ``ruler.ground_truth`` gets a usable config rather than a
+    complaint about a unit it was never asked to look up.
+
+    Two limits, both deliberate. Only *blanks* are filled, so an edited value is
+    never overwritten. And only what the manifest actually declares is used: an
+    extent or a resolution it does not declare is left alone, because the ruler
+    needs one and a guess here would silently decide what the numbers mean.
+    """
+    if not roots:
+        return spec
+    ruler = spec.get("ruler")
+    if not isinstance(ruler, Mapping):
+        return spec
+    truth = ruler.get("ground_truth")
+    if not truth:
+        return spec
+
+    package = discover_packages(roots).get(str(truth))
+    if package is None:
+        return spec
+
+    derived = ruler_defaults(package)
+    filled = dict(ruler)
+    for field, value in derived.items():
+        if field == "variable" or value is None:
+            continue                     # ``variable`` is not part of the ruler
+        if filled.get(field) in (None, "", []):
+            filled[field] = list(value) if isinstance(value, (list, tuple)) else value
+    return {**spec, "ruler": filled}
 
 
 def _validate_against_catalog(cfg: VerificationConfig, roots) -> list[str]:

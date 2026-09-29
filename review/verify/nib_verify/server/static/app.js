@@ -409,24 +409,76 @@ async function loadCatalog() {
   }
   const packages = (state.catalog && state.catalog.packages) || null;
   const truthList = $("#truth-options");
-  const stepList = $("#step-options");
-  clear(truthList); clear(stepList);
+  clear(truthList);
 
   if (!packages) {
     $("#truth-note").textContent = "No package roots were given to this server.";
     return;
   }
-  const seenSteps = new Set();
   for (const pkg of packages.packages || []) {
-    if (pkg.kind === "data") {
-      truthList.append(h("option", { value: pkg.id }));
-      if (pkg.cadence_minutes && !seenSteps.has(pkg.cadence_minutes)) {
-        seenSteps.add(pkg.cadence_minutes);
-        stepList.append(h("option", { value: pkg.cadence_minutes }));
-      }
-    }
+    if (pkg.kind === "data") truthList.append(h("option", { value: pkg.id }));
   }
-  $("#truth-note").textContent = `${(packages.packages || []).length} package(s) found`;
+  applyGroundTruth();
+}
+
+// What the ground truth package says about the ruler, keyed by package id.
+function groundTruth(id) {
+  const packages = (state.catalog && state.catalog.packages) || null;
+  if (!packages) return null;
+  for (const pkg of packages.packages || []) {
+    if (pkg.id === id) return pkg.ruler_defaults || {};
+  }
+  return null;
+}
+
+// A box the manifest does not answer for is left empty, never filled with a
+// guess: the ruler decides what the numbers mean, and an invented extent is a
+// silently invented mask.
+function fill(selector, value) {
+  $(selector).value = value === null || value === undefined ? "" : value;
+}
+
+const RULER_BOXES = [["unit", "#c-unit"], ["time_step_minutes", "#c-step"],
+                     ["resolution", "#c-res"]];
+const EXTENT_BOXES = ["#c-lon0", "#c-lat0", "#c-lon1", "#c-lat1"];
+
+function applyGroundTruth() {
+  const id = $("#c-truth").value.trim();
+  const derived = id ? groundTruth(id) : null;
+
+  for (const [key, selector] of RULER_BOXES) {
+    fill(selector, derived ? derived[key] : null);
+  }
+  EXTENT_BOXES.forEach((selector, i) => {
+    fill(selector, derived && derived.extent ? derived.extent[i] : null);
+  });
+
+  if (!id) {
+    $("#truth-note").textContent = "Pick one; its unit and its step come with it.";
+    $("#extent-note").textContent = "";
+    return;
+  }
+  if (!derived) {
+    $("#truth-note").textContent =
+      `"${id}" is not a package this server can see, so nothing was filled in.`;
+    $("#extent-note").textContent = "";
+    return;
+  }
+
+  const have = [];
+  for (const [key, label] of [["unit", "unit"], ["time_step_minutes", "time step"],
+                              ["extent", "extent"], ["resolution", "resolution"]]) {
+    if (derived[key] !== null && derived[key] !== undefined) have.push(label);
+  }
+  $("#truth-note").textContent = have.length
+    ? `filled from the package: ${have.join(", ")}`
+    : "this package declares none of these, so fill them in yourself";
+  $("#extent-note").textContent =
+    derived.extent == null || derived.resolution == null
+      ? "Where the grid is was not declared — a region name is not an extent — so "
+        + "the extent and the resolution are empty. They decide the mask, and "
+        + "nothing here is going to guess them."
+      : "";
 }
 
 async function loadMetrics() {
@@ -581,9 +633,12 @@ function buildSpec() {
   if (!id) throw new Error("A group id is required.");
   if (!name) throw new Error("A display name is required.");
 
+  // The member's own output field, taken from what the ground truth declares.
+  // It is a per-model fact, not a question for the person filling the form.
+  const derived = groundTruth($("#c-truth").value.trim()) || {};
   const members = state.memberRows.map(r => ({
     name: r.name.trim(),
-    variable: $("#c-variable").value.trim(),
+    variable: derived.variable || "",
     unit: $("#c-unit").value.trim(),
     leads: numbers(r.leads).map(Number),
     active_from: r.active_from.trim() || null,
@@ -597,7 +652,6 @@ function buildSpec() {
     group: { id, name },
     ruler: {
       ground_truth: $("#c-truth").value.trim(),
-      variable: $("#c-variable").value.trim(),
       unit: $("#c-unit").value.trim(),
       time_step_minutes: Number($("#c-step").value),
       extent: [Number($("#c-lon0").value), Number($("#c-lat0").value),
@@ -857,6 +911,10 @@ $("#btn-add-metric-group").addEventListener("click", () => {
 });
 $("#btn-preview").addEventListener("click", previewPlan);
 $("#btn-save").addEventListener("click", saveConfig);
+// Choosing the ground truth is what fills the ruler in, so it is also what has to
+// clear it again when the choice changes to a package that declares less.
+$("#c-truth").addEventListener("input", applyGroundTruth);
+$("#c-truth").addEventListener("change", applyGroundTruth);
 $("#btn-query").addEventListener("click", runQuery);
 $("#q-config").addEventListener("change", onConfigPicked);
 $("#q-method").addEventListener("change", onMethodPicked);

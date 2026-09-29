@@ -71,34 +71,32 @@
     </p>
     <div class="grid">
       <div class="field">
-        <label for="c-truth">Truth source</label>
+        <label for="c-truth">Ground truth</label>
         <input id="c-truth" list="truth-options" placeholder="radar-composite" autocomplete="off">
         <datalist id="truth-options"></datalist>
         <span class="note" id="truth-note"></span>
       </div>
       <div class="field">
-        <label for="c-variable">Variable</label>
-        <input id="c-variable" placeholder="vil" autocomplete="off">
-      </div>
-      <div class="field">
         <label for="c-unit">Unit</label>
-        <input id="c-unit" placeholder="kg m-2" autocomplete="off">
-        <span class="note">Must match every member, or nothing is computed.</span>
+        <input id="c-unit" readonly placeholder="—">
+        <span class="note">From the ground truth, and not editable — every member's
+          unit has to match it or the thresholds mean nothing.</span>
       </div>
       <div class="field">
         <label for="c-step">Time step (minutes)</label>
-        <input id="c-step" list="step-options" type="number" min="1" placeholder="10" autocomplete="off">
-        <datalist id="step-options"></datalist>
-        <span class="note">Not interpolated at run time — the cadence is fixed.</span>
+        <input id="c-step" type="number" min="1" placeholder="—" autocomplete="off">
+        <span class="note">From the ground truth. Not interpolated at run time —
+          the cadence is fixed.</span>
       </div>
     </div>
     <div class="grid tight" style="margin-top:12px">
-      <div class="field"><label for="c-lon0">lon min</label><input id="c-lon0" type="number" step="any" placeholder="110"></div>
-      <div class="field"><label for="c-lat0">lat min</label><input id="c-lat0" type="number" step="any" placeholder="25"></div>
-      <div class="field"><label for="c-lon1">lon max</label><input id="c-lon1" type="number" step="any" placeholder="125"></div>
-      <div class="field"><label for="c-lat1">lat max</label><input id="c-lat1" type="number" step="any" placeholder="42"></div>
-      <div class="field"><label for="c-res">Resolution (°)</label><input id="c-res" type="number" step="any" placeholder="0.05"></div>
+      <div class="field"><label for="c-lon0">lon min</label><input id="c-lon0" type="number" step="any" placeholder="—"></div>
+      <div class="field"><label for="c-lat0">lat min</label><input id="c-lat0" type="number" step="any" placeholder="—"></div>
+      <div class="field"><label for="c-lon1">lon max</label><input id="c-lon1" type="number" step="any" placeholder="—"></div>
+      <div class="field"><label for="c-lat1">lat max</label><input id="c-lat1" type="number" step="any" placeholder="—"></div>
+      <div class="field"><label for="c-res">Resolution (°)</label><input id="c-res" type="number" step="any" placeholder="—"></div>
     </div>
+    <p class="note" id="extent-note"></p>
     <input type="hidden" id="c-fingerprint">
   </div>
 

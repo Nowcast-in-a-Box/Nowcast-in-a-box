@@ -611,3 +611,91 @@ def test_the_chart_size_is_bounded(client):
                                   width="1").text
     assert "whole number" in chart(client, config="size-config", method="ts",
                                    width="wide").text
+
+
+# ======================================================================
+# the ground truth fills the ruler in
+# ======================================================================
+def bare(**ruler):
+    """A spec that names a ground truth and supplies as little else as possible."""
+    return {
+        "group": {"id": "derived", "name": "Derived"},
+        "ruler": {"ground_truth": "radar-composite", **ruler},
+        "members": [{"name": "mlcast-det", "leads": [10, 20, 30]}],
+        "metrics": [{"family": "categorical", "items": ["ts"], "levels": [181.0]}],
+    }
+
+
+def post(client, spec):
+    return client.post("/api/configs", json={"spec": spec, "strict": False})
+
+
+def test_the_ground_truth_fills_the_unit_and_the_step(client):
+    """The package declared them; nobody should have to look them up and retype
+    them, and a caller posting only an extent still gets a usable config."""
+    response = post(client, bare(extent=[110, 30, 120, 42], resolution=0.5))
+    assert response.status_code == 201, response.text
+
+    ruler = client.get("/api/configs/derived").json()["ruler"]
+    assert ruler["unit"] == "kg m-2"
+    assert ruler["time_step_minutes"] == 10
+    assert ruler["ground_truth"] == "radar-composite"
+
+
+def test_what_the_caller_gave_is_never_overwritten(client):
+    """The step is editable on purpose: a config may want a coarser one than the
+    source produces. Filling blanks must not undo that."""
+    response = post(client, bare(unit="mm", time_step_minutes=30,
+                                 extent=[110, 30, 120, 42], resolution=0.5))
+    assert response.status_code == 201, response.text
+
+    ruler = client.get("/api/configs/derived").json()["ruler"]
+    assert ruler["unit"] == "mm"
+    assert ruler["time_step_minutes"] == 30
+
+
+def test_an_extent_the_package_does_not_declare_is_not_invented(client):
+    """The manifest names a region, not a grid. A guessed extent is a guessed
+    mask, and the mask decides which samples the numbers are made of."""
+    response = post(client, bare())
+    assert response.status_code == 400
+    assert "extent" in response.text
+
+
+def test_a_ground_truth_the_server_cannot_see_fills_nothing_in(client):
+    """It refuses rather than inventing a unit for a package nobody found."""
+    response = post(client, {**bare(), "ruler": {
+        "ground_truth": "no-such-package",
+        "extent": [110, 30, 120, 42], "resolution": 0.5,
+    }})
+    assert response.status_code == 400
+    assert "unit" in response.text
+
+
+def test_the_ruler_fingerprint_moves_when_the_unit_is_filled_in(client):
+    """The two paths must agree, or a config made through the interface and the
+    same config made by hand would not be comparable."""
+    from nib_verify.config.schema import VerificationConfig
+
+    assert post(client, bare(extent=[110, 30, 120, 42], resolution=0.5)).status_code == 201
+    filled = client.get("/api/configs/derived").json()
+
+    by_hand = VerificationConfig.from_dict({
+        **bare(extent=[110, 30, 120, 42], resolution=0.5),
+        "group": {"id": "derived", "name": "Derived"},
+        "ruler": {"ground_truth": "radar-composite", "unit": "kg m-2",
+                  "time_step_minutes": 10, "extent": [110, 30, 120, 42],
+                  "resolution": 0.5},
+    })
+    assert filled["ruler_fingerprint"] == by_hand.ruler.fingerprint
+
+
+def test_a_package_advertises_what_it_can_answer_for(client):
+    """The page reads these off the catalog rather than guessing them, so the
+    form and the service cannot disagree about what a ground truth implies."""
+    packages = client.get("/api/catalog").json()["packages"]["packages"]
+    radar = next(p for p in packages if p["id"] == "radar-composite")
+    assert radar["ruler_defaults"] == {
+        "variable": "vil", "unit": "kg m-2", "time_step_minutes": 10,
+        "extent": None, "resolution": None,
+    }

@@ -155,7 +155,7 @@ def test_the_configs_tab_renders_the_config_and_says_nothing_unhappy(page, live_
     body = page.text()
     assert "NiB verification" in body
     assert "vil-test" in body, "the config table did not render"
-    assert "57649a4d7be4acdc" in body, "the ruler fingerprint did not render"
+    assert make_config().ruler.fingerprint in body, "the ruler fingerprint did not render"
     assert "Could not read" not in body
     assert page.errors == []
 
@@ -175,18 +175,63 @@ def test_the_wizard_renders_its_four_sections(page, live_server):
     assert page.errors == []
 
 
-def test_the_wizard_offers_what_the_catalog_found(page, live_server):
+def test_the_wizard_offers_the_ground_truths_the_catalog_found(page, live_server):
     """A datalist's options are not page text, so they are counted directly."""
     page.load(live_server).tab("create")
 
     assert "radar-composite" in page.page.eval_on_selector_all(
         "#truth-options option", "els => els.map(e => e.value)")
-    assert page.page.locator("#step-options option").count() >= 1
 
     # the roster suggests the model ids, once a row exists to suggest them for
     page.page.click("#btn-add-member")
     page.page.wait_for_timeout(200)
     assert "mlcast-det" in page.text()
+
+
+def test_choosing_a_ground_truth_fills_the_ruler_in(page, live_server):
+    """The package already declares its unit and its step, so the form asks it
+    rather than asking a person to retype them."""
+    page.load(live_server).tab("create")
+    assert page.page.eval_on_selector("#c-unit", "e => e.value") == ""
+
+    page.page.fill("#c-truth", "radar-composite")
+    page.page.dispatch_event("#c-truth", "change")
+    page.page.wait_for_timeout(300)
+
+    assert page.page.eval_on_selector("#c-unit", "e => e.value") == "kg m-2"
+    assert page.page.eval_on_selector("#c-step", "e => e.value") == "10"
+    assert "filled from the package" in page.text()
+
+
+def test_the_unit_cannot_be_typed_over_and_what_is_not_declared_stays_empty(page, live_server):
+    """A region name is not an extent. The boxes the package cannot answer for
+    stay empty and say so, because a guessed mask is a silently invented one."""
+    page.load(live_server).tab("create")
+    page.page.fill("#c-truth", "radar-composite")
+    page.page.dispatch_event("#c-truth", "change")
+    page.page.wait_for_timeout(300)
+
+    assert page.page.eval_on_selector("#c-unit", "e => e.readOnly") is True
+    for selector in ("#c-lon0", "#c-lat0", "#c-lon1", "#c-lat1", "#c-res"):
+        assert page.page.eval_on_selector(selector, "e => e.value") == "", selector
+    assert "not declared" in page.text()
+    assert page.errors == []
+
+
+def test_switching_ground_truth_clears_what_the_new_one_does_not_declare(page, live_server):
+    """Otherwise the previous package's unit is left sitting under the new
+    package's name, which is worse than an empty box."""
+    page.load(live_server).tab("create")
+    page.page.fill("#c-truth", "radar-composite")
+    page.page.dispatch_event("#c-truth", "change")
+    page.page.wait_for_timeout(300)
+    assert page.page.eval_on_selector("#c-unit", "e => e.value") == "kg m-2"
+
+    page.page.fill("#c-truth", "no-such-package")
+    page.page.dispatch_event("#c-truth", "change")
+    page.page.wait_for_timeout(300)
+    assert page.page.eval_on_selector("#c-unit", "e => e.value") == ""
+    assert "not a package this server can see" in page.text()
 
 
 def test_opening_a_config_shows_its_ruler_roster_and_metrics(page, live_server):
@@ -206,10 +251,11 @@ def test_a_preview_plans_and_reports(page, live_server):
     page.load(live_server).tab("create")
     page.page.fill("#c-id", "shot-config")
     page.page.fill("#c-name", "A config from the wizard")
+    # Ground truth first: the unit and the step come with it and the extent does
+    # not, which is the whole shape of the section.
     page.page.fill("#c-truth", "radar-composite")
-    page.page.fill("#c-variable", "vil")
-    page.page.fill("#c-unit", "kg m-2")
-    page.page.fill("#c-step", "10")
+    page.page.dispatch_event("#c-truth", "change")
+    page.page.wait_for_timeout(200)
     for element, value in (("#c-lon0", "110"), ("#c-lat0", "30"),
                            ("#c-lon1", "120"), ("#c-lat1", "42"), ("#c-res", "0.5")):
         page.page.fill(element, value)
