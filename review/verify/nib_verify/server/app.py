@@ -56,11 +56,11 @@ from .library import ConfigLibrary, ConfigNotFound
 # parameter, and every endpoint taking a Request would answer 422.
 try:  # pragma: no cover - exercised by whichever branch the environment takes
     from fastapi import Body, FastAPI, Query, Request
-    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.responses import FileResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     HAS_FASTAPI = True
 except ModuleNotFoundError:  # pragma: no cover
-    Body = FastAPI = Query = Request = None
+    Body = FastAPI = Query = Request = Response = None
     FileResponse = JSONResponse = StaticFiles = None
     HAS_FASTAPI = False
 
@@ -397,6 +397,38 @@ def create_app(
             )
         return result
 
+    @app.get("/api/chart")
+    def get_chart(request: Request):
+        """The same query the table runs, drawn.
+
+        A separate endpoint rather than a flag on ``/api/scores``: the page loads
+        this with ``<img src>``, so it has to answer with an image and not with
+        JSON, and it has to be able to fail as an image too.
+        """
+        from ..report import chart_for, line_chart
+
+        params = request.query_params
+        method = params.get("method")
+        if not method:
+            raise QueryError("method is required")
+        config_id = params.get("config")
+        cfg = library.get(config_id) if config_id else None
+
+        with store() as s:
+            chart = chart_for(
+                s, cfg,
+                method=method,
+                s=_filters_from_query(params),
+                x=params.get("x") or "lead_minutes",
+                series=tuple(params.getlist("series")) or ("member",),
+            )
+        return Response(
+            content=line_chart(chart, width=_int_param(params, "width", 760),
+                               height=_int_param(params, "height", 440)),
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store"},
+        )
+
     # ============================================================== static
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -484,6 +516,20 @@ def _strip_fingerprints(spec: dict) -> dict:
     if isinstance(ruler, dict):
         ruler.pop("fingerprint", None)
     return out
+
+
+def _int_param(params, name: str, fallback: int) -> int:
+    """A size from the query string, bounded.
+
+    The value ends up in an SVG header and in the arithmetic behind every
+    coordinate, so it is clamped rather than trusted: an unbounded width is a
+    cheap way to make the service allocate.
+    """
+    try:
+        value = int(params.get(name) or fallback)
+    except (TypeError, ValueError):
+        raise QueryError(f"{name} must be a whole number") from None
+    return max(200, min(value, 4000))
 
 
 def _required(body: dict, key: str) -> str:

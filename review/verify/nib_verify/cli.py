@@ -488,6 +488,42 @@ def cmd_expansions(args) -> int:
     return EXIT_OK
 
 
+def cmd_chart(args) -> int:
+    """Draw one query as SVG.
+
+    Writes to stdout by default, so ``nib-verify chart ... > curve.svg`` works;
+    ``--out`` is for when this is one step in a script that has other things to
+    say on stdout.
+    """
+    from .report import chart_for, line_chart
+
+    root = Path(args.root)
+    cfg = load(args.config) if args.config else None
+    store = Store(root / "verify.sqlite")
+    try:
+        chart = chart_for(
+            store, cfg,
+            method=args.method,
+            s=_parse_filters(args.s or []),
+            x=args.x,
+            series=tuple(args.series or ()),
+        )
+    finally:
+        store.close()
+
+    svg = line_chart(chart, width=args.width, height=args.height,
+                     y_min=args.y_min, y_max=args.y_max)
+    if args.out:
+        Path(args.out).write_text(svg, encoding="utf-8")
+        if args.progress != "quiet":
+            drawn = sum(1 for s in chart.series if s.defined)
+            print(f"{args.out}: {drawn} series, {len(chart.values())} points",
+                  file=sys.stderr)
+    else:
+        sys.stdout.write(svg)
+    return EXIT_OK
+
+
 # ======================================================================
 # serve
 # ======================================================================
@@ -804,6 +840,27 @@ def _build_parser() -> argparse.ArgumentParser:
     e = sub.add_parser("expansions", help="which dimensions a metric can expand by")
     e.add_argument("--method", required=True)
     e.set_defaults(handler=cmd_expansions)
+
+    # -- chart ----------------------------------------------------------
+    c = sub.add_parser("chart", help="draw one query as an SVG line chart")
+    c.add_argument("--method", required=True)
+    c.add_argument("--config")
+    c.add_argument("--root", required=True)
+    c.add_argument("-s", action="append", metavar="KEY=VALUE",
+                   help="filter: time / dtime / member / level / half_window")
+    c.add_argument("-x", dest="x", default="lead_minutes", metavar="COLUMN",
+                   help="column along the x axis (default: lead_minutes)")
+    c.add_argument("--series", action="append", metavar="COLUMN",
+                   help="column that separates one line from another; "
+                        "repeat to cross two (default: member)")
+    c.add_argument("--out", metavar="FILE", help="write here instead of stdout")
+    c.add_argument("--width", type=int, default=760)
+    c.add_argument("--height", type=int, default=440)
+    c.add_argument("--y-min", dest="y_min", type=float,
+                   help="fix the y axis instead of fitting it to the data")
+    c.add_argument("--y-max", dest="y_max", type=float)
+    c.add_argument("--progress", choices=("quiet", "plain"), default="plain")
+    c.set_defaults(handler=cmd_chart)
 
     # -- datafeed -------------------------------------------------------
     # The simulated data interface. Serves any provider at the addresses in
