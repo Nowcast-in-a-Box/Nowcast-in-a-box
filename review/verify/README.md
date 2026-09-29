@@ -13,10 +13,21 @@ as an RFC; this directory is the implementation that follows it.
 ```bash
 cd review/verify
 pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
-python -m pytest                   # 489 tests, no GPU, no network, no data
+python -m pytest                   # 512 tests, no GPU, no network, no data
 ```
 
-The command line:
+**The whole thing, end to end, in one command.** It fabricates a platform, serves
+simulated fields on a real socket, verifies through it over HTTP, and brings up
+the review page:
+
+```bash
+python -m nib_verify demo --open
+```
+
+There is a script for showing that to people — what each stage proves, what to
+click, and the questions it invites — in [DEMO.md](DEMO.md).
+
+The command line, stage by stage:
 
 ```bash
 # what can be computed
@@ -106,9 +117,10 @@ still there, unaggregated.
 | `nib_verify/runner/` | task execution, progress, the single-instance lock |
 | `nib_verify/query/` | the read path |
 | `nib_verify/report/` | the read path, drawn |
+| `nib_verify/demo.py` | the whole chain, in one command, for showing people |
 | `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 489 tests, all synthetic |
+| `tests/` | 512 tests, all synthetic |
 
 ---
 
@@ -390,6 +402,7 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_cli_datafeed.py` | the datafeed commands, and that `real` still cannot be a hole |
 | `tests/test_scenario.py` | the named scenarios, and that they are not a perfect forecast |
 | `tests/test_chart.py` | the chart as a document: no NaN, nothing off the canvas, gaps stay gaps |
+| `tests/test_demo.py` | the fabricated workspace is consistent with itself |
 
 Nothing here needs a GPU, a network, or a data file. The browser tests skip unless
 playwright can find a browser; with Edge or Chrome installed no download is
