@@ -17,7 +17,9 @@ regridding path is always exercised.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -32,6 +34,44 @@ DEFAULT_T0 = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
 MISSING_KINDS = ("none", "random", "range")
 
 
+@dataclass(frozen=True)
+class Source:
+    """One observation product, as the platform serves it.
+
+    Several products of one storm are not several storms. They carry the same
+    weather on a different scale, with their own instrument noise and their own
+    coverage, and that is exactly what a multi-source evaluation has to cope
+    with.
+
+    The *unit* is the part a config cares about: every member of a config has to
+    be in the ruler's unit, so two products in different units are two different
+    rulers, and therefore two different configs.
+
+    ``scale`` is one number rather than a second field generator. A rain rate, a
+    reflectivity and a VIL of the same cell are related by a curve, and one
+    multiplier is enough to make them different numbers on different scales
+    without pretending the curve is known.
+    """
+
+    name: str
+    variable: str
+    unit: str
+    scale: float = 1.0
+    vmin: float | None = None
+    vmax: float | None = None
+    noise: float = 0.0
+    missing_kind: str = "random"
+    missing_points: int = 0
+
+
+#: what a per-source override may say. Anything else is a typo, and a typo that
+#: silently did nothing would serve the wrong field.
+SOURCE_FIELDS = frozenset(
+    {"variable", "unit", "scale", "vmin", "vmax", "noise", "missing_kind",
+     "missing_points"}
+)
+
+
 class SyntheticAccess:
     """A deterministic stand-in for the platform's field provider."""
 
@@ -43,6 +83,8 @@ class SyntheticAccess:
         horizon_minutes: int = 120,
         observation_names: tuple[str, ...] = ("radar-composite",),
         model_ids: tuple[str, ...] = ("mlcast-det",),
+        sources: Mapping[str, Mapping[str, Any]] = {},
+        model_sources: Mapping[str, str] = {},
         obs_shape: tuple[int, int] = (48, 64),
         obs_extent: tuple[float, float, float, float] = (110.0, 30.0, 120.0, 42.0),
         model_shape: tuple[int, int] = (40, 52),
@@ -126,17 +168,80 @@ class SyntheticAccess:
         self.obs_coords = coords_from_extent(obs_extent, obs_shape)
         self.model_coords = coords_from_extent(model_extent, model_shape)
         self._unavailable = {_as_utc(t) for t in unavailable_times}
+        self.sources = self._resolve_sources(sources)
+        self.model_sources = self._resolve_model_sources(model_sources)
 
         self._obs_lead = None
         self._model_lead = None
+
+    def _resolve_sources(
+        self, overrides: Mapping[str, Mapping[str, Any]]
+    ) -> dict[str, Source]:
+        """One fully-resolved :class:`Source` per observation name.
+
+        Resolved rather than looked up on demand, so a name that does not exist,
+        or a setting that is not a setting, is refused when the provider is
+        built — not when a field is asked for and quietly comes back as the
+        first source's.
+        """
+        stray = sorted(set(overrides) - set(self.observation_names))
+        if stray:
+            raise ValueError(
+                f"source settings for {stray}, which are not observation names; "
+                f"the provider serves {list(self.observation_names)}"
+            )
+        out: dict[str, Source] = {}
+        for name in self.observation_names:
+            given = dict(overrides.get(name) or {})
+            unknown = sorted(set(given) - SOURCE_FIELDS)
+            if unknown:
+                raise ValueError(
+                    f"source {name!r} has settings that do not exist: {unknown}; "
+                    f"expected any of {sorted(SOURCE_FIELDS)}"
+                )
+            out[name] = Source(
+                name=name,
+                variable=str(given.get("variable", self.variable)),
+                unit=str(given.get("unit", self.unit)),
+                scale=float(given.get("scale", 1.0)),
+                vmin=given.get("vmin", self.vmin),
+                vmax=given.get("vmax", self.vmax),
+                noise=float(given.get("noise", self.truth_noise)),
+                missing_kind=str(given.get("missing_kind", self.missing_kind)),
+                missing_points=int(given.get("missing_points", self.missing_points)),
+            )
+        return out
+
+    def _resolve_model_sources(self, given: Mapping[str, str]) -> dict[str, Source]:
+        """Which product each model's output is, by the source it copies.
+
+        A model predicting reflectivity is a reflectivity product: same variable,
+        same unit, same scale as the observations it will be compared with. A
+        model whose product does not say which falls back to the provider's own
+        variable and unit.
+        """
+        stray = sorted(set(given) - set(self.model_ids))
+        if stray:
+            raise ValueError(
+                f"model_sources names {stray}, which are not model ids; the "
+                f"provider serves {list(self.model_ids)}"
+            )
+        out: dict[str, Source] = {}
+        for model_id, source_name in given.items():
+            if source_name not in self.sources:
+                raise ValueError(
+                    f"model {model_id!r} is said to produce {source_name!r}, "
+                    f"which is not an observation the provider serves: "
+                    f"{list(self.sources)}"
+                )
+            out[model_id] = self.sources[source_name]
+        return out
 
     # ------------------------------------------------------------------
     # capabilities
     # ------------------------------------------------------------------
     def capabilities(self) -> Capabilities:
-        units = {}
-        for name in self.observation_names:
-            units[name] = self.unit
+        units = {name: self.sources[name].unit for name in self.observation_names}
         for mid in self.model_ids:
             units[mid] = self.unit
         return Capabilities(
@@ -172,8 +277,9 @@ class SyntheticAccess:
                 f"observation {name!r} was not recorded at {valid_time.isoformat()}"
             )
         return self._make_field(
-            self.obs_coords, valid_time, name=name, noise=self.truth_noise,
-            stream=1, bias=0.0,
+            self.obs_coords, valid_time, name=name,
+            noise=self.sources[name].noise, stream=1, bias=0.0,
+            source=self.sources[name],
         )
 
     # ------------------------------------------------------------------
@@ -213,6 +319,7 @@ class SyntheticAccess:
             self.model_coords, valid_time, name=model_id,
             noise=self.forecast_noise * rank, stream=2, bias=self.forecast_bias,
             lag_minutes=self.forecast_lag_minutes * rank,
+            source=self.model_sources.get(model_id),
         )
 
     # ------------------------------------------------------------------
@@ -228,29 +335,34 @@ class SyntheticAccess:
         stream: int,
         bias: float,
         lag_minutes: float = 0.0,
+        source: Source | None = None,
     ) -> Field:
         # A lagging forecast is the field from earlier, not a blurred one. It is
         # the honest way to be wrong: the structure is right and the position is
         # not, so a high threshold loses it entirely while a low one barely
         # notices — which is exactly what thresholds are for.
         data = self.blob(coords, valid_time - timedelta(minutes=lag_minutes))
+        if source is not None and source.scale != 1.0:
+            data = data * source.scale
         if noise:
             data = data + self._noise(coords.shape, valid_time, stream, noise)
         if bias:
             data = data + bias
-        if self.vmin is not None or self.vmax is not None:
+        vmin = self.vmin if source is None else source.vmin
+        vmax = self.vmax if source is None else source.vmax
+        if vmin is not None or vmax is not None:
             data = np.clip(
                 data,
-                self.vmin if self.vmin is not None else -np.inf,
-                self.vmax if self.vmax is not None else np.inf,
+                vmin if vmin is not None else -np.inf,
+                vmax if vmax is not None else np.inf,
             )
-        mask = self._missing_mask(coords, valid_time)
+        mask = self._missing_mask(coords, valid_time, source=source)
         return Field(
             data=data,
             coords=coords,
             valid_time=valid_time,
-            unit=self.unit,
-            variable=self.variable,
+            unit=self.unit if source is None else source.unit,
+            variable=self.variable if source is None else source.variable,
             name=name,
             mask=mask,
         )
@@ -343,18 +455,22 @@ class SyntheticAccess:
         rng = np.random.default_rng([self.seed, self._minutes(valid_time), stream])
         return rng.normal(0.0, amplitude, size=shape)
 
-    def _missing_mask(self, coords: Coords, valid_time: datetime) -> np.ndarray | None:
+    def _missing_mask(
+        self, coords: Coords, valid_time: datetime, *, source: Source | None = None
+    ) -> np.ndarray | None:
         shape = coords.shape
+        kind = self.missing_kind if source is None else source.missing_kind
+        points = self.missing_points if source is None else source.missing_points
         parts = []
-        if self.missing_kind == "range":
+        if kind == "range":
             parts.append(self._range_mask(coords))
-        if self.missing_kind != "none" and self.missing_points > 0:
+        if kind != "none" and points > 0:
             # Speckle on top of a coverage gap is what a real composite looks
             # like, and the two exercise different code: a large contiguous hole
             # catches a resampling step that fills, scattered points catch one
             # that smears.
             rng = np.random.default_rng([self.seed, self._minutes(valid_time), 99])
-            n = min(self.missing_points, shape[0] * shape[1])
+            n = min(points, shape[0] * shape[1])
             speckle = np.zeros(shape, dtype=bool)
             speckle.flat[rng.choice(shape[0] * shape[1], size=n, replace=False)] = True
             parts.append(speckle)

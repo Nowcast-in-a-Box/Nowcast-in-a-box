@@ -298,3 +298,99 @@ def test_simple_declares_only_the_default_names():
     access = provider("simple")
     assert access.model_ids == ("mlcast-det",)
     assert access.observation_names == ("radar-composite",)
+
+
+# ======================================================================
+# several observation products from one provider
+# ======================================================================
+def _fleet(**overrides):
+    return SyntheticAccess(
+        t_start=T0,
+        observation_names=("radar-composite", "radar-dbz-hires", "satellite-vil"),
+        model_ids=("mlcast-det", "mlcast-alt"),
+        sources={
+            "radar-composite": {"variable": "vil", "unit": "kg m-2", "scale": 1.0,
+                                "missing_kind": "range", "missing_points": 60},
+            "radar-dbz-hires": {"variable": "dbz", "unit": "dBZ", "scale": 0.25,
+                                "vmin": -10.0, "vmax": 70.0,
+                                "missing_kind": "none", "missing_points": 0},
+            "satellite-vil": {"variable": "vil", "unit": "kg m-2", "scale": 0.9,
+                              "noise": 9.0, "missing_kind": "random",
+                              "missing_points": 120},
+        },
+        model_sources={"mlcast-det": "radar-composite",
+                       "mlcast-alt": "radar-dbz-hires"},
+        **overrides,
+    )
+
+
+def test_each_product_reports_its_own_unit():
+    caps = _fleet().capabilities()
+    assert caps.unit_of("radar-composite") == "kg m-2"
+    assert caps.unit_of("radar-dbz-hires") == "dBZ"
+    assert caps.unit_of("satellite-vil") == "kg m-2"
+
+
+def test_a_model_reports_the_product_it_copies():
+    """A model that nowcasts reflectivity produces reflectivity, and saying
+    otherwise would put it in a config whose ruler is in another unit."""
+    fleet = _fleet()
+    field = fleet.get_prediction("mlcast-alt", T0, 10)
+    assert (field.variable, field.unit) == ("dbz", "dBZ")
+    other = fleet.get_prediction("mlcast-det", T0, 10)
+    assert (other.variable, other.unit) == ("vil", "kg m-2")
+
+
+def test_products_of_one_storm_are_not_the_same_field():
+    """Otherwise the second source is the first wearing another name."""
+    fleet = _fleet(truth_noise=0.0)
+    vil = fleet.get_observation("radar-composite", T0).data
+    dbz = fleet.get_observation("radar-dbz-hires", T0).data
+    sat = fleet.get_observation("satellite-vil", T0).data
+    assert np.allclose(dbz, vil * 0.25, atol=1e-9), "same storm, another scale"
+    assert not np.allclose(sat, vil), "the second VIL product is not the first renamed"
+    # what separates it is its own instrument noise, on top of its own scale
+    assert float(np.abs(sat - vil * 0.9).mean()) > 1.0
+
+
+def test_a_product_keeps_its_own_coverage():
+    fleet = _fleet(truth_noise=0.0)
+    assert fleet.get_observation("radar-dbz-hires", T0).mask is None
+    for name in ("radar-composite", "satellite-vil"):
+        mask = fleet.get_observation(name, T0).mask
+        assert mask is not None and mask.any(), name
+
+
+def test_a_product_keeps_its_own_clipping():
+    fleet = _fleet()
+    assert float(fleet.get_observation("radar-dbz-hires", T0).data.max()) <= 70.0
+
+
+def test_saying_nothing_about_sources_changes_nothing():
+    """The default has to stay byte for byte what it was, or every expectation
+    written before products existed moves."""
+    plain = SyntheticAccess(t_start=T0, observation_names=("radar-composite",),
+                            model_ids=("mlcast-det",))
+    bare = SyntheticAccess(t_start=T0)
+    for method in ("get_observation", "get_prediction"):
+        args = ("radar-composite", T0) if method == "get_observation" else ("mlcast-det", T0, 10)
+        a, b = getattr(plain, method)(*args), getattr(bare, method)(*args)
+        assert np.array_equal(a.data, b.data)
+        assert (a.unit, a.variable) == (b.unit, b.variable)
+
+
+@pytest.mark.parametrize("given, mentions", [
+    ({"not-a-source": {}}, "not observation names"),
+    ({"radar-composite": {"uni": "dBZ"}}, "do not exist"),
+])
+def test_a_source_setting_that_is_wrong_is_refused_at_construction(given, mentions):
+    """Not when a field is asked for and quietly comes back as the first one's."""
+    with pytest.raises(ValueError, match=mentions):
+        SyntheticAccess(t_start=T0, observation_names=("radar-composite",), sources=given)
+
+
+def test_a_model_pointed_at_a_source_that_does_not_exist_is_refused():
+    with pytest.raises(ValueError, match="not an observation"):
+        SyntheticAccess(t_start=T0, observation_names=("radar-composite",),
+                        model_ids=("mlcast-det",),
+                        model_sources={"mlcast-det": "nope"})
