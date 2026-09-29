@@ -162,7 +162,36 @@ This file is a placeholder. When A2 is implemented, delete it and call theirs.
 
 ---
 
-## 5. Planning states intent; running states fact
+## 5. What a ground truth can answer for the ruler
+
+A verification config's ruler is, by design, immutable. Most of it is not a
+decision anybody makes — it is a fact the data package already declares:
+
+| Ruler field | Where it comes from |
+|---|---|
+| `unit` | the package's first named field |
+| `time_step_minutes` | the package's cadence |
+| `extent` | `extent` (or `bounds`) on the package or the field, if declared |
+| `resolution` | `resolution` on the package or the field, if declared |
+
+`PackageManifest.as_dict()` carries this as `ruler_defaults`, and it is exposed
+through `GET /api/catalog` so the form can fill its boxes without asking a second
+question. Where a manifest declares nothing, the value is `None` and the box
+stays **empty**.
+
+Two rules, and both matter more than they look:
+
+- **Nothing is derived from a region name.** Manifests usually name a region
+  (`east-china`) rather than a grid. A name is not an extent, so no corners are
+  invented from it. The extent decides the mask, and a guessed mask decides which
+  samples the numbers are made of.
+- **Blanks are filled, never overwritten.** `POST /api/configs` applies the same
+  derivation, so a caller posting only a ground truth gets the same config the
+  form would have built. A value the caller supplied is left alone: the step in
+  particular is editable on purpose, because a config may want a coarser one than
+  its source produces.
+
+## 6. Planning states intent; running states fact
 
 ```
 one config  +  many runs  →  many tasks
@@ -209,3 +238,7 @@ call per window, not one per task, and it never pulls a prediction field.
    of model ids. This module reads v1 only, and will need a version branch.
 5. **Scanning cost.** Discovery walks a whole root. For a large workspace this
    wants an index, or a hook from the handler that says "a run was written".
+6. **Where `extent` and `resolution` belong.** Deriving the ruler needs them to
+   be declarable, and today they are read from either the package or its first
+   field under a short list of aliases, because no manifest schema says where
+   they go. When A3 does, that becomes a plain field lookup.

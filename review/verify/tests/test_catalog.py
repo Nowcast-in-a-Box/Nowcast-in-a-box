@@ -364,3 +364,93 @@ def test_matching_two_data_packages_refuses():
     result = check_pair(_data(), _data())
     assert not result.ok
     assert "is not a model package" in result.errors[0]
+
+
+# ======================================================================
+# what the ground truth can answer for the ruler
+# ======================================================================
+def manifest(**overrides):
+    from nib_verify.catalog.packages import PackageManifest
+
+    raw = {
+        "id": "radar-composite",
+        "offers": ["precip-nowcast.v1"],
+        "fields": [{"name": "vil", "unit": "kg m-2", "cadence_minutes": 10,
+                    "shape": [48, 64]}],
+    }
+    raw.update(overrides)
+    return PackageManifest.from_mapping(raw)
+
+
+def test_the_unit_the_step_andthe_field_name_come_from_the_field():
+    from nib_verify.catalog.packages import ruler_defaults
+
+    got = ruler_defaults(manifest())
+    assert got["unit"] == "kg m-2"
+    assert got["time_step_minutes"] == 10
+    assert got["variable"] == "vil"
+
+
+def test_an_extent_is_read_when_the_manifest_gives_one():
+    from nib_verify.catalog.packages import ruler_defaults
+
+    got = ruler_defaults(manifest(extent=[110, 30, 120, 42], resolution=0.5))
+    assert got["extent"] == [110.0, 30.0, 120.0, 42.0]
+    assert got["resolution"] == 0.5
+
+
+def test_an_extent_given_as_bounds_is_read_too():
+    from nib_verify.catalog.packages import ruler_defaults
+
+    got = ruler_defaults(manifest(bounds={"lon_min": 100, "lat_min": 20,
+                                          "lon_max": 130, "lat_max": 45}))
+    assert got["extent"] == [100.0, 20.0, 130.0, 45.0]
+    assert got["resolution"] is None
+
+
+def test_an_extent_on_the_field_is_read_as_well_as_on_the_package():
+    from nib_verify.catalog.packages import ruler_defaults
+
+    got = ruler_defaults(manifest(fields=[{"name": "z", "unit": "mm",
+                                           "extent": [1, 2, 3, 4], "resolution": 0.25}]))
+    assert got["extent"] == [1.0, 2.0, 3.0, 4.0]
+    assert got["resolution"] == 0.25
+
+
+def test_a_region_name_is_not_an_extent():
+    """The interesting case. A manifest usually names a *region*, and a name is
+    not a grid — inventing corners from `east-china` would be inventing the mask."""
+    from nib_verify.catalog.packages import ruler_defaults
+
+    got = ruler_defaults(manifest(region="east-china"))
+    assert got["extent"] is None
+    assert got["resolution"] is None
+
+
+@pytest.mark.parametrize("junk", [
+    {"extent": ["a", "b"]}, {"extent": [1, 2, 3]}, {"extent": "east-china"},
+    {"extent": {"lon_min": 1, "lat_min": 2}}, {"resolution": "fine"},
+    {"resolution": True}, {"bounds": {"north": 40}},
+])
+def test_something_unreadable_comes_back_as_nothing(junk):
+    from nib_verify.catalog.packages import ruler_defaults
+
+    got = ruler_defaults(manifest(**junk))
+    assert got["extent"] is None
+    assert got["resolution"] is None
+
+
+def test_a_package_with_no_fields_answers_for_nothing_it_does_not_have():
+    from nib_verify.catalog.packages import ruler_defaults
+
+    got = ruler_defaults(manifest(fields=[]))
+    assert got["unit"] is None
+    assert got["variable"] is None
+    assert got["extent"] is None
+
+
+def test_every_package_in_a_catalog_carries_its_defaults(platform):
+    """The page reads them out of /api/catalog, so they have to be on every
+    package, not only on the one you happened to test."""
+    for package in platform.catalog().packages:
+        assert "ruler_defaults" in package.as_dict(), package.id

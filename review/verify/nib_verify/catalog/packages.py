@@ -171,6 +171,7 @@ class PackageManifest:
             "context_frames": dict(self.context_frames),
             "fields": [f.describe() for f in self.all_fields],
             "cadence_minutes": self.cadence_minutes,
+            "ruler_defaults": ruler_defaults(self),
         }
 
     def describe(self) -> str:
@@ -262,6 +263,76 @@ def load_manifest(path: str | Path) -> PackageManifest:
     if not looks_like_manifest(raw):
         raise ManifestError(f"{p}: does not look like a package manifest")
     return PackageManifest.from_mapping(raw, path=p)
+
+
+def ruler_defaults(package: PackageManifest) -> dict[str, Any]:
+    """What a manifest can answer for the ruler, and nothing it cannot.
+
+    A ground truth package already knows its unit and its step, so the form asks
+    the package instead of asking a person to retype what the platform already
+    declared. Everything it does not declare comes back as ``None`` and the form
+    leaves that box empty: filling it in with a guess would be inventing the
+    ruler, and the ruler is the part that decides whether two numbers are
+    comparable.
+
+    ``extent`` and ``resolution`` are the interesting case, because a manifest
+    usually names a *region* (``east-china``) rather than a grid. A region name is
+    not an extent, so nothing is derived from it — the box stays empty and
+    somebody has to say where the grid actually is.
+    """
+    field = _primary_field(package)
+    return {
+        "variable": field.name if field else None,
+        "unit": field.unit if field else None,
+        "time_step_minutes": package.cadence_minutes,
+        "extent": _extent(_declared(package, field, "extent", "bounds")),
+        "resolution": _number(_declared(package, field, "resolution")),
+    }
+
+
+def _primary_field(package: PackageManifest) -> FieldSpec | None:
+    """The field a config would verify: the first one that has a name."""
+    for spec in package.all_fields:
+        if spec.name:
+            return spec
+    return package.all_fields[0] if package.all_fields else None
+
+
+def _declared(package: PackageManifest, field: FieldSpec | None, *names: str) -> Any:
+    """A value from the manifest, looking on the package and then on the field.
+
+    Two places because both are plausible and neither is wrong. The alias list is
+    kept short on purpose — it goes away when the manifest schema is settled, the
+    same as the rest of the tolerant reading in this module.
+    """
+    for source in (package.raw or {}, field.raw if field else {}):
+        for name in names:
+            value = source.get(name)
+            if value is not None:
+                return value
+    return None
+
+
+def _extent(value: Any) -> list[float] | None:
+    """``(lon0, lat0, lon1, lat1)``, or nothing at all."""
+    if isinstance(value, Mapping):
+        keys = ("lon_min", "lat_min", "lon_max", "lat_max")
+        numbers = [_number(value.get(k)) for k in keys]
+        return numbers if all(n is not None for n in numbers) else None      # type: ignore[return-value]
+    if isinstance(value, (list, tuple)) and len(value) == 4:
+        numbers = [_number(v) for v in value]
+        return numbers if all(n is not None for n in numbers) else None      # type: ignore[return-value]
+    return None
+
+
+def _number(value: Any) -> float | None:
+    """A float, or ``None``. ``True`` is not a number here."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 @dataclass
