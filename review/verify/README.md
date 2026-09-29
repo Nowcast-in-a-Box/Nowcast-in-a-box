@@ -13,7 +13,7 @@ as an RFC; this directory is the implementation that follows it.
 ```bash
 cd review/verify
 pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
-python -m pytest                   # 596 tests, no GPU, no network, no data
+python -m pytest                   # 598 tests, no GPU, no network, no data
 ```
 
 **The whole thing, end to end, in one command.** It fabricates a platform, serves
@@ -120,7 +120,7 @@ still there, unaggregated.
 | `nib_verify/demo.py` | the whole chain, in one command, for showing people |
 | `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 596 tests, all synthetic |
+| `tests/` | 598 tests, all synthetic |
 
 ---
 

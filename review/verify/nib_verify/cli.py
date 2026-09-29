@@ -508,7 +508,7 @@ def cmd_demo(args) -> int:
         return EXIT_FAILURE
 
     demo_module.survey(demo, say=say)
-    demo_module.show_config(demo, say=say)
+    demo_module.show_configs(demo, say=say)
 
     try:
         with demo_module.datafeed(demo, say=say) as (access, url):

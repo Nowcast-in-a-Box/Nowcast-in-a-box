@@ -191,10 +191,8 @@ def test_the_survey_reports_what_it_found(built, capsys):
     assert "read by content" in text
     for source in demo_module.SOURCES:
         assert source.id in text, source.id
-    for model in demo_module.MODELS:
-        assert model in text, model
-    # the dBZ model is out there too, and is named by the catalogue
-    assert "mlcast-dbz" in text
+    for forecast in demo_module.FORECASTS:
+        assert forecast.id in text, forecast.id
     # every combination is listed, and only the ones in the same unit pass
     every = {(s.id, f.id) for s in demo_module.SOURCES for f in demo_module.FORECASTS}
     same = {(s.id, f.id) for f, s in demo_module.pairs()}
@@ -302,3 +300,45 @@ def test_force_really_rebuilds_and_leaves_other_files_alone(tmp_path):
     assert keep.read_text(encoding="utf-8") == "mine", "an unrelated file was deleted"
     assert (where / "config.yaml").is_file()
     assert (where / "packages").is_dir()
+
+
+def test_every_product_has_two_models_and_a_config_of_its_own(built):
+    """Two products, two models each, two configs. The pairing is the point: a
+    model's output is in its product's unit, and a config's thresholds are in the
+    unit of the ruler it was built on."""
+    catalog = discover_packages(built.packages)
+    for source in demo_module.SOURCES:
+        models = [f for f in demo_module.FORECASTS if f.source == source.id]
+        assert len(models) == 2, source.id
+        manifest = catalog.get(source.id)
+        for forecast in models:
+            output = catalog.get(forecast.id).output_fields[0]
+            assert (output.name, output.unit) == (source.variable, source.unit)
+
+    assert len(demo_module.EXERCISES) == len(demo_module.SOURCES)
+    for spec in demo_module.EXERCISES:
+        cfg = load(built.configs / f"{spec.id}.json")
+        assert cfg.ruler.ground_truth == spec.source
+        assert cfg.ruler.unit == demo_module.source_of(spec.source).unit
+        assert {m.name for m in cfg.members} == {
+            f.id for f in demo_module.FORECASTS if f.source == spec.source
+        }
+        # the thresholds belong to the ruler, in its unit
+        assert cfg.metrics[0].levels == spec.levels
+
+
+def test_the_two_configs_answer_in_two_units(built, capsys):
+    """Separate groups, so 133 is a number about kg m-2 and 16 is a number about
+    mm h-1 and neither can be read as the other."""
+    cfg_a = load(built.configs / "vil-demo.json")
+    cfg_b = load(built.configs / "rain-demo.json")
+    assert cfg_a.ruler.unit != cfg_b.ruler.unit
+    assert cfg_a.ruler.fingerprint != cfg_b.ruler.fingerprint
+    assert max(cfg_b.metrics[0].levels) < max(cfg_a.metrics[0].levels)
+
+    lines: list[str] = []
+    demo_module.show_configs(built, say=lines.append)
+    text = "\n".join(lines)
+    for spec in demo_module.EXERCISES:
+        assert spec.id in text, spec.id
+        assert demo_module.source_of(spec.source).unit in text

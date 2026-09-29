@@ -37,7 +37,8 @@ from typing import Any, Callable, Sequence
 
 UTC = timezone.utc
 
-#: One config, and the id is stable so a demo can be re-run over an old one.
+#: The demonstration config, and the id is stable so the demo can be re-run over
+#: an old workspace.
 CONFIG_ID = "vil-demo"
 DEMO_NAME = "VIL verification, demonstration"
 
@@ -78,28 +79,68 @@ class Forecast:
     source: str
 
 
-#: The observation products the fabricated platform serves.
+@dataclass(frozen=True)
+class Exercise:
+    """One config: a ruler, and the thresholds that belong to it.
+
+    Two of them, in two units, and that is the whole reason for the pair.
+    Thresholds are the ruler's business, so 133 is a number about ``kg m-2`` and
+    16 is a number about ``mm h-1``; the store keeps their answers apart because
+    the configs are apart, and neither one's levels can be read off the other's.
+    """
+
+    id: str
+    name: str
+    source: str
+    levels: tuple[float, ...]
+
+    @property
+    def headline_level(self) -> float:
+        """The middle threshold — where the answers differ most between models."""
+        return self.levels[len(self.levels) // 2]
+
+
+#: The two observation products the fabricated platform serves: one from the
+#: radar, one from the satellite. Different instruments, different units,
+#: different coverage, and the same storm underneath both of them.
+#:
+#: The satellite product is an estimate of the same rain, so it is smoother,
+#: coarser and more scattered in what it misses. A radar sees the cores; an
+#: infrared estimate sees the anvil over them. Both are ``vil``-shaped fields
+#: here, which is the one place the fabrication is cheaper than the world.
 SOURCES: tuple[Product, ...] = (
     Product("radar-composite", "vil", "kg m-2", scale=1.0, vmin=0.0, vmax=255.0,
             noise=4.0, missing_kind="range", missing_points=60),
-    Product("radar-dbz-hires", "dbz", "dBZ", scale=0.25, vmin=-10.0, vmax=70.0,
-            noise=1.0, missing_kind="none", missing_points=0),
-    Product("satellite-vil", "vil", "kg m-2", scale=0.9, vmin=0.0, vmax=255.0,
-            noise=9.0, missing_kind="random", missing_points=120),
+    Product("satellite-rain", "rain_rate", "mm h-1", scale=0.16, vmin=0.0, vmax=45.0,
+            noise=2.5, missing_kind="random", missing_points=150),
 )
 
-#: The forecast models. The last one is for the other unit, which is why it is
-#: not on the demonstration config's roster: it is verifiable, just not against
-#: a ``kg m-2`` ruler.
+#: Two models for each product, in order of skill: the generator makes the second
+#: one worse, which is what makes a comparison worth showing. A model belongs to
+#: one product because its output is in that product's unit, and the config built
+#: on the other product could not take it.
 FORECASTS: tuple[Forecast, ...] = (
     Forecast("mlcast-det", "radar-composite"),
     Forecast("mlcast-alt", "radar-composite"),
-    Forecast("simvp-lag", "radar-composite"),
-    Forecast("mlcast-dbz", "radar-dbz-hires"),
+    Forecast("satcast-det", "satellite-rain"),
+    Forecast("satcast-alt", "satellite-rain"),
 )
 
-#: The product the demonstration config is built on, and the models it verifies.
-CONFIG_SOURCE = "radar-composite"
+#: One config per product. Two rulers, two rosters, two sets of thresholds.
+EXERCISES: tuple[Exercise, ...] = (
+    Exercise(CONFIG_ID, DEMO_NAME, "radar-composite",
+             levels=(16.0, 74.0, 133.0, 181.0, 219.0)),
+    Exercise("rain-demo", "Rain rate verification, demonstration", "satellite-rain",
+             levels=(2.0, 8.0, 16.0, 32.0)),
+)
+
+#: The demonstration config's own numbers, named so a reader does not have to
+#: remember which of the two exercises they came from.
+CONFIG_SOURCE = EXERCISES[0].source
+DATA_ID = CONFIG_SOURCE
+VARIABLE = "vil"
+UNIT = "kg m-2"
+LEVELS = EXERCISES[0].levels
 
 
 def pairs() -> tuple[tuple[Forecast, Product], ...]:
@@ -125,9 +166,13 @@ def source_of(product: str) -> Product:
     raise KeyError(f"no such product {product!r}")
 
 
-DATA_ID = CONFIG_SOURCE
-VARIABLE = source_of(CONFIG_SOURCE).variable
-UNIT = source_of(CONFIG_SOURCE).unit
+def exercise(ident: str) -> Exercise:
+    for one in EXERCISES:
+        if one.id == ident:
+            return one
+    raise KeyError(f"no such config {ident!r}")
+
+
 MODELS = tuple(f.id for f in FORECASTS if f.source == CONFIG_SOURCE)
 
 #: How much worse each model is than the one before it. Part of the catalogue
@@ -178,14 +223,20 @@ class Demo:
     data_url: str | None = None
 
     @property
+    def config_files(self) -> list[Path]:
+        return [self.configs / f"{spec.id}.json" for spec in EXERCISES]
+
+    @property
     def config_file(self) -> Path:
-        return self.configs / f"{CONFIG_ID}.json"
+        """The demonstration one. The other is beside it in the same directory."""
+        return self.config_files[0]
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "root": str(self.root),
             "scenario": self.scenario,
             "config": str(self.config_file),
+            "configs": [str(path) for path in self.config_files],
             "store": str(self.store),
             "packages": [str(p) for p in self.packages],
             "runs": str(self.runs_root) if self.runs_root else None,
@@ -289,27 +340,30 @@ def host_config_text(review_port: int) -> str:
     )
 
 
-def verification_config():
+def verification_config(spec: Exercise | None = None):
+    """The config for one exercise. The roster is every model in its unit."""
     from .config.schema import Member, MetricGroup, Ruler, VerificationConfig
 
+    spec = spec or EXERCISES[0]
+    source = source_of(spec.source)
     return VerificationConfig(
-        group_id=CONFIG_ID,
-        name=DEMO_NAME,
+        group_id=spec.id,
+        name=spec.name,
         ruler=Ruler(
-            ground_truth=CONFIG_SOURCE, unit=UNIT,
+            ground_truth=spec.source, unit=source.unit,
             time_step_minutes=CADENCE_MINUTES, extent=EXTENT, resolution=RESOLUTION,
         ),
         members=tuple(
-            Member(name=model_id, variable=VARIABLE, unit=UNIT, leads=LEADS)
-            for model_id in MODELS
+            Member(name=f.id, variable=source.variable, unit=source.unit, leads=LEADS)
+            for f in FORECASTS if f.source == spec.source
         ),
         metrics=(
             MetricGroup(family="yes_or_no",
                         items=("ts", "bias", "ets", "pod", "far", "dts"),
-                        levels=LEVELS),
+                        levels=spec.levels),
             MetricGroup(family="continuous", items=("me", "mae", "rmse")),
             MetricGroup(family="moments", items=("corr",)),
-            MetricGroup(family="spatial", items=("fss",), levels=LEVELS,
+            MetricGroup(family="spatial", items=("fss",), levels=spec.levels,
                         half_windows=(1, 2)),
         ),
     )
@@ -420,7 +474,8 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
         f"{len(pairs())} model/source pairs)")
 
     demo.configs.mkdir(parents=True, exist_ok=True)
-    _json(demo.config_file, verification_config().to_dict())
+    for spec in EXERCISES:
+        _json(demo.configs / f"{spec.id}.json", verification_config(spec).to_dict())
     _write(root / "README.md", WORKSPACE_README)
     return demo
 
@@ -461,17 +516,25 @@ def survey(demo: Demo, *, say: Callable[[str], None] = print):
     return catalog, book
 
 
-def show_config(demo: Demo, *, say: Callable[[str], None] = print):
+def show_configs(demo: Demo, *, say: Callable[[str], None] = print) -> list:
+    """Read both configs back. Two rulers, two rosters, two sets of levels."""
     from .config.schema import load
 
-    cfg = load(demo.config_file)
-    say("  3/6  config       %s  ruler %s" % (cfg.group_id, cfg.ruler.fingerprint))
-    say("         %s, %d members %s, leads %s, %d thresholds"
-        % (cfg.ruler.ground_truth, len(cfg.members),
-           "/".join(m.name for m in cfg.members), list(LEADS), len(LEVELS)))
-    families = sorted({g.family for g in cfg.metrics})
-    say("         %d metric families: %s" % (len(families), ", ".join(families)))
-    return cfg
+    say("  3/6  config       %d configs, one per product" % len(demo.config_files))
+    out = []
+    for spec in EXERCISES:
+        cfg = load(demo.configs / f"{spec.id}.json")
+        out.append(cfg)
+        say("         %-10s ruler %s  %s [%s] @ %g"
+            % (cfg.group_id, cfg.ruler.fingerprint, cfg.ruler.ground_truth,
+               cfg.ruler.unit, cfg.ruler.resolution))
+        say("         %-10s %d members %s, leads %s, levels %s"
+            % ("", len(cfg.members), "/".join(m.name for m in cfg.members),
+               list(LEADS), list(spec.levels)))
+        families = sorted({g.family for g in cfg.metrics})
+        say("         %-10s %d metric families: %s"
+            % ("", len(families), ", ".join(families)))
+    return out
 
 
 # ======================================================================
@@ -522,34 +585,43 @@ def verify(demo: Demo, *, access, data_url: str,
     from .runner.executor import run_tasks
     from .store import Store
 
-    cfg = load(demo.config_file)
     book = discover_runs([demo.runs_root])
+    catalog = _catalog(demo)
 
     say("  5/6  verify       through that service, over HTTP -- not in process")
-    result = plan(cfg, book, catalog=_catalog(demo), access=access, probe=True)
-    if result.is_empty:
-        for reason in result.reasons().items():
-            say("         rejected: %s" % (reason,))
-        raise RuntimeError("nothing was planned; the demo workspace is inconsistent")
-    say("         planned             %d tasks over %d init time(s)"
-        % (len(result.tasks), len(result.init_times())))
-
     client = CountingAccess(build_access("real", base_url=data_url))
     demo.store.mkdir(parents=True, exist_ok=True)
     store = Store(demo.store / "verify.sqlite")
     try:
-        run_tasks(client, store, cfg, planned_runs(result))
-        facts = store.task_counts(cfg.group_id)
+        for spec in EXERCISES:
+            cfg = load(demo.configs / f"{spec.id}.json")
+            result = plan(cfg, book, catalog=catalog, access=access, probe=True)
+            if result.is_empty:
+                for reason in result.reasons().items():
+                    say("         rejected: %s" % (reason,))
+                raise RuntimeError(
+                    "nothing was planned for %s; the demo workspace is inconsistent"
+                    % spec.id
+                )
+            before = dict(client.log.calls)
+            run_tasks(client, store, cfg, planned_runs(result))
+            facts = store.task_counts(cfg.group_id)
+            say("         %-11s planned %3d tasks over %d init time(s)"
+                % (spec.id, len(result.tasks), len(result.init_times())))
+            say("         %-11s ran     %3d done, %d unavailable, %d failed, %d skipped"
+                % ("", facts.get("done", 0), facts.get("unavailable", 0),
+                   facts.get("failed", 0), facts.get("skipped", 0)))
+            # The counters matter: they are what the acceptance condition is
+            # stated in. Adding a threshold has to leave this second number
+            # exactly where it is.
+            say("         %-11s fetches %3d observation, %d prediction, over the socket"
+                % ("",
+                   client.log.calls.get("get_observation", 0)
+                   - before.get("get_observation", 0),
+                   client.log.calls.get("get_prediction", 0)
+                   - before.get("get_prediction", 0)))
     finally:
         store.close()
-    say("         ran                 %d done, %d unavailable, %d failed, %d skipped"
-        % (facts.get("done", 0), facts.get("unavailable", 0),
-           facts.get("failed", 0), facts.get("skipped", 0)))
-    # The counters matter: they are what the acceptance condition is stated in.
-    # Adding a threshold has to leave this second number exactly where it is.
-    say("         fetches             %d observation, %d prediction, over the socket"
-        % (client.log.calls.get("get_observation", 0),
-           client.log.calls.get("get_prediction", 0)))
     return client.log
 
 
@@ -568,26 +640,30 @@ def headline(demo: Demo, *, say: Callable[[str], None] = print) -> list[dict]:
     from .query.service import query_scores
     from .store import Store
 
-    cfg = load(demo.config_file)
     store = Store(demo.store / "verify.sqlite")
+    out: list[dict] = []
     try:
-        result = query_scores(store, cfg, method="ts", s={"level": [181.0]},
-                              g=["member", "lead_minutes"])
+        for spec in EXERCISES:
+            cfg = load(demo.configs / f"{spec.id}.json")
+            level = spec.headline_level
+            result = query_scores(store, cfg, method="ts", s={"level": [level]},
+                                  g=["member", "lead_minutes"])
+            rows = _pivot(result["records"], LEADS)
+            out.extend(rows)
+            say("")
+            say("         %s: CSI at %g %s, by lead time"
+                % (spec.id, level, cfg.ruler.unit))
+            say("           " + "".join("%7s" % lead for lead in LEADS))
+            for row in rows:
+                cells = "".join(
+                    "%7s" % ("--" if row["values"].get(lead) is None
+                             else f"{row['values'][lead]:.3f}")
+                    for lead in LEADS
+                )
+                say("         %-11s%s" % (row["member"], cells))
     finally:
         store.close()
-
-    rows = _pivot(result["records"], LEADS)
-    say("")
-    say("         CSI at %g, by lead time" % 181.0)
-    header = "           " + "".join("%7s" % lead for lead in LEADS)
-    say(header)
-    for row in rows:
-        cells = "".join(
-            "%7s" % ("--" if row["values"].get(lead) is None else f"{row['values'][lead]:.3f}")
-            for lead in LEADS
-        )
-        say("         %-11s%s" % (row["member"], cells))
-    return rows
+    return out
 
 
 def _pivot(records: Sequence[dict], leads: Sequence[int]) -> list[dict]:
