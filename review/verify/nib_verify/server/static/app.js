@@ -167,7 +167,9 @@ function renderConfigDetail(cfg) {
     h("p", { class: "hint" }, "These fields decide the denominator and the mask. To change one, make a new config."),
     h("div", { class: "grid tight" },
       fact("truth source", ruler.ground_truth),
-      fact("variable", ruler.variable),
+      // No `variable`: the ruler has not carried one since it stopped deciding
+      // anything. A member's output field is the member's own fact, and it is
+      // shown on the roster, not here.
       fact("unit", ruler.unit),
       fact("time step", `${ruler.time_step_minutes} min`),
       fact("extent", `[${ruler.extent.join(", ")}]`),

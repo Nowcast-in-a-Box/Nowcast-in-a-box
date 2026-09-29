@@ -626,3 +626,19 @@ def test_a_run_twice_over_skips_the_second_time(page, live_server):
             pytest.fail(f"the run never reported {expected!r}")
         previous = text
         assert expected in text, text
+
+
+def test_the_detail_panel_shows_nothing_the_config_does_not_have(page, live_server):
+    """`variable` was on the ruler once and stopped deciding anything, so it was
+    deleted from the schema. The panel went on rendering it, and the browser
+    showed the word `undefined` in a card whose whole point is being the part that
+    cannot be argued with."""
+    page.load(live_server).tab("configs")
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(400)
+    text = page.text()
+    assert "undefined" not in text
+    assert "null" not in text
+    assert "NaN" not in text
+    panel = page.page.eval_on_selector("#config-detail .grid", "e => e.textContent")
+    assert "variable" not in panel, panel
