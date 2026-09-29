@@ -59,6 +59,27 @@ def frequency_bias(H: float, F: float, M: float, C: float) -> float:
     return (H + F) / denom if denom > 0 else NAN
 
 
+def dts(H: float, F: float, M: float, C: float) -> float:
+    """Detection threat score — the event's threat score and the no-event's,
+    averaged.
+
+    ``ts`` only asks how well the event was found. On a rare event a model can
+    look good there while calling almost everything a hit, because hits are
+    cheap when the answer is almost always no. This asks the same question of
+    the negative class, so firing everywhere is paid for by the second half
+    rather than rewarded by the first.
+
+    Both halves have to exist. When either denominator is zero the score is
+    undefined, not half of the other one — that is what MetEva's ``IV`` means,
+    and taking the mean of one number and a gap would invent a value.
+    """
+    yes = H + F + M
+    no = M + F + C
+    if yes <= 0 or no <= 0:
+        return NAN
+    return (H / yes + C / no) / 2
+
+
 # ----------------------------------------------------------------------
 # continuous
 # ----------------------------------------------------------------------
@@ -135,6 +156,7 @@ REGISTRY: dict[str, MetricSpec] = {
     "ets": MetricSpec("ets", "cat", _CAT, ets, "Equitable threat score", needs_level=True),
     "pod": MetricSpec("pod", "cat", _CAT, pod, "Probability of detection", needs_level=True),
     "far": MetricSpec("far", "cat", _CAT, far, "False alarm ratio", needs_level=True),
+    "dts": MetricSpec("dts", "cat", _CAT, dts, "Detection threat score", needs_level=True),
     # continuous — no threshold
     "me": MetricSpec("me", "cont", _CONT, me, "Mean error"),
     "mae": MetricSpec("mae", "cont", _CONT, mae, "Mean absolute error"),
@@ -162,6 +184,7 @@ ALIASES: dict[str, str] = {
     "critical_success_index": "ts",
     "frequency_bias": "bias",
     "correlation": "corr",
+    "detection_threat_score": "dts",
 }
 
 

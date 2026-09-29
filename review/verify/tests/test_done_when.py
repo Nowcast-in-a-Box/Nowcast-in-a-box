@@ -23,8 +23,11 @@ requested.  Five thresholds cost the same reads as two.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from nib_verify.access import CountingAccess
 from nib_verify.query import query_scores
+from nib_verify.config.schema import MetricGroup
 from nib_verify.runner import RunRef, run_tasks
 from nib_verify.store import Store
 
@@ -145,3 +148,42 @@ def test_force_recomputes():
     assert store.count_rows("cont", filters={"group_id": cfg.group_id}) == 3
     assert store.count_rows("mom", filters={"group_id": cfg.group_id}) == 3
     assert store.count_rows("spatial", filters={"group_id": cfg.group_id}) == 12
+
+
+# ----------------------------------------------------------------------
+# 6. a metric over a block that is already stored needs no rerun
+# ----------------------------------------------------------------------
+def test_a_new_metric_over_the_same_block_reads_nothing():
+    """DTS is a formula over H, F, M and C — the same four numbers ts is a
+    formula over. Adding it asks the store for a column that is already there,
+    so it costs a query and nothing else.
+
+    This is the whole reason to store the blocks rather than the scores: a
+    threshold is not the only thing that should be changeable for free.
+    """
+    access = CountingAccess(make_access())
+    store = Store(":memory:")
+    runs = [RunRef(member="mlcast-det", init_time=T0)]
+
+    before = make_config(LEVELS_SUB)
+    assert "dts" not in before.metrics[0].items
+    first = run_tasks(access, store, before, runs)
+    assert first.ran == 3 and first.skipped == 0
+    reads = access.field_reads
+
+    # same ruler, same roster, same thresholds; the metric list is the difference
+    after = replace(before, metrics=before.metrics + (MetricGroup(
+        family="categorical", items=("dts",), levels=tuple(LEVELS_SUB)),))
+    again = run_tasks(access, store, after, runs)
+
+    assert again.ran == 0 and again.skipped == 3, "adding a metric must not re-run"
+    assert access.field_reads == reads, "and must not read a field"
+
+    records = query_scores(store, after, method="dts",
+                           s={"level": list(LEVELS_SUB)},
+                           g=["lead_minutes", "level"])["records"]
+    assert records, "the new metric has nothing to read"
+    for rec in records:
+        assert rec["value"] is not None
+        assert 0.0 <= rec["value"] <= 1.0
+    assert access.field_reads == reads, "reading it must not either"

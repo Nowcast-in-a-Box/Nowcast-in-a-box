@@ -11,6 +11,7 @@ from nib_verify.core.metrics import (
     bias,
     corr,
     csi,
+    dts,
     ets,
     far,
     fss,
@@ -117,3 +118,56 @@ def test_list_metrics_reports_required_parameters():
 
 def test_alias_ts_and_csi_are_the_same_formula():
     assert spec_for("ts").fn is spec_for("csi").fn
+
+
+# ----------------------------------------------------------------------
+# dts
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("hfmc, expected", [
+    # MetEva's own outputs on these cells, so the two implementations can be
+    # talked about with one set of numbers.
+    ((30.0, 10.0, 20.0, 940.0), 0.7345360824742269),
+    ((50.0, 50.0, 50.0, 850.0), 0.6140350877192983),
+    ((20.0, 0.0, 10.0, 970.0), 0.8282312925170068),
+    ((1.0, 1.0, 1.0, 1.0), 1.0 / 3.0),
+])
+def test_dts_agrees_with_meteva(hfmc, expected):
+    assert dts(*hfmc) == pytest.approx(expected)
+
+
+def test_dts_of_a_perfect_forecast_is_one():
+    assert dts(10.0, 0.0, 0.0, 90.0) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("hfmc", [(0.0, 0.0, 0.0, 100.0), (100.0, 0.0, 0.0, 0.0)])
+def test_dts_is_a_gap_when_either_half_is_undefined(hfmc):
+    """Not half of the other one, and not MetEva's 999999.
+
+    A number that means "not a number" is how a mean gets taken over a value
+    that does not exist — and 999999 would drag any average it entered into it.
+    """
+    assert math.isnan(dts(*hfmc))
+
+
+def test_dts_moves_with_the_negatives_where_csi_cannot():
+    """Two forecasts with the same threat score: one that speaks less often and
+    is right when it does, one that catches more at the cost of false alarms.
+
+    csi calls them equal, because all it looks at is the event. dts also asks
+    how the negatives came out, so it can tell them apart."""
+    cautious = (50.0, 20.0, 30.0, 900.0)
+    eager = (50.0, 30.0, 20.0, 1000.0)
+    assert csi(*cautious) == pytest.approx(csi(*eager))
+    assert dts(*cautious) != pytest.approx(dts(*eager))
+
+
+def test_dts_is_a_formula_over_the_block_ts_already_uses():
+    """Which is why adding it to a config costs a query and nothing else."""
+    assert spec_for("dts").columns == spec_for("ts").columns == ("H", "F", "M", "C")
+    assert spec_for("dts").family == "cat"
+    assert spec_for("dts").needs_level
+    assert not spec_for("dts").needs_window
+
+
+def test_dts_can_be_asked_for_by_its_long_name():
+    assert spec_for("detection_threat_score").name == "dts"
