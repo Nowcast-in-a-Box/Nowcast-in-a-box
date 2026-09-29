@@ -26,7 +26,7 @@ One config is **one ruler, one roster, one metric list**.
       "leads": [10, 20, 30, 60, 120], "active_from": null, "active_to": null }
   ],
   "metrics": [
-    { "family": "categorical", "items": ["ts", "bias", "ets"],
+    { "family": "yes_or_no", "items": ["ts", "bias", "ets"],
       "levels": [16, 74, 133, 181, 219], "half_windows": [] },
     { "family": "continuous", "items": ["me", "mae", "rmse"] },
     { "family": "spatial", "items": ["fss"],
@@ -125,23 +125,24 @@ A leading `None` in `active_from` or `active_to` means unbounded.
 Metrics are grouped by family, because members of a family share one set of
 parameters and one row of stored quantities.
 
-| Family | Metrics | Parameters |
-|---|---|---|
-| `categorical` | `ts` (alias `csi`), `bias`, `ets`, `pod`, `far`, `dts` | `levels` |
-| `continuous` | `me`, `mae`, `rmse` | — |
-| `moments` | `corr` | — |
-| `spatial` | `fss` | `levels`, `half_windows` |
+| Family | Metrics | Parameters | Answering |
+|---|---|---|---|
+| `yes_or_no` | `ts` (alias `csi`), `bias`, `ets`, `pod`, `far`, `dts` | `levels` | did it happen |
+| `continuous` | `me`, `mae`, `rmse` | — | how far off was it |
+| `spatial` | `fss` | `levels`, `half_windows` | how does it look over a neighbourhood |
+| `moments` | `corr` | — | how do the two fields move together |
 
 A config is created with **three families already on it**: `continuous`,
-`categorical` and `spatial`. Everything in a family is verified — there is
-nothing to tick. The only things to fill in are the parameters: `levels` for the
-categorical family, and `levels` plus `half_windows` for `fss`. `moments` stays
-a valid family (hand-written configs may carry it), but it is not among the
-defaults.
+`yes_or_no` and `spatial`. Everything in a family is verified — there is nothing
+to tick. The only things to fill in are the parameters: `levels` for `yes_or_no`,
+and `levels` plus `half_windows` for `spatial`. `moments` stays a valid family
+(hand-written configs may carry it), but it is not among the defaults.
 
-On screen the families are named for the question each one answers — `Yes or no`,
-`Continuous`, `Spatial` — because a family outlives the first metric that landed
-in it.
+**There is one name per family.** It is the key in a config file, the key in the
+store, the family a metric declares it reads, and — with the underscores opened
+out — the heading on the review page. `yes_or_no` is `Yes or no` is `q_yes_or_no`.
+Two vocabularies would need a translation table, and a translation table is how a
+metric ends up filed under a family whose block its columns are not in.
 
 ### Metrics are append-only
 
@@ -179,12 +180,12 @@ second pass over a narrower level set free: the rows are already there.
 
 Only **additive quantities**. No ratios, no scores, no averages.
 
-| Family | Columns | Feeds |
-|---|---|---|
-| `cat` | `H F M C` | `ts`, `bias`, `ets`, `pod`, `far` |
-| `cont` | `T E A S` | `me`, `mae`, `rmse` |
-| `mom` | `T MX MY SX SY SXY` | `corr` |
-| `spatial` | `pob pfo fbs n_valid` | `fss` |
+| Family | Table | Columns | Feeds |
+|---|---|---|---|
+| `yes_or_no` | `q_yes_or_no` | `H F M C` | `ts`, `bias`, `ets`, `pod`, `far`, `dts` |
+| `continuous` | `q_continuous` | `T E A S` | `me`, `mae`, `rmse` |
+| `moments` | `q_moments` | `T MX MY SX SY SXY` | `corr` |
+| `spatial` | `q_spatial` | `pob pfo fbs n_valid` | `fss` |
 
 Every row carries the full dimension tuple
 `(group_id, member, init_time, valid_time, lead_minutes, level, half_window)`,

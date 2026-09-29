@@ -39,7 +39,7 @@ python -m nib_verify demo --open
 
   3/6  config       vil-demo  ruler 256416deac63ca02
          radar-composite, 2 members mlcast-det/mlcast-alt, leads [10, 20, 30, 60], 5 thresholds
-         4 metric families: categorical, continuous, moments, spatial
+         4 metric families: yes_or_no, continuous, moments, spatial
 
   4/6  datafeed     serving the 'convective' scenario
          10-minute cadence, observations ['radar-composite'], models ['mlcast-det', 'mlcast-alt']
