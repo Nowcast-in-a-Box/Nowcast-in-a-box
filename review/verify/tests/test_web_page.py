@@ -196,3 +196,15 @@ def test_the_config_form_does_not_ask_for_notes():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert 'id="c-notes"' not in html
     assert "c-notes" not in app
+
+
+def test_the_wizard_does_not_ask_when_a_forecast_ran():
+    """A forecast picked from the list is on the roster from now on. Giving one a
+    last day is a later action, in the config's own detail panel, and it is the
+    only reason the dates still exist at all."""
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    wizard = app[app.index("function emptyMember"):
+                 app.index("function renderMetricAdder")]
+    assert "active_from" not in wizard
+    assert "active_to" not in wizard
+    assert "active_from" in app, "the detail panel still retires a member"

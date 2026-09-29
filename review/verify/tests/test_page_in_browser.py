@@ -175,17 +175,63 @@ def test_the_wizard_renders_its_four_sections(page, live_server):
     assert page.errors == []
 
 
-def test_the_wizard_offers_the_ground_truths_the_catalog_found(page, live_server):
-    """A datalist's options are not page text, so they are counted directly."""
+def test_the_wizard_offers_what_the_catalog_found(page, live_server):
+    """Both pickers are lists of what this server can see. A datalist's options
+    are not page text, so they are read directly."""
     page.load(live_server).tab("create")
 
     assert "radar-composite" in page.page.eval_on_selector_all(
         "#truth-options option", "els => els.map(e => e.value)")
+    assert "mlcast-det" in page.page.eval_on_selector_all(
+        "#member-pick option", "els => els.map(e => e.value)")
 
-    # the roster suggests the model ids, once a row exists to suggest them for
+
+def test_adding_a_forecast_brings_its_leads_with_it(page, live_server):
+    """The leads are the horizon the model's own run configs asked for, read in
+    the time step fixed above: six frames at ten minutes, so ten to sixty."""
+    page.load(live_server).tab("create")
     page.page.click("#btn-add-member")
-    page.page.wait_for_timeout(200)
-    assert "mlcast-det" in page.text()
+    page.page.wait_for_timeout(300)
+
+    assert page.page.eval_on_selector("#members input >> nth=0", "e => e.value") == "mlcast-det"
+    # the forecast is what was picked, so it cannot be typed over
+    assert page.page.eval_on_selector("#members input >> nth=0", "e => e.readOnly") is True
+    # the leads are a proposal, because a config may want fewer than the model can produce
+    assert page.page.eval_on_selector("#members input >> nth=1", "e => e.value") == "10, 20, 30, 40, 50, 60"
+    assert page.page.eval_on_selector("#members input >> nth=1", "e => e.readOnly") is False
+    assert page.errors == []
+
+
+def test_the_leads_are_editable_after_being_filled_in(page, live_server):
+    page.load(live_server).tab("create")
+    page.page.click("#btn-add-member")
+    page.page.wait_for_timeout(300)
+    page.page.fill("#members input >> nth=1", "10, 30")
+    page.page.wait_for_timeout(100)
+    assert page.page.eval_on_selector("#members input >> nth=1", "e => e.value") == "10, 30"
+
+
+def test_a_forecast_already_on_the_roster_is_not_offered_again(page, live_server):
+    """Picking is the whole action, so the list it picks from has to shrink —
+    otherwise the second click silently adds a duplicate member."""
+    page.load(live_server).tab("create")
+    page.page.click("#btn-add-member")
+    page.page.wait_for_timeout(300)
+
+    assert page.page.eval_on_selector("#member-pick", "e => e.disabled") is True
+    assert "every model the catalog found is on the roster" in page.text()
+
+
+def test_removing_a_forecast_puts_it_back_in_the_list(page, live_server):
+    page.load(live_server).tab("create")
+    page.page.click("#btn-add-member")
+    page.page.wait_for_timeout(300)
+    page.page.click("#members button.danger")
+    page.page.wait_for_timeout(300)
+
+    assert "No forecasts on the roster yet." in page.text()
+    assert "mlcast-det" in page.page.eval_on_selector_all(
+        "#member-pick option", "els => els.map(e => e.value)")
 
 
 def test_choosing_a_ground_truth_fills_the_ruler_in(page, live_server):
@@ -261,8 +307,7 @@ def test_a_preview_plans_and_reports(page, live_server):
         page.page.fill(element, value)
 
     page.page.click("#btn-add-member")
-    page.page.wait_for_timeout(200)
-    page.page.fill("#members input >> nth=0", "mlcast-det")
+    page.page.wait_for_timeout(300)
     page.page.fill("#members input >> nth=1", "10, 20, 30")
 
     # levels are required for this family, and the page says so before asking

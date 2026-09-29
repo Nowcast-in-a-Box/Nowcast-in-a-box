@@ -539,37 +539,66 @@ function markRequired(input, needed) {
 }
 
 function emptyMember() {
-  return { name: "", leads: "", active_from: "", active_to: "" };
+  return { name: "", leads: "" };
+}
+
+// The dropdown offers the models this server can see, minus the ones already on
+// the roster: adding the same forecast twice is not a thing.
+function modelChoices() {
+  const packages = state.catalog && state.catalog.packages;
+  const known = packages
+    ? (packages.packages || []).filter(p => p.kind === "model").map(p => p.id)
+    : [];
+  const chosen = new Set(state.memberRows.map(r => r.name));
+  return known.filter(id => !chosen.has(id));
+}
+
+// The leads a model's own run configs allow: the horizon it asked for, in the
+// one time step this config has. It is a starting point, not a fence -- the box
+// stays editable, and the planner clips per run and says which leads it dropped.
+function leadsFor(model) {
+  const all = state.catalog && state.catalog.leads;
+  const leads = all && all.by_model && all.by_model[model];
+  return leads && leads.length ? leads.join(", ") : "";
+}
+
+function cadenceLabel() {
+  const all = state.catalog && state.catalog.leads;
+  return all && all.cadence_minutes ? `${all.cadence_minutes} min` : "the source step";
 }
 
 function renderMembers() {
-  const host = "#members";
-  const models = modelIds();
+  const pick = $("#member-pick");
+  clear(pick);
+  const choices = modelChoices();
+  for (const id of choices.length ? choices : [""]) {
+    pick.append(h("option", { value: id, text: id || (state.memberRows.length
+      ? "every model the catalog found is on the roster"
+      : "the catalog found no models") }));
+  }
+  pick.disabled = !choices.length;
+
   const rows = state.memberRows.map((row) => h("div", { class: "grid", style: "margin-bottom:8px" },
-    h("div", { class: "field" }, h("label", { text: "member id" }),
-      h("input", { value: row.name, placeholder: "mlcast-det", oninput: e => row.name = e.target.value })),
+    h("div", { class: "field" }, h("label", { text: "forecast" }),
+      h("input", { value: row.name, readonly: true })),
     h("div", { class: "field" }, h("label", { text: "leads (minutes)" }),
-      h("input", { value: row.leads, placeholder: "10, 30, 60", oninput: e => row.leads = e.target.value })),
-    h("div", { class: "field" }, h("label", { text: "active from" }),
-      h("input", { value: row.active_from, placeholder: "optional", oninput: e => row.active_from = e.target.value })),
-    h("div", { class: "field" }, h("label", { text: "active to" }),
-      h("input", { value: row.active_to, placeholder: "optional", oninput: e => row.active_to = e.target.value })),
+      h("input", { value: row.leads, placeholder: "10, 30, 60",
+                   oninput: e => row.leads = e.target.value })),
     h("div", { class: "field" }, h("label", { text: " " }),
       h("button", { class: "act danger", text: "Remove", onclick: () => {
         state.memberRows = state.memberRows.filter(r => r !== row);
         renderMembers();
       } }))));
 
-  mount($(host),
-    rows.length ? h("div", {}, rows) : empty("No members yet."),
-    h("p", { class: "tiny muted" }, models.length
-      ? `Models the catalog knows about: ${models.join(", ")}`
-      : "This server was given no package roots, so no model ids to suggest."));
-}
+  mount($("#members"), rows.length
+    ? h("div", {}, rows)
+    : empty("No forecasts on the roster yet."));
 
-function modelIds() {
-  const packages = state.catalog && state.catalog.packages;
-  return packages ? (packages.packages || []).filter(p => p.kind === "model").map(p => p.id) : [];
+  // Kept while there are rows, even once the list is exhausted: it is the only
+  // place that says where the numbers in those boxes came from.
+  $("#member-hint").textContent = state.memberRows.length
+    ? `leads = run horizon x ${cadenceLabel()}, from the model's own run configs`
+    : "";
 }
 
 function renderMetricAdder(cfg, onAdd) {
@@ -636,14 +665,12 @@ function buildSpec() {
   // The member's own output field, taken from what the ground truth declares.
   // It is a per-model fact, not a question for the person filling the form.
   const derived = groundTruth($("#c-truth").value.trim()) || {};
-  const members = state.memberRows.map(r => ({
+  const members = state.memberRows.filter(r => r.name).map(r => ({
     name: r.name.trim(),
     variable: derived.variable || "",
     unit: $("#c-unit").value.trim(),
     leads: numbers(r.leads).map(Number),
-    active_from: r.active_from.trim() || null,
-    active_to: r.active_to.trim() || null,
-  })).filter(m => m.name);
+  }));
 
   if (!members.length) throw new Error("At least one member is required.");
   if (!state.metricGroups.length) throw new Error("At least one metric group is required.");
@@ -892,7 +919,13 @@ function renderScores(result) {
 // wiring
 // ==================================================================
 $("#btn-reload-configs").addEventListener("click", loadConfigs);
-$("#btn-add-member").addEventListener("click", () => { state.memberRows.push(emptyMember()); renderMembers(); });
+$("#btn-add-member").addEventListener("click", () => {
+  const id = $("#member-pick").value;
+  if (!id) return;
+  // Picking one is the whole action: the leads are already known from its runs.
+  state.memberRows.push({ name: id, leads: leadsFor(id) });
+  renderMembers();
+});
 $("#btn-add-metric-group").addEventListener("click", () => {
   const family = $("#m-family").value;
   if (!state.chosenItems.size) return window.alert("Pick at least one metric.");

@@ -103,12 +103,14 @@
   <div class="card">
     <h2><span class="step">3</span>Forecasts</h2>
     <p class="hint">
-      Which forecast models this config verifies, and over which dates. A model is
-      added or has a last day, and the record is kept either way.
+      Which forecast models this config verifies. The list is what this server can
+      see; the leads come from each model's own run configs — the horizon it
+      actually asked for, read in the time step fixed above.
     </p>
     <div id="members"></div>
     <div class="row" style="margin-top:10px">
-      <button class="act quiet" id="btn-add-member">Add member</button>
+      <select id="member-pick"></select>
+      <button class="act quiet" id="btn-add-member">Add</button>
       <span class="muted tiny" id="member-hint"></span>
     </div>
   </div>
