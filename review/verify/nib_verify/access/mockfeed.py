@@ -30,6 +30,7 @@ and point a verifier at it with::
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Any
 
 from . import wire
@@ -193,3 +194,45 @@ def run(access: FieldAccess, *, host: str, port: int, log_level: str = "info") -
     import uvicorn
 
     uvicorn.run(create_data_app(access), host=host, port=port, log_level=log_level)
+
+
+@contextmanager
+def serve_in_thread(access: FieldAccess, *, host: str = "127.0.0.1", port: int = 0,
+                    log_level: str = "warning"):
+    """Serve ``access`` on a background thread and yield its base URL.
+
+    For demonstrations and for tests: the service is on a real socket, so a
+    ``curl`` works and the client genuinely goes over HTTP, without the caller
+    having to run a second process and guess a port.
+
+    ``port=0`` asks the operating system for a free one, and the port that was
+    actually bound is read back from the socket rather than assumed — otherwise
+    two demos started at once fight over the number.
+    """
+    import threading
+    import time
+
+    import uvicorn
+
+    server = uvicorn.Server(uvicorn.Config(
+        create_data_app(access), host=host, port=port, log_level=log_level,
+    ))
+    thread = threading.Thread(target=server.run, daemon=True, name="nib-datafeed")
+    thread.start()
+
+    for _ in range(300):
+        if server.started:
+            break
+        if not thread.is_alive():
+            raise RuntimeError("the field service exited before it started")
+        time.sleep(0.05)
+    else:
+        server.should_exit = True
+        raise RuntimeError("the field service did not start within 15 seconds")
+
+    bound = server.servers[0].sockets[0].getsockname()[1]
+    try:
+        yield f"http://{host}:{bound}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
