@@ -255,3 +255,22 @@ def test_dropped_metrics_helper_is_symmetric():
     )
     assert _dropped_metrics(before, after) == {"ts", "ets"}
     assert _dropped_metrics(after, before) == set()
+
+
+# ======================================================================
+# notes is gone
+# ======================================================================
+def test_to_dict_has_no_notes_field():
+    """The field was deleted: it was written by the form and never read by
+    anything. Asking for it on the form was a question with no answer path."""
+    assert "notes" not in make_config().to_dict()
+
+
+def test_a_stray_notes_key_in_an_old_file_is_ignored():
+    """Configs written by older versions keep loading — the reader ignores keys
+    it does not know, exactly as it does for any other unknown key."""
+    raw = make_config().to_dict()
+    raw["notes"] = "written by an older version of the module"
+    cfg = VerificationConfig.from_dict(raw)
+    assert cfg.group_id == "vil-test"
+    assert cfg.name == make_config().name

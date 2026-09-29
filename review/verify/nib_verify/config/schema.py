@@ -152,7 +152,6 @@ class VerificationConfig:
     ruler: Ruler
     members: tuple[Member, ...]
     metrics: tuple[MetricGroup, ...]
-    notes: str = ""
 
     def __post_init__(self) -> None:
         if not self.group_id:
@@ -241,7 +240,6 @@ class VerificationConfig:
     def to_dict(self) -> dict:
         return {
             "group": {"id": self.group_id, "name": self.name},
-            "notes": self.notes,
             "ruler": {
                 "ground_truth": self.ruler.ground_truth,
                 "variable": self.ruler.variable,
@@ -334,7 +332,6 @@ class VerificationConfig:
             ruler=ruler,
             members=tuple(members),
             metrics=tuple(metrics),
-            notes=str(data.get("notes", "")),
         )
 
     @classmethod

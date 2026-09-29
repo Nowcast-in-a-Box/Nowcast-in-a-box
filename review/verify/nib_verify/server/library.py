@@ -172,7 +172,6 @@ class ConfigLibrary:
         return {
             "group_id": cfg.group_id,
             "name": cfg.name,
-            "notes": cfg.notes,
             "ruler_fingerprint": cfg.ruler_fingerprint,
             "ground_truth": cfg.ruler.ground_truth,
             "time_step_minutes": cfg.ruler.time_step_minutes,
