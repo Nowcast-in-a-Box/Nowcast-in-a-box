@@ -310,11 +310,10 @@ def test_a_preview_plans_and_reports(page, live_server):
     page.page.wait_for_timeout(300)
     page.page.fill("#members input >> nth=1", "10, 20, 30")
 
-    # levels are required for this family, and the page says so before asking
-    assert page.page.locator("#m-levels").is_enabled()
-    page.page.fill("#m-levels", "181, 219")
-    page.page.click("#btn-add-metric-group")
-    page.page.wait_for_timeout(200)
+    # the three families are already there; only their parameters are missing
+    page.page.fill("#m-levels-categorical", "181, 219")
+    page.page.fill("#m-levels-spatial", "181")
+    page.page.fill("#m-windows-spatial", "2, 4")
     page.page.click("#btn-preview")
     page.page.wait_for_timeout(900)
 
@@ -324,52 +323,87 @@ def test_a_preview_plans_and_reports(page, live_server):
     assert page.errors == []
 
 
-def test_a_parameter_a_family_does_not_use_is_not_carried_over(page, live_server):
-    """A disabled input keeps its text, so it must not be read.
-
-    Adding a categorical group fills in the levels box. Switching to continuous
-    disables it — and the old text is still there, one keystroke away from being
-    attached to a family that has no threshold at all.
-    """
+def test_the_three_families_are_already_there_and_ask_only_for_their_parameters(page, live_server):
+    """Nothing to pick. The groups are there when the tab opens, and the only
+    boxes are the parameters the families actually read."""
     page.load(live_server).tab("create")
     page.page.wait_for_timeout(400)
 
-    page.page.fill("#m-levels", "181, 219")
-    page.page.click("#btn-add-metric-group")
-    page.page.wait_for_timeout(300)
-    assert "levels 181, 219" in page.text()
+    families = page.page.eval_on_selector_all(
+        "#metric-groups .groupbox", "els => els.map(e => e.dataset.family)")
+    assert families == ["continuous", "categorical", "spatial"]
 
-    page.page.select_option("#m-family", "continuous")
-    page.page.wait_for_timeout(200)
-    page.page.click("#btn-add-metric-group")
-    page.page.wait_for_timeout(300)
+    assert page.page.locator("#m-levels-categorical").count() == 1
+    assert page.page.locator("#m-windows-spatial").count() == 1
+    # continuous reads neither, so it is not handed a dead box to wonder about
+    assert page.page.locator("#m-levels-continuous").count() == 0
+    assert page.page.locator("#m-windows-continuous").count() == 0
+    assert "No parameters" in page.text()
 
-    blocks = page.page.eval_on_selector_all(
-        "#metric-groups .groupbox",
-        "els => els.map(e => e.innerText.replace(/\\s+/g, ' ').trim())")
-    assert len(blocks) == 2
-    assert "levels" in blocks[0], blocks
-    assert "levels" not in blocks[1], f"continuous inherited a threshold: {blocks[1]}"
-    assert "mae" in blocks[1]
+    # both parameters are marked required before anything is submitted
+    assert "*" in page.page.inner_text("#m-levels-categorical >> xpath=../label")
+    assert "*" in page.page.inner_text("#m-windows-spatial >> xpath=../label")
     assert page.errors == []
 
 
-def test_the_wizard_marks_a_parameter_the_family_needs(page, live_server):
-    """Found at the field, not after five blocks and a round trip."""
+def test_every_metric_in_a_family_is_verified(page, live_server):
+    """There is nothing to tick, so the family's whole list has to be on screen."""
     page.load(live_server).tab("create")
+    page.page.wait_for_timeout(400)
+
+    def chips(family):
+        return set(page.page.eval_on_selector_all(
+            f"#metric-groups .groupbox[data-family={family}] .chip",
+            "els => els.map(e => e.textContent)"))
+
+    assert chips("continuous") == {"me", "mae", "rmse"}
+    assert chips("categorical") == {"bias", "ets", "far", "pod", "ts"}
+    assert chips("spatial") == {"fss"}
+
+
+def test_a_family_reads_only_the_parameters_it_has(page, live_server):
+    """Each group carries its own boxes, so a threshold typed for one family
+    cannot end up attached to another that has no threshold at all."""
+    page.load(live_server).tab("create")
+    page.page.wait_for_timeout(400)
+    page.page.fill("#m-levels-categorical", "181, 219")
+    page.page.fill("#m-levels-spatial", "181")
+    page.page.fill("#m-windows-spatial", "2, 4")
+
+    spec = page.page.evaluate("""() => {
+        document.querySelector("#c-id").value = "x";
+        document.querySelector("#c-name").value = "x";
+        state.memberRows = [{name: "mlcast-det", leads: "10"}];
+        return buildSpec().metrics;
+    }""")
+    by = {m["family"]: m for m in spec}
+    assert by["continuous"]["levels"] == []
+    assert by["continuous"]["half_windows"] == []
+    assert by["categorical"]["levels"] == [181, 219]
+    assert by["categorical"]["half_windows"] == [], "continuous' windows leaked in"
+    assert by["spatial"]["levels"] == [181]
+    assert by["spatial"]["half_windows"] == [2, 4]
+
+
+def test_a_family_is_dropped_and_put_back_with_one_click(page, live_server):
+    """The one action left in this section, and it is undoable: a removed family
+    that could not come back would be a trap."""
+    page.load(live_server).tab("create")
+    page.page.wait_for_timeout(400)
+    assert page.page.locator("#metric-add button").count() == 0
+
+    page.page.click("#metric-groups .groupbox >> nth=0 >> button.danger")
     page.page.wait_for_timeout(300)
+    assert page.page.eval_on_selector_all(
+        "#metric-add button", "els => els.map(e => e.textContent)") == ["+ Continuous"]
 
-    assert page.page.locator("#m-levels").is_enabled(), "categorical needs levels"
-    assert page.page.locator("#m-windows").is_disabled(), "categorical needs no window"
-    assert "*" in page.page.inner_text("#m-levels >> xpath=../label")
-
-    page.page.select_option("#m-family", "continuous")
-    page.page.wait_for_timeout(200)
-    assert page.page.locator("#m-levels").is_disabled()
-
-    page.page.select_option("#m-family", "spatial")
-    page.page.wait_for_timeout(200)
-    assert page.page.locator("#m-windows").is_enabled()
+    page.page.click("#metric-add button")
+    page.page.wait_for_timeout(300)
+    assert page.page.eval_on_selector_all(
+        "#metric-groups .groupbox", "els => els.map(e => e.dataset.family)"
+    ) == ["categorical", "spatial", "continuous"]
+    assert page.page.locator("#metric-add button").count() == 0
+    assert page.errors == []
 
 
 def test_the_results_tab_answers_a_query(page, live_server):

@@ -118,36 +118,14 @@
   <div class="card">
     <h2><span class="step">4</span>Metrics</h2>
     <p class="hint">
-      Grouped by family, because everything in a family shares one set of parameters
-      and is accumulated in the same pass. Levels and windows are parameters, not
-      separate metrics: adding a threshold adds rows, adding a metric does not.
+      Three families, all added for you. Everything in a family shares its
+      parameters and is accumulated in the same pass, so there is nothing to pick —
+      only the parameters to fill in, and a family to drop if you do not want it.
+      Levels and windows are parameters, not metrics: a new threshold adds rows, a
+      new metric does not.
     </p>
     <div id="metric-groups"></div>
-    <div class="groupbox" style="background:#fafbfe">
-      <div class="grid">
-        <div class="field">
-          <label for="m-family">Family</label>
-          <select id="m-family"></select>
-        </div>
-        <div class="field">
-          <label for="m-levels">Levels</label>
-          <input id="m-levels" placeholder="181, 219" autocomplete="off">
-          <span class="note">Comma separated. Only the families that need them.</span>
-        </div>
-        <div class="field">
-          <label for="m-windows">Half windows</label>
-          <input id="m-windows" placeholder="2, 4" autocomplete="off">
-          <span class="note">In grid cells, for the neighbourhood metrics.</span>
-        </div>
-      </div>
-      <div class="field" style="margin-top:10px">
-        <label>Metrics in this family</label>
-        <div class="chips" id="m-items"></div>
-      </div>
-      <div class="row end" style="margin-top:10px">
-        <button class="act ghost" id="btn-add-metric-group">Add this group</button>
-      </div>
-    </div>
+    <div class="row" id="metric-add" style="margin-top:10px"></div>
   </div>
 
   <div class="card create-foot">

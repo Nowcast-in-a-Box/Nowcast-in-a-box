@@ -208,3 +208,33 @@ def test_the_wizard_does_not_ask_when_a_forecast_ran():
     assert "active_from" not in wizard
     assert "active_to" not in wizard
     assert "active_from" in app, "the detail panel still retires a member"
+
+
+def test_the_metrics_section_asks_for_no_selection():
+    """The three families are put there by the page, so there is no family
+    picker and no list of metrics to tick: everything that could be ticked is
+    already on. The parameters live on each group, not on the section."""
+    body = (STATIC / "index.html").read_text(encoding="utf-8")
+    section = body[body.index('<span class="step">4</span>'):
+                   body.index("create-foot")]
+    assert "metric-groups" in section
+    assert "metric-add" in section
+    assert "<select" not in section
+    assert "m-levels" not in section
+    assert "m-windows" not in section
+
+
+def test_the_page_adds_the_three_families_it_was_told_to():
+    """Read from the registry, but this is the list, and it is short."""
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert 'const DEFAULT_FAMILIES = ["continuous", "categorical", "spatial"]' in app
+    # the labels are what the user reads, and FSS is called FSS
+    assert 'spatial: "FSS"' in app
+
+
+def test_each_group_owns_its_own_parameter_boxes():
+    """Two families share the `level` parameter, so a single shared box would
+    have to be copied into both configs and the last one typed would win."""
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "m-levels-${group.family}" in app
+    assert "m-windows-${group.family}" in app

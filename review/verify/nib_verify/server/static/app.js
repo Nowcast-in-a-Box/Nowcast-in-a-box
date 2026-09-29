@@ -84,7 +84,6 @@ const state = {
   metricGroups: [],
   preview: null,
   metricFamily: null,
-  chosenItems: new Set(),
   expand: [],
   lastQuery: null,
   poll: null,
@@ -487,14 +486,31 @@ async function loadMetrics() {
   } catch (error) {
     state.metrics = { families: [], metrics: [] };
   }
-  const select = $("#m-family");
-  clear(select);
-  for (const family of state.metrics.families) {
-    select.append(h("option", { value: family.family, text: family.family }));
-  }
-  select.value = "categorical";
-  renderItemChips();
-  select.addEventListener("change", renderItemChips);
+  seedMetricGroups();
+}
+
+// The three families a config starts with. The registry decides what is *in* a
+// family; this only decides the order and the words on screen.
+const DEFAULT_FAMILIES = ["continuous", "categorical", "spatial"];
+const FAMILY_LABEL = { continuous: "Continuous", categorical: "Categorical",
+                       moments: "Moments", spatial: "FSS" };
+
+function familyItems(family) {
+  return (state.metrics.metrics || [])
+    .filter(m => m.family === family).map(m => m.method);
+}
+
+function defaultGroup(family) {
+  return { family, items: familyItems(family), levels: "", half_windows: "" };
+}
+
+// Seeded from what the registry actually offers, so a family the server does not
+// have is not added and everything in one it does have is. That is the whole
+// point of the section: there is nothing here to tick.
+function seedMetricGroups() {
+  const known = new Set((state.metrics.families || []).map(f => f.family));
+  state.metricGroups = DEFAULT_FAMILIES.filter(f => known.has(f)).map(defaultGroup);
+  renderMetricGroups();
 }
 
 function paramsForFamily(family) {
@@ -504,23 +520,34 @@ function paramsForFamily(family) {
   return params;
 }
 
-function renderItemChips() {
-  const family = $("#m-family").value;
-  const host = "#m-items";
-  const items = (state.metrics.metrics || []).filter(m => m.family === family).map(m => m.method);
-  state.chosenItems = new Set(items);           // default: the whole family
-  const needs = paramsForFamily(family);
-  markRequired($("#m-levels"), needs.has("level"));
-  markRequired($("#m-windows"), needs.has("half_window"));
-  mount($(host), items.map(item => h("button", {
-    class: "chip", type: "button", "aria-pressed": "true", text: item,
-    onclick: (event) => {
-      const button = event.currentTarget;
-      const on = button.getAttribute("aria-pressed") !== "true";
-      button.setAttribute("aria-pressed", String(on));
-      if (on) state.chosenItems.add(item); else state.chosenItems.delete(item);
-    },
-  })));
+/// The boxes a family's parameters are typed into, derived from what its metrics
+/// say they need. A family that reads no parameter is told so rather than handed
+/// two dead boxes to wonder about.
+function metricParamFields(group) {
+  const needs = paramsForFamily(group.family);
+  const fields = [];
+  if (needs.has("level")) {
+    fields.push(h("div", { class: "field" },
+      h("label", { for: `m-levels-${group.family}`, text: "Thresholds *" }),
+      h("input", { id: `m-levels-${group.family}`, value: group.levels,
+                   placeholder: "16, 74, 133, 181, 219", autocomplete: "off",
+                   oninput: e => { group.levels = e.target.value; } }),
+      h("span", { class: "note",
+                  text: "The levels the scores are computed at. Comma separated." })));
+  }
+  if (needs.has("half_window")) {
+    fields.push(h("div", { class: "field" },
+      h("label", { for: `m-windows-${group.family}`, text: "Half windows *" }),
+      h("input", { id: `m-windows-${group.family}`, value: group.half_windows,
+                   placeholder: "2, 4", autocomplete: "off",
+                   oninput: e => { group.half_windows = e.target.value; } }),
+      h("span", { class: "note",
+                  text: "Neighbourhood radius, in grid cells. Comma separated." })));
+  }
+  return fields.length
+    ? h("div", { class: "grid", style: "margin-top:10px" }, fields)
+    : h("p", { class: "tiny muted", style: "margin:10px 0 0" },
+        "No parameters — it needs nothing but the truth and the forecast.");
 }
 
 /// Show that a parameter is required *before* the user asks for a preview.
@@ -686,7 +713,18 @@ function buildSpec() {
       resolution: Number($("#c-res").value),
     },
     members,
-    metrics: state.metricGroups,
+    metrics: state.metricGroups.map(g => {
+      const needs = paramsForFamily(g.family);
+      // Only carry a parameter the family actually reads. An empty list is a
+      // claim about the config, not an absence in it.
+      return {
+        family: g.family,
+        items: g.items,
+        levels: needs.has("level") ? numbers(g.levels).map(Number) : [],
+        half_windows: needs.has("half_window")
+          ? numbers(g.half_windows).map(Number) : [],
+      };
+    }),
   };
 }
 
@@ -926,22 +964,6 @@ $("#btn-add-member").addEventListener("click", () => {
   state.memberRows.push({ name: id, leads: leadsFor(id) });
   renderMembers();
 });
-$("#btn-add-metric-group").addEventListener("click", () => {
-  const family = $("#m-family").value;
-  if (!state.chosenItems.size) return window.alert("Pick at least one metric.");
-  const needed = paramsForFamily(family);
-  state.metricGroups.push({
-    family,
-    items: Array.from(state.chosenItems),
-    // Only read a parameter the family actually has. ``markRequired`` disables
-    // the other field but a disabled input still holds whatever was typed into
-    // it before the family changed.
-    levels: needed.has("level") ? numbers($("#m-levels").value) : [],
-    half_windows: needed.has("half_window")
-      ? numbers($("#m-windows").value).map(Number) : [],
-  });
-  renderMetricGroups();
-});
 $("#btn-preview").addEventListener("click", previewPlan);
 $("#btn-save").addEventListener("click", saveConfig);
 // Choosing the ground truth is what fills the ruler in, so it is also what has to
@@ -953,19 +975,25 @@ $("#q-config").addEventListener("change", onConfigPicked);
 $("#q-method").addEventListener("change", onMethodPicked);
 
 function renderMetricGroups() {
-  const host = $("#metric-groups");
-  if (!state.metricGroups.length) return mount(host, empty("No metric groups yet."));
-  mount(host, state.metricGroups.map((g, i) => h("div", { class: "groupbox" },
-    h("div", { class: "head" },
-      h("strong", { text: g.family }),
-      h("span", { class: "spacer" }),
-      h("button", { class: "link danger", text: "remove",
-        onclick: () => { state.metricGroups.splice(i, 1); renderMetricGroups(); } })),
-    h("div", { class: "chips", style: "margin-top:6px" }, g.items.map(x => h("span", { class: "chip", text: x }))),
-    (g.levels.length || g.half_windows.length)
-      ? h("p", { class: "tiny muted", style: "margin:6px 0 0" },
-          [g.levels.length ? `levels ${g.levels.join(", ")}` : "", g.half_windows.length ? `half windows ${g.half_windows.join(", ")}` : ""].filter(Boolean).join(" · "))
-      : null)));
+  const groups = state.metricGroups;
+  mount($("#metric-groups"), groups.length
+    ? groups.map((g, i) => h("div", { class: "groupbox", "data-family": g.family },
+        h("div", { class: "head" },
+          h("strong", { text: FAMILY_LABEL[g.family] || g.family }),
+          h("span", { class: "spacer" }),
+          h("button", { class: "link danger", text: "remove",
+            onclick: () => { groups.splice(i, 1); renderMetricGroups(); } })),
+        h("div", { class: "chips", style: "margin-top:6px" },
+          g.items.map(x => h("span", { class: "chip", text: x }))),
+        metricParamFields(g)))
+    : empty("No families. A config with no metrics computes nothing."));
+
+  // A family dropped by mistake comes back with one click, and nothing else can
+  // be added: the three are the three.
+  const have = new Set(groups.map(g => g.family));
+  mount($("#metric-add"), DEFAULT_FAMILIES.filter(f => !have.has(f)).map(f =>
+    h("button", { class: "act quiet", text: `+ ${FAMILY_LABEL[f]}`,
+      onclick: () => { groups.push(defaultGroup(f)); renderMetricGroups(); } })));
 }
 
 async function boot() {
