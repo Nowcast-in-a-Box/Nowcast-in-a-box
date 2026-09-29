@@ -152,12 +152,14 @@ def create_app(
             for data in catalog.data_packages:
                 for model in catalog.model_packages:
                     pairs.append(check_pair(data, model).as_dict())
-        return {
+        payload = {
             "packages": catalog.as_dict() if catalog is not None else None,
             "runs": book.as_dict() if book is not None else None,
             "pairs": pairs,
             "ok_pairs": [p for p in pairs if p["ok"]],
         }
+        payload["leads"] = available_leads(catalog, book)
+        return payload
 
     def make_access(access_kind: str | None = None):
         """The provider, or a clear refusal naming what is missing."""
@@ -476,6 +478,41 @@ def _catalog_or_none(roots):
         return None
     catalog = discover_packages(roots)
     return catalog or None
+
+
+def available_leads(catalog, book) -> dict[str, Any]:
+    """Which lead times each model could be verified at, from its own runs.
+
+    The forecast horizon in a run config is a *frame count*, so turning it into
+    minutes needs one cadence — and there is exactly one, because a config has a
+    single time step and every model on its roster runs on it. The source
+    package declares it; a model's own declaration is the fallback.
+
+    The union across a model's runs, not the intersection: a model whose first
+    run had a shorter horizon can still be verified to the longer lead on the
+    runs that had it. Which runs reach which lead is the planner's business, and
+    it clips per run and says so in a note.
+    """
+    cadence = None
+    if catalog is not None:
+        for package in catalog.data_packages + catalog.model_packages:
+            if package.cadence_minutes:
+                cadence = int(package.cadence_minutes)
+                break
+    if book is None:
+        return {"cadence_minutes": cadence, "by_model": {}, "note": "no run configs"}
+
+    by_model: dict[str, list[int]] = {}
+    for model_id in sorted(book.model_ids):
+        leads: set[int] = set()
+        for run in book.for_model(model_id):
+            leads.update(run.leads_within_horizon(cadence or 0))
+        by_model[model_id] = sorted(leads)
+    note = None
+    if cadence is None and by_model:
+        note = ("no package declares a cadence, so a frame count cannot be turned "
+                "into minutes")
+    return {"cadence_minutes": cadence, "by_model": by_model, "note": note}
 
 
 def fill_ruler_from_ground_truth(spec: dict, roots) -> dict:

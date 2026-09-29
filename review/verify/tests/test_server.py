@@ -699,3 +699,79 @@ def test_a_package_advertises_what_it_can_answer_for(client):
         "variable": "vil", "unit": "kg m-2", "time_step_minutes": 10,
         "extent": None, "resolution": None,
     }
+
+
+# ======================================================================
+# what a model's own runs say it can be verified at
+# ======================================================================
+def test_the_catalog_says_which_leads_each_model_can_reach(client):
+    """The form fills the leads box from here rather than from a guess: the
+    horizon in the run config is a frame count, and this is where it is turned
+    into minutes."""
+    leads = client.get("/api/catalog").json()["leads"]
+    assert leads["cadence_minutes"] == 10
+    # the fixture's runs ask for 6 frames at 10 minutes
+    assert leads["by_model"] == {"mlcast-det": [10, 20, 30, 40, 50, 60]}
+
+
+def test_a_model_with_no_runs_reaches_nothing(platform):
+    """Rather than inheriting the horizon of whichever model did have runs."""
+    from nib_verify.server.app import available_leads
+
+    # the fixture's two runs are both mlcast-det
+    got = available_leads(platform.catalog(), platform.runbook())
+    assert "mlcast-alt" not in got["by_model"]
+
+
+def test_a_run_with_no_horizon_contributes_no_leads():
+    """An unknown horizon is not a guess in either direction: at planning time it
+    is taken at face value, but a *frame count* that is absent cannot be turned
+    into minutes at all."""
+    from nib_verify.catalog.runs import RunBook, RunConfig
+    from nib_verify.server.app import available_leads
+
+    run = RunConfig.from_mapping({
+        "version": 1, "data": {"id": "d"}, "model": {"id": "m"},
+        "run": {"start_time": "2026-01-01T00:00:00Z"},
+    })
+    book = RunBook(runs=(run,))
+    assert available_leads(None, book)["by_model"] == {"m": []}
+
+
+def test_the_cadence_comes_from_the_source_package_first(platform):
+    """One cadence, because a config has one time step — and it is the truth's,
+    since that is what every member has to agree with."""
+    from nib_verify.server.app import available_leads
+
+    catalog = platform.catalog()
+    book = platform.runbook()
+    assert available_leads(catalog, book)["cadence_minutes"] == 10
+
+
+def test_without_a_cadence_the_question_cannot_be_answered_and_says_so():
+    from nib_verify.catalog.packages import PackageManifest
+    from nib_verify.catalog.runs import RunConfig, RunBook
+    from nib_verify.server.app import available_leads
+
+    bare = PackageManifest.from_mapping({
+        "id": "d", "offers": ["p"], "fields": [{"name": "vil"}]})   # no cadence
+    run = RunConfig.from_mapping({
+        "version": 1, "data": {"id": "d"}, "model": {"id": "m"},
+        "run": {"start_time": "2026-01-01T00:00:00Z", "forecast_horizon": 6},
+    })
+
+    class JustOne:
+        data_packages = (bare,)
+        model_packages = ()
+
+    got = available_leads(JustOne(), RunBook(runs=(run,)))
+    assert got["by_model"] == {"m": []}
+    assert "cannot be turned into minutes" in got["note"]
+
+
+def test_no_runs_at_all_is_not_an_error(platform):
+    from nib_verify.server.app import available_leads
+
+    got = available_leads(platform.catalog(), None)
+    assert got["by_model"] == {}
+    assert got["note"] == "no run configs"
