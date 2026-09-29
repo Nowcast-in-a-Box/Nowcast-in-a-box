@@ -106,11 +106,12 @@ Members are the forecast models being scored.
 | `unit` | must match the ruler's unit |
 | `leads` | which lead times, in minutes, to verify |
 
+| `active_from`, `active_to` | the window in which this member is on the roster |
+
 `leads` is **proposed from the model's own run configs**: `forecast_horizon` is a
 frame count, so it becomes `[1..horizon] × time_step_minutes`. The proposal is a
 starting point, not a fence — the box is editable, and at planning time each run
 clips to what its own horizon reaches, reporting the leads it dropped.
-| `active_from`, `active_to` | the window in which this member is on the roster |
 
 Members are **added and retired, never deleted**. Retiring sets `active_to`, so
 the history of what was being verified stays readable.
@@ -130,6 +131,13 @@ parameters and one row of stored quantities.
 | `continuous` | `me`, `mae`, `rmse` | — |
 | `moments` | `corr` | — |
 | `spatial` | `fss` | `levels`, `half_windows` |
+
+A config is created with **three families already on it**: `continuous`,
+`categorical` and `spatial`. Everything in a family is verified — there is
+nothing to tick. The only things to fill in are the parameters: `levels` for the
+categorical family, and `levels` plus `half_windows` for `fss`. `moments` stays
+a valid family (hand-written configs may carry it), but it is not among the
+defaults.
 
 ### Metrics are append-only
 
