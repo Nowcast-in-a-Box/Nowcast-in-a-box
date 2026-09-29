@@ -73,7 +73,7 @@ def test_the_demo_config_can_be_loaded_and_is_a_complete_ruler(built):
     assert {m.name for m in cfg.members} == set(demo_module.MODELS)
     # every family, so the review page has something in each tab of the picker
     assert {g.family for g in cfg.metrics} == {
-        "categorical", "continuous", "moments", "spatial"
+        "yes_or_no", "continuous", "moments", "spatial"
     }
 
 
@@ -252,3 +252,29 @@ def test_the_demo_describes_itself(built):
     assert described["review"].startswith("http://127.0.0.1:")
     assert described["packages"]
     assert described["runs"].endswith("jobs")
+
+
+def test_force_really_rebuilds_and_leaves_other_files_alone(tmp_path):
+    """`--force` means "rebuild over it", and a store left behind is not rebuilt.
+
+    The quantities live under names derived from the families, so a leftover
+    store is a workspace that looks new and answers every query with a gap. The
+    flip side matters as much: only the paths this command writes are removed.
+    """
+    from nib_verify.demo import build
+
+    where = tmp_path / "demo"
+    build(where, scenario="convective", say=lambda *_: None)
+
+    # the store appears when the verification runs, not when the tree is laid out
+    (where / ".store").mkdir(exist_ok=True)
+    (where / ".store" / "junk.txt").write_text("stale", encoding="utf-8")
+    keep = where / "notes-from-me.txt"
+    keep.write_text("mine", encoding="utf-8")
+
+    build(where, scenario="convective", force=True, say=lambda *_: None)
+
+    assert not (where / ".store" / "junk.txt").exists(), "the store was not rebuilt"
+    assert keep.read_text(encoding="utf-8") == "mine", "an unrelated file was deleted"
+    assert (where / "config.yaml").is_file()
+    assert (where / "packages").is_dir()

@@ -27,6 +27,7 @@ The stages are printed as they happen, because the printout is half the point.
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -187,7 +188,7 @@ def verification_config():
             for model_id in MODELS
         ),
         metrics=(
-            MetricGroup(family="categorical",
+            MetricGroup(family="yes_or_no",
                         items=("ts", "bias", "ets", "pod", "far", "dts"),
                         levels=LEVELS),
             MetricGroup(family="continuous", items=("me", "mae", "rmse")),
@@ -242,6 +243,19 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
         )
     # Fail on an unknown scenario before writing half a workspace.
     scenarios.settings(scenario)
+
+    if force:
+        # "Rebuild over it" has to mean the parts this command owns. Leaving the
+        # store behind would leave the old quantities in place under the old
+        # names — a workspace that looks rebuilt and answers every query with a
+        # gap. Only paths the demo itself writes are ever removed.
+        for name in ("config.yaml", "README.md", "configs", "inputs", "packages",
+                     "workspace", ".store"):
+            victim = root / name
+            if victim.is_dir():
+                shutil.rmtree(victim, ignore_errors=True)
+            elif victim.exists():
+                victim.unlink()
 
     say(f"  1/6  platform     fabricating a workspace in {root}")
     demo = Demo(root=root, scenario=scenario, review_port=review_port,
