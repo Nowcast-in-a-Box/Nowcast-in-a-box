@@ -208,6 +208,19 @@
       <span class="muted tiny" id="query-hint"></span>
     </div>
     <div id="query-result"></div>
+    <div id="chart-card" hidden>
+      <div class="row" style="margin-top:14px; justify-content:space-between">
+        <h3 style="margin:0">Chart</h3>
+        <span class="muted tiny" id="chart-hint"></span>
+      </div>
+      <p class="hint">The same query, drawn. The last expansion is the x axis and the
+        ones before it separate the lines, which is the convention the query already uses.</p>
+      <img id="chart" alt="chart of the current query" style="width:100%; height:auto; display:block">
+      <div class="row" style="margin-top:8px">
+        <a class="act ghost" id="chart-svg" download="chart.svg" href="#">Download SVG</a>
+        <span class="muted tiny" id="chart-note"></span>
+      </div>
+    </div>
   </div>
 
   <div class="card">

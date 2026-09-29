@@ -119,6 +119,13 @@ button.act {
   font-weight: 600;
 }
 button.act:hover { filter: brightness(1.08); }
+button.act.ghost,
+a.act.ghost {
+  display: inline-block;
+  text-decoration: none;
+  line-height: 1.6;
+}
+
 button.act.ghost {
   background: #fff;
   color: var(--accent);

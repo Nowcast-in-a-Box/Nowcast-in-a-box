@@ -89,6 +89,7 @@ const state = {
   lastQuery: null,
   poll: null,
   job: null,
+  chartUrl: null,
 };
 
 // ---------------------------------------------------------------- tabs
@@ -772,9 +773,36 @@ async function runQuery() {
     const result = await api(`/api/scores?${params.toString()}`);
     state.lastQuery = result;
     mount(host, renderScores(result));
+    showChart(params);
   } catch (error) {
     mount(host, notice("bad", error.message));
+    $("#chart-card").hidden = true;
   }
+}
+
+function showChart(params) {
+  // The same convention the query already documents: the last expansion runs
+  // along x, the ones before it separate the lines. Nothing here decides
+  // anything — it reads back what the user picked and asks the service to draw
+  // it.
+  const dims = state.expand || [];
+  const x = dims.length ? dims[dims.length - 1] : "lead_minutes";
+  const series = dims.slice(0, -1);
+
+  const chart = new URLSearchParams(params);
+  chart.delete("g");
+  chart.set("x", x);
+  for (const name of series) chart.append("series", name);
+
+  state.chartUrl = `/api/chart?${chart.toString()}`;
+  // An <a download> rather than a button that builds a blob: the browser
+  // already knows how to save a URL, and one less place to get base64 wrong.
+  $("#chart-svg").href = state.chartUrl;
+  const img = $("#chart");
+  img.src = state.chartUrl;
+  $("#chart-card").hidden = false;
+  $("#chart-hint").textContent = `x: ${x}` + (series.length ? ` · lines: ${series.join(" + ")}` : " · one line");
+  $("#chart-note").textContent = chart.get("method") + " — fetched from the same query";
 }
 
 function renderScores(result) {
