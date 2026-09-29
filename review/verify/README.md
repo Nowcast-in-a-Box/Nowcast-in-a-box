@@ -13,7 +13,7 @@ as an RFC; this directory is the implementation that follows it.
 ```bash
 cd review/verify
 pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
-python -m pytest                   # 414 tests, no GPU, no network, no data
+python -m pytest                   # 489 tests, no GPU, no network, no data
 ```
 
 The command line:
@@ -42,6 +42,10 @@ python -m nib_verify task plan --config cfg.json --runs <RUNS> --probe
 python -m nib_verify task run --config cfg.json --root .store --runs <RUNS>
 python -m nib_verify query --method ts --config cfg.json --root .store \
     -s level=181,219 -g lead_minutes -g level
+
+# or look at it
+python -m nib_verify chart --method ts --config cfg.json --root .store \
+    -s level=181 -x lead_minutes --series member --out csi.svg
 ```
 
 `--root` is where we write: one SQLite file and one lock file, nothing else.
@@ -101,9 +105,10 @@ still there, unaggregated.
 | `nib_verify/store/` | SQLite: quantities and task state |
 | `nib_verify/runner/` | task execution, progress, the single-instance lock |
 | `nib_verify/query/` | the read path |
+| `nib_verify/report/` | the read path, drawn |
 | `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 414 tests, all synthetic |
+| `tests/` | 489 tests, all synthetic |
 
 ---
 
@@ -246,6 +251,7 @@ the whole interface in one sitting.
 | `GET /api/host` | the resolved `config.yaml` |
 | `GET /api/catalog` | packages, runs, and which pairs the Matcher allows |
 | `GET /api/metrics`, `/api/metrics/{m}/dimensions` | what can be computed, and how it can be split |
+| `GET /api/chart` | the same query as `/api/scores`, drawn, as `image/svg+xml` |
 | `GET/POST/DELETE /api/configs[/{id}]` | the configs |
 | `POST /api/configs/{id}/roster[...]` | add a member, or retire one |
 | `POST /api/configs/{id}/metrics` | append a metric group |
@@ -296,6 +302,49 @@ mean nothing. The executor refuses instead, and the task is recorded as failed.
 
 ---
 
+## Charts
+
+A chart is a view of a query, not a second way to ask. There is exactly one path
+from the store to a line on a chart and it goes through the same
+`query_scores` the table uses, so a chart cannot show a number the table would
+refuse to return, and a filter means the same thing in both.
+
+```bash
+# skill against lead time, one line per model, at one threshold
+python -m nib_verify chart --method ts --config cfg.json --root .store \
+    -s level=181 -x lead_minutes --series member --out csi.svg
+
+# and a fixed scale, to put two charts side by side honestly
+python -m nib_verify chart ... --y-min 0 --y-max 1
+```
+
+Which dimension is which follows the convention `query_scores` already documents:
+**the last expansion runs along x, the ones before it separate the lines.** The
+review page reads that back from the expansion chips the user picked and asks the
+service to draw it — nothing in the page decides what a chart is.
+
+It is **SVG, rendered on the server**. Drawing in the browser would mean a second
+renderer that drifts from this one, a chart that cannot be exported without a
+browser, and the rule about gaps living in JavaScript where nothing can test it.
+The page loads it with `<img src="/api/chart?...">`, so a chart is also a URL you
+can save, link to, or paste into a slide.
+
+Four decisions, each of which a naive implementation gets wrong:
+
+| | |
+|---|---|
+| **A gap is a gap** | The store returns a null for a quantity with no samples. That is not a zero — an undefined CSI and a CSI of 0 say opposite things about a forecast. The line **breaks** over it, and the legend says `(gap)` |
+| **No coordinate is NaN** | `x="nan"` does not warn, it makes the element vanish; the chart is then merely emptier than it should be. Every coordinate is checked, and there is a test |
+| **The axis snaps to its ticks** | Bounds are round numbers so gridlines land on the corners. Otherwise the axis quietly starts a gridline below where it claims, because `floor(0.6 / 0.1) * 0.1` is `0.6000000000000001` and that tick is simply not drawn |
+| **The y axis is not forced to zero** | A CSI curve living between 0.85 and 0.95 is unreadable against a zero-based axis, and the decay over lead time is the reason to plot it at all. The axis is fitted to the data and **every tick is labelled**, which is what makes a fitted axis honest. `--y-min`/`--y-max` override it |
+
+The tests parse the SVG as a document rather than searching the text for
+substrings: geometry is checked against the canvas, so a legend that runs off the
+right edge fails. That one was found by looking at a rendered chart, and it is
+the reason the check exists.
+
+---
+
 ## Command line contract
 
 A handler is expected to call this on a timer without reading any of our config,
@@ -330,7 +379,7 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_runner.py` | isolation, gaps, task state, the lock |
 | `tests/test_catalog.py` | host config, content-based discovery, the Matcher's rules |
 | `tests/test_planner.py` | every rejection reason, probing, several members |
-| `tests/test_cli.py` | exit codes, progress modes, end-to-end run and query |
+| `tests/test_cli.py` | exit codes, progress modes, end-to-end run, query and chart |
 | `tests/test_cli_platform.py` | the platform-facing commands, end to end |
 | `tests/test_server.py` | the API, and the three rules it refuses to break |
 | `tests/test_web_page.py` | every path and file the page calls actually exists |
@@ -340,6 +389,7 @@ python -m pytest -q -k "not cli"           # skip the process-level tests
 | `tests/test_conformance.py` | the checklist, and proof that broken providers fail it |
 | `tests/test_cli_datafeed.py` | the datafeed commands, and that `real` still cannot be a hole |
 | `tests/test_scenario.py` | the named scenarios, and that they are not a perfect forecast |
+| `tests/test_chart.py` | the chart as a document: no NaN, nothing off the canvas, gaps stay gaps |
 
 Nothing here needs a GPU, a network, or a data file. The browser tests skip unless
 playwright can find a browser; with Edge or Chrome installed no download is
@@ -364,8 +414,7 @@ Deliberately out of scope so far:
 - **real sample files.** There are none yet, so `ReplayAccess` is unexercised
   beyond its own tests. `--scenario convective` is what stands in for them;
 - deriving `extent` and `resolution` from the data (they are entered by hand);
-- inserting a verification task into the platform's own scheduler;
-- charts — the results table is a table.
+- inserting a verification task into the platform's own scheduler.
 
 `spec/*.md` closes with the open questions that are still genuinely open rather
 than merely unimplemented.

@@ -85,7 +85,7 @@ def test_the_page_uses_the_endpoints_it_was_given(app):
     calls = page_calls()
     assert len(calls) >= 10, sorted(calls)
     for expected in ("/api/configs", "/api/catalog", "/api/metrics",
-                     "/api/plan", "/api/runs", "/api/scores"):
+                     "/api/plan", "/api/runs", "/api/scores", "/api/chart"):
         assert expected in calls, expected
 
 
@@ -143,3 +143,29 @@ def test_every_static_file_on_disk_is_reachable():
     for path in sorted(STATIC.iterdir()):
         if path.is_file() and path.name != "index.html":
             assert path.name in html, f"{path.name} is never loaded by index.html"
+
+
+def test_the_chart_is_an_image_the_page_can_load():
+    """``<img src>`` and not a container to fill in from JavaScript.
+
+    The renderer lives on the server, in one place, so the page, the command line
+    and any report draw the same picture — and a chart is a URL that can be saved
+    or linked to.
+    """
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'id="chart"' in html
+    assert '<img id="chart"' in html, "the chart has to be an <img>"
+    assert 'id="chart-card"' in html
+    assert 'id="chart-svg"' in html, "the download link has a fixed id"
+    assert "download=" in html, "it is a download, not a link to a new tab"
+
+
+def test_the_chart_follows_the_expansion_order_that_was_chosen():
+    """The page does not invent an axis. It reads back the last expansion, which
+    is the convention the query already documents."""
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    body = app[app.index("function showChart"):]
+    body = body[: body.index("\n}\n")]
+    assert 'dims[dims.length - 1]' in body, "the last expansion is the x axis"
+    assert "dims.slice(0, -1)" in body, "the ones before it separate the lines"
+    assert "chart.delete(\"g\")" in body, "g is the table's grouping, not the chart's"

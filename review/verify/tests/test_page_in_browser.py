@@ -324,6 +324,57 @@ def test_a_new_threshold_over_stored_numbers_needs_no_rerun(page, live_server):
     assert page.errors == []
 
 
+def test_the_chart_is_drawn_by_the_browser(page, live_server):
+    """``naturalWidth`` is the whole assertion.
+
+    An ``<img>`` whose request failed shows a broken icon and reports a width of
+    zero, and no console error has to be raised for that to happen — so a chart
+    endpoint that returns the wrong content type, or an SVG the browser refuses,
+    looks like a working page with a small grey box on it.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+    assert not page.page.locator("#chart-card").is_visible(), "no query, no chart"
+
+    page.page.click("#q-g .chip:has-text('lead_minutes')")
+    page.page.wait_for_timeout(200)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1200)
+
+    assert page.page.locator("#chart-card").is_visible()
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0,         "the browser could not render what /api/chart returned"
+    assert "x: lead_minutes" in page.text()
+    assert page.page.locator("#chart-svg").get_attribute("href").startswith("/api/chart?")
+    assert page.errors == []
+
+
+def test_the_chart_follows_the_expansion_the_user_picked(page, live_server):
+    """Two expansions means the last is x and the one before it separates the
+    lines, so switching the expansions has to redraw rather than re-label."""
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+
+    page.page.click("#q-g .chip:has-text('lead_minutes')")
+    page.page.wait_for_timeout(200)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1000)
+    first = page.page.locator("#chart").get_attribute("src")
+    assert "x=lead_minutes" in first
+    assert "series=" not in first, "one expansion, one line"
+
+    page.page.click("#q-g .chip:has-text('level')")
+    page.page.wait_for_timeout(200)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1000)
+    second = page.page.locator("#chart").get_attribute("src")
+    assert "x=level" in second, "the last expansion moved to the x axis"
+    assert "series=lead_minutes" in second, "the earlier one became the lines"
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
+    assert page.errors == []
+
+
 def test_the_results_tab_says_so_when_nothing_matches(page, live_server):
     """An empty answer is an answer. It must not look like a failure.
 

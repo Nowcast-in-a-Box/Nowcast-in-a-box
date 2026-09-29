@@ -166,3 +166,89 @@ def test_unknown_metric_is_reported_with_alternatives(config_file, tmp_path, cap
     code = main(["query", "--method", "nope", "--root", str(tmp_path)])
     assert code == EXIT_FAILURE
     assert "ts" in capsys.readouterr().err
+
+
+# ======================================================================
+# chart
+# ======================================================================
+@pytest.fixture
+def verified(config_file, tmp_path):
+    """A store with one verified run in it, for the chart tests to draw."""
+    root = tmp_path / "store"
+    assert main(["task", "run", "--config", str(config_file), "--root", str(root),
+                 "--init", "2026-01-01T00:00:00Z", *MOCK, "--progress", "quiet"]) == EXIT_OK
+    return config_file, root
+
+
+def test_chart_writes_svg_to_stdout(verified, capsys):
+    """``> curve.svg`` has to work, or the command is useless in a script."""
+    config, root = verified
+    code = main(["chart", "--method", "ts", "--config", str(config), "--root", str(root),
+                 "-s", "level=181", "-x", "lead_minutes", "--series", "member"])
+    assert code == EXIT_OK
+    out = capsys.readouterr().out
+    assert out.startswith("<?xml")
+    assert "<svg" in out and "</svg>" in out
+
+
+def test_chart_writes_svg_to_a_file(verified, capsys, tmp_path):
+    config, root = verified
+    target = tmp_path / "curve.svg"
+    code = main(["chart", "--method", "ts", "--config", str(config), "--root", str(root),
+                 "-s", "level=181", "--out", str(target)])
+    assert code == EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out == "", "nothing on stdout, so it can still be piped"
+    assert target.read_text(encoding="utf-8").startswith("<?xml")
+    assert "series" in captured.err            # the summary goes to stderr
+
+
+def test_chart_is_silent_when_asked(verified, capsys, tmp_path):
+    config, root = verified
+    code = main(["chart", "--method", "ts", "--config", str(config), "--root", str(root),
+                 "--out", str(tmp_path / "c.svg"), "--progress", "quiet"])
+    assert code == EXIT_OK
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err) == ("", "")
+
+
+def test_chart_draws_the_metric_that_was_asked_for(verified, capsys):
+    config, root = verified
+    assert main(["chart", "--method", "rmse", "--config", str(config),
+                 "--root", str(root)]) == EXIT_OK
+    assert "Root mean square error" in capsys.readouterr().out
+
+
+def test_chart_says_no_samples_rather_than_failing(verified, capsys):
+    """An empty chart is an answer. A missing file is not."""
+    config, root = verified
+    code = main(["chart", "--method", "ts", "--config", str(config), "--root", str(root),
+                 "-s", "level=99999"])
+    assert code == EXIT_OK
+    assert "no samples" in capsys.readouterr().out
+
+
+def test_chart_refuses_a_column_it_cannot_draw(verified, capsys):
+    config, root = verified
+    code = main(["chart", "--method", "ts", "--config", str(config), "--root", str(root),
+                 "-x", "nonsense"])
+    assert code == EXIT_FAILURE
+    assert "cannot expand by" in capsys.readouterr().err
+
+
+def test_chart_honours_a_pinned_axis(verified, capsys):
+    config, root = verified
+    code = main(["chart", "--method", "ts", "--config", str(config), "--root", str(root),
+                 "-s", "level=181", "--y-min", "0", "--y-max", "1"])
+    assert code == EXIT_OK
+    out = capsys.readouterr().out
+    assert ">1.0<" in out and ">0.0<" in out
+
+
+def test_chart_expands_by_the_columns_it_was_given(verified, capsys):
+    config, root = verified
+    assert main(["chart", "--method", "ts", "--config", str(config), "--root", str(root),
+                 "-s", "dtime=30", "-x", "level", "--series", "member"]) == EXIT_OK
+    out = capsys.readouterr().out
+    assert ">219<" in out, "the levels are the x axis"
+    assert ">30<" not in out, "the filtered lead is not"

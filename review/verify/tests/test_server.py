@@ -518,3 +518,96 @@ def test_a_config_is_json_on_disk(tmp_path):
     raw = json.loads((tmp_path / "vil-test.json").read_text(encoding="utf-8"))
     assert raw["group"]["id"] == "vil-test"
     assert raw["ruler"]["time_step_minutes"] == 10
+
+
+# ======================================================================
+# charts
+# ======================================================================
+def chart(client, **params) -> "object":
+    return client.get("/api/chart", params=params)
+
+
+def test_a_chart_comes_back_as_an_image(client):
+    """Not JSON with an SVG in it. The page loads this with ``<img src>``, so the
+    content type is the interface."""
+    create(client, group={"id": "chart-config", "name": "Chart"})
+    wait(client, client.post("/api/runs", json={
+        "config": "chart-config", "init": ["2026-01-01T00:00:00Z"],
+    }).json()["job"])
+
+    response = chart(client, config="chart-config", method="ts",
+                     x="lead_minutes", series="member", level="181")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert response.text.startswith("<?xml")
+    assert "<svg" in response.text
+
+
+def test_the_chart_is_the_same_query_as_the_table(client):
+    """Whatever the table drew its numbers from, the chart draws the same ones —
+    both go through ``query_scores``, and a chart of different data would be a
+    second, quieter way to ask."""
+    create(client, group={"id": "same-config", "name": "Same"})
+    wait(client, client.post("/api/runs", json={
+        "config": "same-config", "init": ["2026-01-01T00:00:00Z"],
+    }).json()["job"])
+
+    params = {"config": "same-config", "method": "ts", "level": "181"}
+    table = client.get("/api/scores", params={**params, "g": "lead_minutes"}).json()
+    svg = chart(client, **params, x="lead_minutes").text
+
+    assert table["records"], "the table has to have something in it"
+    # one marker per stored quantity, which is one per point in the table
+    assert svg.count("<circle") == len(table["records"])
+    # and every lead the table returned is a tick on the chart, spelled the same
+    for record in table["records"]:
+        assert f">{record['lead_minutes']:g}<" in svg
+
+
+def test_a_chart_with_no_samples_still_answers_with_a_picture(client):
+    """A 404 for "nothing verified yet" would leave a broken image in the page and
+    nothing to read. The answer is a picture that says so."""
+    create(client, group={"id": "empty-config", "name": "Empty"})
+    response = chart(client, config="empty-config", method="ts", x="lead_minutes")
+    assert response.status_code == 200
+    assert "no samples" in response.text
+
+
+def test_a_chart_needs_a_method(client):
+    response = chart(client, config="vil-test")
+    assert response.status_code == 400
+    assert "method is required" in response.text
+
+
+def test_a_chart_needs_a_config(client):
+    """A query must name a config, chart or table. Without one there is no ruler
+    and the numbers would mean nothing."""
+    response = chart(client, method="ts")
+    assert response.status_code == 400
+    assert "must name a config" in response.text
+
+
+def test_a_chart_refuses_a_column_the_metric_cannot_expand_by(client):
+    create(client, group={"id": "bad-x", "name": "Bad x"})
+    response = chart(client, config="bad-x", method="ts", x="nonsense")
+    assert response.status_code == 400
+    assert "cannot expand by" in response.text
+
+
+def test_a_chart_refuses_a_series_the_metric_cannot_expand_by(client):
+    create(client, group={"id": "bad-s", "name": "Bad series"})
+    response = chart(client, config="bad-s", method="ts", series="nonsense")
+    assert response.status_code == 400
+    assert "cannot expand by" in response.text
+
+
+def test_the_chart_size_is_bounded(client):
+    """The size ends up in every coordinate and in the SVG header, so it is
+    clamped rather than trusted."""
+    create(client, group={"id": "size-config", "name": "Size"})
+    assert 'width="4000"' in chart(client, config="size-config", method="ts",
+                                   width="999999").text
+    assert 'width="200"' in chart(client, config="size-config", method="ts",
+                                  width="1").text
+    assert "whole number" in chart(client, config="size-config", method="ts",
+                                   width="wide").text
