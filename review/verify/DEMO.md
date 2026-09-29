@@ -41,14 +41,14 @@ python -m nib_verify demo --open
          runs                24, mlcast-det, satcast-det, mlcast-alt, satcast-alt
 
   3/6  config       2 configs, one per product        <- 两套参数几乎不共享
-         vil-demo   ruler c1fa754e1f3939f8  radar-composite [kg m-2] @ 0.25
+         vil-demo   ruler 0c8f...  radar-composite [kg m-2] @ 0.25
+                    extent [110, 30, 120, 42]         <- 包自己声明的
                     2 members mlcast-det/mlcast-alt
                     leads [10, 20, 30, 60]   levels [16, 74, 133, 181, 219]   window (1, 2)
-                    4 metric families: continuous, moments, spatial, yes_or_no
-         rain-demo  ruler 0db36ae64e983d13  satellite-rain [mm h-1] @ 0.5
+         rain-demo  ruler 7ba1...  satellite-rain [mm h-1] @ 0.5
+                    extent [104, 24, 126, 48]         <- 覆盖更大，格更粗
                     2 members satcast-det/satcast-alt
                     leads [30, 60, 90, 120]  levels [0.5, 2, 5, 12]          window (2, 4)
-                    4 metric families: continuous, moments, spatial, yes_or_no
 
   4/6  datafeed     serving the 'convective' scenario
          10-minute cadence, observations radar-composite [kg m-2],
@@ -65,13 +65,13 @@ python -m nib_verify demo --open
 
          vil-demo: CSI at 133 kg m-2, by lead time
                 10     20     30     60
-         mlcast-alt   0.866  0.833  0.840  0.860
-         mlcast-det   0.879  0.879  0.889  0.920
+         mlcast-alt   0.862  0.821  0.844  0.858
+         mlcast-det   0.896  0.865  0.897  0.905
 
          rain-demo: CSI at 5 mm h-1, by lead time
                 30     60     90    120
-         satcast-alt  0.352  0.341  0.326  0.309
-         satcast-det  0.390  0.377  0.367  0.349
+         satcast-alt  0.825  0.859  0.833  0.828
+         satcast-det  0.847  0.880  0.845  0.856
 
   6/6  review       http://127.0.0.1:8766/
 ```

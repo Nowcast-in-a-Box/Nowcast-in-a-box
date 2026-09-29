@@ -67,6 +67,8 @@ class Product:
     missing_points: int
     frames: int
     resolution: float
+    extent: tuple[float, float, float, float]
+    shape: tuple[int, int]
 
 
 @dataclass(frozen=True)
@@ -121,11 +123,20 @@ class Exercise:
 SOURCES: tuple[Product, ...] = (
     Product("radar-composite", "vil", "kg m-2", scale=1.0, vmin=0.0, vmax=255.0,
             noise=4.0, missing_kind="range", missing_points=60,
-            frames=6, resolution=0.25),
+            frames=6, resolution=0.25,
+            extent=(110.0, 30.0, 120.0, 42.0), shape=(48, 64)),
     Product("satellite-rain", "rain_rate", "mm h-1", scale=0.16, vmin=0.0, vmax=45.0,
-            noise=2.5, missing_kind="random", missing_points=150,
-            frames=12, resolution=0.5),
+            noise=6.0, missing_kind="random", missing_points=150,
+            frames=12, resolution=0.5,
+            extent=(104.0, 24.0, 126.0, 48.0), shape=(56, 72)),
 )
+
+#: The domain every model's grid covers. Not either product's: a forecast model
+#: has its own grid, coarser than both, and resampling onto a ruler is our job.
+#: It has to be the union of the two products or the part of a ruler outside it
+#: would come back as a gap for no reason worth explaining.
+MODEL_EXTENT = (104.0, 24.0, 126.0, 48.0)
+MODEL_SHAPE = (48, 64)
 
 #: Two models for each product, in order of skill: the generator makes the second
 #: one worse, which is what makes a comparison worth showing. A model belongs to
@@ -215,11 +226,6 @@ CONTEXT_FRAMES = 3
 #: How many init times the fabricated platform has produced.
 INIT_TIMES = 6
 
-#: The domain both products cover. Entered by hand today; the module resamples
-#: whatever it is given onto the ruler's grid, and the two rulers differ in how
-#: fine that grid is.
-EXTENT = (110.0, 30.0, 120.0, 42.0)
-
 
 @dataclass
 class Demo:
@@ -270,10 +276,12 @@ def data_manifest(source: Product) -> dict:
             "name": source.variable,
             "unit": source.unit,
             "dtype": "float32",
-            "shape": [48, 64],
+            "shape": list(source.shape),
             "cadence_minutes": CADENCE_MINUTES,
             "frame_count": CONTEXT_FRAMES + source.frames,
             "target_frame_count": source.frames,
+            "extent": list(source.extent),
+            "resolution": source.resolution,
         }],
     }
 
@@ -285,12 +293,12 @@ def model_manifest(forecast: Forecast, source: Product) -> dict:
         "region": "east-china",
         "context_frames": {"required_count": CONTEXT_FRAMES, "mode": "latest"},
         "input": [{"name": source.variable, "unit": source.unit, "dtype": "float32",
-                   "shape": [48, 64]}],
+                   "shape": list(source.shape)}],
         "output": [{
             "name": source.variable,
             "unit": source.unit,
             "dtype": "float32",
-            "shape": [48, 64],
+            "shape": list(source.shape),
             "cadence_minutes": CADENCE_MINUTES,
             "frame_count": source.frames,
         }],
@@ -333,12 +341,19 @@ def catalogue(scenario: str) -> dict:
         # claims, which is the satellite's. A scenario's own horizon is about the
         # weather; how far ahead anybody looks is the catalogue's business.
         "horizon_minutes": max(s.frames for s in SOURCES) * CADENCE_MINUTES,
+        # Each product comes on its own footprint -- a radar sees the range of one
+        # radar. The model grid is its own too, and has to cover both or the part
+        # of a ruler outside it is a gap that means nothing.
+        "model_extent": MODEL_EXTENT,
+        "model_shape": MODEL_SHAPE,
         "sources": {
             s.id: {
                 "variable": s.variable, "unit": s.unit, "scale": s.scale,
                 "vmin": s.vmin, "vmax": s.vmax, "noise": s.noise,
                 "missing_kind": s.missing_kind,
                 "missing_points": s.missing_points,
+                "extent": s.extent,
+                "shape": s.shape,
             }
             for s in SOURCES
         },
@@ -372,7 +387,7 @@ def verification_config(spec: Exercise | None = None):
         name=spec.name,
         ruler=Ruler(
             ground_truth=spec.source, unit=source.unit,
-            time_step_minutes=CADENCE_MINUTES, extent=EXTENT,
+            time_step_minutes=CADENCE_MINUTES, extent=source.extent,
             resolution=source.resolution,
         ),
         members=tuple(

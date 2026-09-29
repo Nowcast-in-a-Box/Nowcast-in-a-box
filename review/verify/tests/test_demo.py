@@ -353,13 +353,47 @@ def test_the_two_configs_share_almost_no_parameters(built):
     b = load(built.configs / "rain-demo.json")
 
     assert a.ruler.resolution != b.ruler.resolution
-    assert a.ruler.extent == b.ruler.extent, "one domain, two grids laid over it"
+    assert a.ruler.extent != b.ruler.extent, "each instrument has its own footprint"
+    # the radar's footprint is inside the satellite's, which is why one model grid
+    # can serve both
+    ra, rb = demo_module.source_of("radar-composite"), demo_module.source_of("satellite-rain")
+    for lo, hi in ((0, 2), (1, 3)):
+        assert rb.extent[lo] <= ra.extent[lo] and ra.extent[hi] <= rb.extent[hi]
     assert [m.leads for m in a.members] != [m.leads for m in b.members]
     assert a.metrics[0].levels != b.metrics[0].levels
     assert a.metrics[-1].half_windows != b.metrics[-1].half_windows
     # and the sets of levels are not the same numbers on another scale: the
     # satellite's top threshold is below the radar's bottom one
     assert max(b.metrics[0].levels) < min(a.metrics[0].levels)
+
+
+def test_each_ground_truth_declares_its_own_extent(built):
+    """Which is what lets the form fill the boxes in instead of asking somebody to
+    retype what the package already said."""
+    catalog = discover_packages(built.packages)
+    for source in demo_module.SOURCES:
+        defaults = catalog.get(source.id).as_dict()["ruler_defaults"]
+        assert defaults["extent"] == list(source.extent), source.id
+        assert defaults["resolution"] == source.resolution, source.id
+        assert defaults["variable"] == source.variable, source.id
+        assert defaults["unit"] == source.unit, source.id
+    # and they are not the same numbers: switching ground truth has to move
+    # something, or the test above would pass on one package duplicated
+    extents = {tuple(catalog.get(s.id).as_dict()["ruler_defaults"]["extent"])
+               for s in demo_module.SOURCES}
+    assert len(extents) == len(demo_module.SOURCES)
+
+
+def test_every_model_grid_covers_both_products(built):
+    """A ruler outside the model grid comes back as a gap for no reason worth
+    explaining, so the one model grid has to hold the union."""
+    catalog = discover_packages(built.packages)
+    model = catalog.get("mlcast-det")
+    assert tuple(model.input_fields[0].shape) == tuple(demo_module.MODEL_SHAPE)
+    for source in demo_module.SOURCES:
+        lo, la, hi, ha = source.extent
+        assert demo_module.MODEL_EXTENT[0] <= lo and hi <= demo_module.MODEL_EXTENT[2]
+        assert demo_module.MODEL_EXTENT[1] <= la and ha <= demo_module.MODEL_EXTENT[3]
 
 
 def test_a_run_reaches_exactly_as_far_as_its_product_claims(built):
