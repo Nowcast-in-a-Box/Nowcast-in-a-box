@@ -228,8 +228,15 @@ def test_the_page_adds_the_three_families_it_was_told_to():
     """Read from the registry, but this is the list, and it is short."""
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert 'const DEFAULT_FAMILIES = ["continuous", "categorical", "spatial"]' in app
-    # the labels are what the user reads, and FSS is called FSS
-    assert 'spatial: "FSS"' in app
+
+
+def test_the_family_titles_are_the_question_each_one_answers():
+    """A family is named for what it asks, not for the first metric that landed
+    in it: 'FSS' stops being true the day a second spatial metric arrives."""
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert 'categorical: "Yes or no"' in app
+    assert 'spatial: "Special"' in app
+    assert "FSS" not in app, "the metric is not the family"
 
 
 def test_each_group_owns_its_own_parameter_boxes():

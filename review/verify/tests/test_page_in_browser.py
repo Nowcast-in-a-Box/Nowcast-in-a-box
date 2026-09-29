@@ -357,8 +357,17 @@ def test_every_metric_in_a_family_is_verified(page, live_server):
             "els => els.map(e => e.textContent)"))
 
     assert chips("continuous") == {"me", "mae", "rmse"}
-    assert chips("categorical") == {"bias", "ets", "far", "pod", "ts"}
+    assert chips("categorical") == {"bias", "dts", "ets", "far", "pod", "ts"}
     assert chips("spatial") == {"fss"}
+
+
+def test_the_families_are_titled_by_the_question_they_answer(page, live_server):
+    """Nobody reading the screen has to know what 'categorical' means."""
+    page.load(live_server).tab("create")
+    page.page.wait_for_timeout(400)
+    titles = page.page.eval_on_selector_all(
+        "#metric-groups .groupbox strong", "els => els.map(e => e.textContent)")
+    assert titles == ["Continuous", "Yes or no", "Special"]
 
 
 def test_a_family_reads_only_the_parameters_it_has(page, live_server):
