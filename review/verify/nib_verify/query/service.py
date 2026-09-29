@@ -13,14 +13,12 @@ from typing import Any, Mapping, Sequence
 
 from ..config.schema import VerificationConfig
 from ..core.metrics import REGISTRY, MetricSpec, spec_for
+from ..core.quantities import FAMILIES
 from ..store.db import Between, Store, iso_utc
 
-#: how many valid samples each family contributes
+#: how many valid samples each family contributes, from the family itself
 SAMPLE_COLUMNS: dict[str, tuple[str, ...]] = {
-    "cat": ("H", "F", "M", "C"),
-    "cont": ("T",),
-    "mom": ("T",),
-    "spatial": ("n_valid",),
+    f.name: f.samples for f in FAMILIES
 }
 
 DEFAULT_LIMIT = 20_000

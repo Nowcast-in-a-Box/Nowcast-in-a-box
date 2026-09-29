@@ -25,16 +25,10 @@ from datetime import date, datetime
 from typing import Any, Iterable, Mapping
 
 from ..core.metrics import REGISTRY, spec_for
+from ..core.quantities import FAMILY_OF
 
-STORAGE_FAMILIES = ("cat", "cont", "mom", "spatial")
-
-#: metric family -> the storage family its rows live in
-FAMILY_TABLE = {
-    "categorical": "cat",
-    "continuous": "cont",
-    "moments": "mom",
-    "spatial": "spatial",
-}
+#: the family names a config may use — one vocabulary, and it is the store's
+FAMILIES = tuple(FAMILY_OF)
 
 
 class ConfigError(ValueError):
@@ -122,10 +116,10 @@ class MetricGroup:
     half_windows: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.family not in FAMILY_TABLE:
+        if self.family not in FAMILY_OF:
             raise ConfigError(
                 f"unknown metric family {self.family!r}; "
-                f"expected one of {sorted(FAMILY_TABLE)}"
+                f"expected one of {sorted(FAMILY_OF)}"
             )
         if not self.items:
             raise ConfigError(f"metric family {self.family!r} is empty")
@@ -134,6 +128,15 @@ class MetricGroup:
                 spec = spec_for(item)
             except KeyError as exc:
                 raise ConfigError(str(exc)) from None
+            # A metric filed under a family it does not read would be a formula
+            # over columns that are not in the block, so every answer it gave
+            # would be a gap rather than an error. Now that the family is one
+            # name, this is the only place the two can be compared.
+            if spec.family != self.family:
+                raise ConfigError(
+                    f"metric {item!r} belongs to the {spec.family!r} family, "
+                    f"not to {self.family!r}"
+                )
             if spec.needs_level and not self.levels:
                 raise ConfigError(f"metric {item!r} needs at least one level")
             if spec.needs_window and not self.half_windows:
@@ -141,9 +144,6 @@ class MetricGroup:
         if any(h < 0 for h in self.half_windows):
             raise ConfigError("half_windows must be >= 0")
 
-    @property
-    def storage_family(self) -> str:
-        return FAMILY_TABLE[self.family]
 
 
 @dataclass(frozen=True)
@@ -184,7 +184,7 @@ class VerificationConfig:
 
     def families(self) -> tuple[str, ...]:
         """Storage families this config writes, in a stable order."""
-        return tuple(dict.fromkeys(g.storage_family for g in self.metrics))
+        return tuple(dict.fromkeys(g.family for g in self.metrics))
 
     def levels(self) -> tuple[float, ...]:
         out: list[float] = []
@@ -201,14 +201,14 @@ class VerificationConfig:
     def levels_for(self, family: str) -> tuple[float, ...]:
         out: list[float] = []
         for g in self.metrics:
-            if g.storage_family == family:
+            if g.family == family:
                 out.extend(g.levels)
         return tuple(dict.fromkeys(out))
 
     def half_windows_for(self, family: str) -> tuple[int, ...]:
         out: list[int] = []
         for g in self.metrics:
-            if g.storage_family == family:
+            if g.family == family:
                 out.extend(g.half_windows)
         return tuple(dict.fromkeys(out))
 
@@ -265,10 +265,6 @@ class VerificationConfig:
             "metrics": [
                 {
                     "family": g.family,
-                    # the family a config names, and the family the store uses.
-                    # Two vocabularies, because a config groups metrics by what
-                    # they mean and the store groups them by how they accumulate.
-                    "storage_family": g.storage_family,
                     "items": list(g.items),
                     "levels": list(g.levels),
                     "half_windows": list(g.half_windows),

@@ -36,13 +36,12 @@ from ..catalog.packages import (
 )
 from ..catalog.runs import RunConfigError, discover as discover_runs
 from ..config.schema import (
-    FAMILY_TABLE,
     ConfigError,
     Member,
     MetricGroup,
     VerificationConfig,
 )
-from ..core.metrics import list_metrics as metric_list
+from ..core.metrics import list_families, list_metrics as metric_list
 from ..core.planner import plan as plan_tasks
 from ..core.planner import planned_runs
 from ..query.service import QueryError, available_expansions, query_scores
@@ -75,7 +74,6 @@ STATIC_DIR = Path(__file__).parent / "static"
 #: because a config groups metrics by what they mean and the store groups them by
 #: how they accumulate; the API speaks the config's, since that is what a user
 #: sees and types.
-CONFIG_FAMILY = {storage: name for name, storage in FAMILY_TABLE.items()}
 
 
 def create_app(
@@ -208,21 +206,9 @@ def create_app(
 
     @app.get("/api/metrics")
     def get_metrics():
-        rows = [
-            {**row, "storage_family": row["family"],
-             "family": CONFIG_FAMILY.get(row["family"], row["family"])}
-            for row in metric_list()
-        ]
-        families: dict[str, list[str]] = {}
-        for row in rows:
-            families.setdefault(row["family"], []).append(row["method"])
-        return {
-            "metrics": rows,
-            "families": [
-                {"family": family, "items": sorted(items)}
-                for family, items in sorted(families.items())
-            ],
-        }
+        # The families come with the words the page shows and the ones a new
+        # config starts with, so neither is written down twice.
+        return {"metrics": metric_list(), "families": list_families()}
 
     @app.get("/api/metrics/{method}/dimensions")
     def get_dimensions(method: str):
@@ -466,7 +452,6 @@ def available_metrics(cfg: VerificationConfig) -> list[dict]:
             out.append({
                 "method": item,
                 "family": group.family,
-                "storage_family": group.storage_family,
                 "levels": list(group.levels),
                 "half_windows": list(group.half_windows),
             })

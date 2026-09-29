@@ -115,7 +115,7 @@ def test_roster_rejects_a_backwards_window():
 def test_metrics_can_be_appended():
     cfg = make_config()
     grown = cfg.with_metric_group(
-        MetricGroup(family="categorical", items=("pod",), levels=(5.0,))
+        MetricGroup(family="yes_or_no", items=("pod",), levels=(5.0,))
     )
     assert len(grown.metrics) == len(cfg.metrics) + 1
     assert grown.metrics_for("pod")
@@ -126,13 +126,13 @@ def test_appending_an_existing_metric_is_refused():
     cfg = make_config()
     with pytest.raises(ConfigError, match="append-only"):
         cfg.with_metric_group(
-            MetricGroup(family="categorical", items=("ts",), levels=(5.0,))
+            MetricGroup(family="yes_or_no", items=("ts",), levels=(5.0,))
         )
 
 
 def test_a_metric_needing_a_level_without_one_is_refused():
     with pytest.raises(ConfigError, match="needs at least one level"):
-        MetricGroup(family="categorical", items=("ts",))
+        MetricGroup(family="yes_or_no", items=("ts",))
 
 
 def test_a_metric_needing_a_window_without_one_is_refused():
@@ -146,7 +146,7 @@ def test_an_unknown_family_is_refused():
 
 
 def test_the_same_metric_twice_is_refused():
-    group = MetricGroup(family="categorical", items=("ts",), levels=(5.0,))
+    group = MetricGroup(family="yes_or_no", items=("ts",), levels=(5.0,))
     with pytest.raises(ConfigError, match="more than once"):
         replace(make_config(), metrics=(group, group))
 
@@ -166,7 +166,7 @@ def test_dropping_a_metric_forces_a_new_config():
         before,
         metrics=tuple(
             replace(g, items=tuple(i for i in g.items if i != "ets"))
-            if g.family == "categorical" else g
+            if g.family == "yes_or_no" else g
             for g in before.metrics
         ),
     )
@@ -185,7 +185,7 @@ def test_growing_the_roster_needs_no_new_config():
 def test_adding_a_metric_needs_no_new_config():
     before = make_config()
     after = before.with_metric_group(
-        MetricGroup(family="categorical", items=("far",), levels=(5.0,))
+        MetricGroup(family="yes_or_no", items=("far",), levels=(5.0,))
     )
     assert after.allows_modification_of(before) == ()
 
@@ -230,11 +230,11 @@ def test_from_dict_accepts_iso_dates_for_the_roster():
 # ----------------------------------------------------------------------
 def test_families_and_levels_are_deduplicated_in_order():
     cfg = make_config()
-    assert cfg.families() == ("cat", "cont", "mom", "spatial")
+    assert cfg.families() == ("yes_or_no", "continuous", "moments", "spatial")
     assert cfg.levels() == (16.0, 74.0, 133.0, 181.0, 219.0)
     assert cfg.half_windows() == (1, 2)
-    assert cfg.levels_for("cont") == ()
-    assert cfg.half_windows_for("cat") == ()
+    assert cfg.levels_for("continuous") == ()
+    assert cfg.half_windows_for("yes_or_no") == ()
 
 
 def test_metrics_for_reports_membership():
@@ -248,8 +248,8 @@ def test_dropped_metrics_helper_is_symmetric():
     after = replace(
         before,
         metrics=tuple(
-            MetricGroup(family="categorical", items=("bias",), levels=(5.0,))
-            if g.family == "categorical" else g
+            MetricGroup(family="yes_or_no", items=("bias",), levels=(5.0,))
+            if g.family == "yes_or_no" else g
             for g in before.metrics
         ),
     )
@@ -309,3 +309,45 @@ def test_the_fingerprint_covers_the_five_things_that_are_left():
                          ("time_step_minutes", 5), ("resolution", 1.0),
                          ("extent", (0.0, 0.0, 1.0, 1.0))):
         assert replace(base, **{field: value}).fingerprint != base.fingerprint, field
+
+
+# ----------------------------------------------------------------------
+# a metric has to live in the block it reads
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("family, item", [
+    ("continuous", "ts"),
+    ("moments", "mae"),
+    ("spatial", "bias"),
+    ("yes_or_no", "fss"),
+    ("yes_or_no", "corr"),
+])
+def test_a_metric_cannot_be_filed_under_a_family_it_does_not_read(family, item):
+    """The bug two vocabularies made invisible.
+
+    A metric sitting in a family whose block its columns are not in is a formula
+    over columns that are not there. Nothing raises: the query finds no rows and
+    every answer comes back as a gap. It was accepted for as long as the family a
+    config names and the family a metric declares came from two different tables,
+    because then the two could not be compared at all.
+    """
+    with pytest.raises(ConfigError, match="belongs to the"):
+        MetricGroup(family=family, items=(item,), levels=(5.0,), half_windows=(1,))
+
+
+def test_every_metric_in_the_registry_is_where_it_says_it_is():
+    from nib_verify.core.metrics import REGISTRY, spec_for
+
+    for name in REGISTRY:
+        spec = spec_for(name)                      # raises if it is not
+        assert set(spec.columns) <= set(spec.block.columns), name
+
+
+def test_a_config_names_the_families_the_store_names():
+    """One name, so this is a comparison rather than a translation."""
+    from nib_verify.core.quantities import FAMILY_OF
+    from nib_verify.store.db import TABLE_OF
+
+    cfg = make_config()
+    assert set(cfg.families()) <= set(FAMILY_OF)
+    assert {FAMILY_OF[f].table for f in cfg.families()} <= set(TABLE_OF.values())
+    assert FAMILY_OF["yes_or_no"].table == "q_yes_or_no"

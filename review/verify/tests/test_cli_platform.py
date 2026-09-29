@@ -293,14 +293,14 @@ def test_config_delete_removes_only_that_configs_rows(config_file, platform, cap
 
     group = load(config_file).group_id
     with Store(root / "verify.sqlite") as store:
-        before = store.count_rows("cat", filters={"group_id": group})
+        before = store.count_rows("yes_or_no", filters={"group_id": group})
     assert before > 0
 
     assert main(["config", "delete", str(config_file), "--root", str(root)]) == EXIT_OK
     assert "removed stored rows" in capsys.readouterr().out
 
     with Store(root / "verify.sqlite") as store:
-        assert store.count_rows("cat", filters={"group_id": group}) == 0
+        assert store.count_rows("yes_or_no", filters={"group_id": group}) == 0
         assert store.task_counts(group) == {}
 
 
@@ -321,13 +321,13 @@ def test_config_delete_keeps_other_configs(config_file, platform, capsys):
     capsys.readouterr()
 
     with Store(root / "verify.sqlite") as store:
-        assert store.count_rows("cat", filters={"group_id": cfg.group_id}) > 0
+        assert store.count_rows("yes_or_no", filters={"group_id": cfg.group_id}) > 0
 
     main(["config", "delete", str(config_file), "--root", str(root)])
 
     with Store(root / "verify.sqlite") as store:
-        assert store.count_rows("cat", filters={"group_id": cfg.group_id}) == 0
-        assert store.count_rows("cat", filters={"group_id": "a-second-config"}) > 0
+        assert store.count_rows("yes_or_no", filters={"group_id": cfg.group_id}) == 0
+        assert store.count_rows("yes_or_no", filters={"group_id": "a-second-config"}) > 0
 
 
 def test_config_delete_on_a_missing_file(config_file, tmp_path, capsys):

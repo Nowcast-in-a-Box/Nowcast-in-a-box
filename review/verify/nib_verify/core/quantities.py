@@ -4,16 +4,11 @@ The module persists *counts and sums*, never ratios.  That single choice is what
 makes a threshold change a re-aggregation instead of a re-run: every metric in
 :mod:`nib_verify.core.metrics` is a pure function of the numbers produced here.
 
-Four families, each with its own key shape:
-
-===========  =========================================  =========================
-family       columns                                    feeds
-===========  =========================================  =========================
-``cat``      H, F, M, C                                 CSI, TS, bias, ETS, POD, FAR
-``cont``     T, E, A, S                                 ME, MAE, RMSE
-``mom``      T, MX, MY, SX, SY, SXY                      correlation
-``spatial``  pob, pfo, fbs, n_valid                      FSS
-===========  =========================================  =========================
+**One name per family, here and everywhere.** The name below is the key in a
+config file, the key in the store, the key a metric declares it reads, and —
+with the underscore opened out — the heading on the review page. Two vocabularies
+would mean a translation table, and a translation table is how a metric ends up
+sitting in a family it does not live in without anything noticing.
 
 Rows are shared inside a family: adding ``ets`` next to ``csi`` costs no new
 row, because both read the same ``H F M C``.  Adding a *level* does add rows —
@@ -22,21 +17,68 @@ a level is a threshold.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Mapping
 
 import numpy as np
 
-FAMILIES: Mapping[str, tuple[str, ...]] = {
-    "cat": ("H", "F", "M", "C"),
-    "cont": ("T", "E", "A", "S"),
-    "mom": ("T", "MX", "MY", "SX", "SY", "SXY"),
-    "spatial": ("pob", "pfo", "fbs", "n_valid"),
-}
+#: the columns every family's key starts with
+BASE_KEY = ("group_id", "member", "init_time", "valid_time", "lead_minutes")
 
-#: families whose key includes a threshold level
-LEVEL_FAMILIES = ("cat", "spatial")
-#: families whose key includes a neighbourhood half-width
-WINDOW_FAMILIES = ("spatial",)
+
+@dataclass(frozen=True)
+class Family:
+    """One additive block: what is stored, and what its metrics answer.
+
+    ``columns`` are the additive quantities and the only things ever summed.
+    ``samples`` are which of them count valid samples, which a weighted mean
+    needs and which is not the same question as how many rows there are.
+    ``extra_key`` is what makes the key shape differ between families — a
+    threshold, a neighbourhood, or neither.
+    """
+
+    name: str
+    label: str
+    columns: tuple[str, ...]
+    samples: tuple[str, ...]
+    extra_key: tuple[str, ...] = ()
+    added_by_default: bool = False
+
+    @property
+    def key_columns(self) -> tuple[str, ...]:
+        return BASE_KEY + self.extra_key
+
+    @property
+    def needs_level(self) -> bool:
+        return "level" in self.extra_key
+
+    @property
+    def needs_window(self) -> bool:
+        return "half_window" in self.extra_key
+
+    @property
+    def table(self) -> str:
+        return f"q_{self.name}"
+
+
+#: Every family there is. The order is the order they are shown in, and the
+#: three defaults come first because that is the order they are created in.
+FAMILIES: tuple[Family, ...] = (
+    Family("continuous", "Continuous", ("T", "E", "A", "S"), ("T",),
+           added_by_default=True),
+    Family("yes_or_no", "Yes or no", ("H", "F", "M", "C"),
+           ("H", "F", "M", "C"), ("level",), added_by_default=True),
+    Family("spatial", "Spatial", ("pob", "pfo", "fbs", "n_valid"),
+           ("n_valid",), ("level", "half_window"), added_by_default=True),
+    Family("moments", "Moments", ("T", "MX", "MY", "SX", "SY", "SXY"),
+           ("T",)),
+)
+
+FAMILY_OF: dict[str, Family] = {f.name: f for f in FAMILIES}
+
+#: the families whose key carries a threshold, and those that carry a window
+LEVEL_FAMILIES = tuple(f.name for f in FAMILIES if f.needs_level)
+WINDOW_FAMILIES = tuple(f.name for f in FAMILIES if f.needs_window)
 
 
 def categorical(
@@ -185,23 +227,28 @@ def accumulate(
 
     Returns ``{family: {quantities}}`` for the key-less families and
     ``{family: {(level, half_window): {quantities}}}`` for the keyed ones.
+
+    The family says how it is keyed; this does not decide that per family name.
     """
     out: dict = {}
     for family in families:
-        if family == "cont":
-            out["cont"] = continuous(truth, prediction, valid)
-        elif family == "mom":
-            out["mom"] = moments(truth, prediction, valid)
-        elif family == "cat":
-            out["cat"] = {
-                float(lv): categorical(truth, prediction, lv, valid) for lv in levels
-            }
-        elif family == "spatial":
-            out["spatial"] = {
+        try:
+            spec = FAMILY_OF[family]
+        except KeyError:
+            raise ValueError(f"unknown family {family!r}") from None
+        if spec.needs_level and spec.needs_window:
+            out[family] = {
                 (float(lv), int(hw)): spatial(truth, prediction, lv, hw, valid)
                 for lv in levels
                 for hw in half_windows
             }
+        elif spec.needs_level:
+            out[family] = {
+                float(lv): categorical(truth, prediction, lv, valid)
+                for lv in levels
+            }
+        elif spec.name == "moments":
+            out[family] = moments(truth, prediction, valid)
         else:
-            raise ValueError(f"unknown family {family!r}")
+            out[family] = continuous(truth, prediction, valid)
     return out

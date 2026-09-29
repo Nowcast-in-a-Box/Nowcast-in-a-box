@@ -180,17 +180,15 @@ def _run_one(
     )
 
     for family in families:
+        spec = Q.FAMILY_OF[family]
         result = payload.get(family)
         if not result:
             continue
-        if family == "cat":
-            for level, values in result.items():
-                store.upsert("cat", {**key, "level": level}, values)
-        elif family == "spatial":
-            for (level, half), values in result.items():
-                store.upsert(
-                    "spatial", {**key, "level": level, "half_window": half}, values
-                )
+        if spec.extra_key:
+            # A keyed family: the block is stored once per point in its key.
+            for point, values in result.items():
+                parts = point if isinstance(point, tuple) else (point,)
+                store.upsert(family, {**key, **dict(zip(spec.extra_key, parts))}, values)
         else:
             store.upsert(family, key, result)
     store.commit()

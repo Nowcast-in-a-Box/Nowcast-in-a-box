@@ -38,9 +38,9 @@ CREATE TABLE IF NOT EXISTS obs_gap (
 );
 
 -- ---------------------------------------------------------------------
--- categorical: H F M C, one row per threshold
+-- yes_or_no: H F M C, one row per threshold
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS q_cat (
+CREATE TABLE IF NOT EXISTS q_yes_or_no (
     group_id     TEXT    NOT NULL,
     member       TEXT    NOT NULL,
     init_time    TEXT    NOT NULL,
@@ -54,13 +54,13 @@ CREATE TABLE IF NOT EXISTS q_cat (
     PRIMARY KEY (group_id, member, init_time, lead_minutes, level)
 );
 
-CREATE INDEX IF NOT EXISTS ix_cat_vt ON q_cat(group_id, valid_time, lead_minutes);
-CREATE INDEX IF NOT EXISTS ix_cat_mb ON q_cat(group_id, member, lead_minutes);
+CREATE INDEX IF NOT EXISTS ix_yes_or_no_vt ON q_yes_or_no(group_id, valid_time, lead_minutes);
+CREATE INDEX IF NOT EXISTS ix_yes_or_no_mb ON q_yes_or_no(group_id, member, lead_minutes);
 
 -- ---------------------------------------------------------------------
 -- continuous: T E A S, one row per (member, init, lead)
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS q_cont (
+CREATE TABLE IF NOT EXISTS q_continuous (
     group_id     TEXT    NOT NULL,
     member       TEXT    NOT NULL,
     init_time    TEXT    NOT NULL,
@@ -73,12 +73,12 @@ CREATE TABLE IF NOT EXISTS q_cont (
     PRIMARY KEY (group_id, member, init_time, lead_minutes)
 );
 
-CREATE INDEX IF NOT EXISTS ix_cont_vt ON q_cont(group_id, valid_time, lead_minutes);
+CREATE INDEX IF NOT EXISTS ix_continuous_vt ON q_continuous(group_id, valid_time, lead_minutes);
 
 -- ---------------------------------------------------------------------
 -- moments: T MX MY SX SY SXY
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS q_mom (
+CREATE TABLE IF NOT EXISTS q_moments (
     group_id     TEXT    NOT NULL,
     member       TEXT    NOT NULL,
     init_time    TEXT    NOT NULL,
@@ -111,4 +111,4 @@ CREATE TABLE IF NOT EXISTS q_spatial (
     PRIMARY KEY (group_id, member, init_time, lead_minutes, level, half_window)
 );
 
-CREATE INDEX IF NOT EXISTS ix_spa_vt ON q_spatial(group_id, valid_time, lead_minutes);
+CREATE INDEX IF NOT EXISTS ix_spatial_vt ON q_spatial(group_id, valid_time, lead_minutes);

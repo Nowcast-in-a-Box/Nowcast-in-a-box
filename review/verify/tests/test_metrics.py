@@ -91,7 +91,7 @@ def test_every_metric_declares_the_columns_it_needs():
     for name, spec in REGISTRY.items():
         assert spec.columns, f"{name} declares no columns"
         assert set(spec.columns) <= allowed, f"{name} wants unknown columns"
-        assert spec.family in {"cat", "cont", "mom", "spatial"}
+        assert spec.family in {"yes_or_no", "continuous", "moments", "spatial"}
 
 
 def test_compute_reads_a_row_dict():
@@ -164,10 +164,26 @@ def test_dts_moves_with_the_negatives_where_csi_cannot():
 def test_dts_is_a_formula_over_the_block_ts_already_uses():
     """Which is why adding it to a config costs a query and nothing else."""
     assert spec_for("dts").columns == spec_for("ts").columns == ("H", "F", "M", "C")
-    assert spec_for("dts").family == "cat"
+    assert spec_for("dts").family == "yes_or_no"
     assert spec_for("dts").needs_level
     assert not spec_for("dts").needs_window
 
 
 def test_dts_can_be_asked_for_by_its_long_name():
     assert spec_for("detection_threat_score").name == "dts"
+
+
+def test_the_family_names_are_the_ones_the_store_uses():
+    """No translation table, because a translation table is where a metric ends
+    up in a family it does not live in without anything noticing."""
+    from nib_verify.core.quantities import FAMILY_OF
+    from nib_verify.store.db import TABLE_OF
+
+    assert set(FAMILY_OF) == set(TABLE_OF)
+    assert {f.table for f in FAMILY_OF.values()} == set(TABLE_OF.values())
+
+
+def test_every_metric_reads_columns_its_family_actually_stores():
+    for name in REGISTRY:
+        spec = spec_for(name)
+        assert set(spec.columns) <= set(spec.block.columns), name

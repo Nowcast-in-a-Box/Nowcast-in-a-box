@@ -311,7 +311,7 @@ def test_a_preview_plans_and_reports(page, live_server):
     page.page.fill("#members input >> nth=1", "10, 20, 30")
 
     # the three families are already there; only their parameters are missing
-    page.page.fill("#m-levels-categorical", "181, 219")
+    page.page.fill("#m-levels-yes_or_no", "181, 219")
     page.page.fill("#m-levels-spatial", "181")
     page.page.fill("#m-windows-spatial", "2, 4")
     page.page.click("#btn-preview")
@@ -331,9 +331,9 @@ def test_the_three_families_are_already_there_and_ask_only_for_their_parameters(
 
     families = page.page.eval_on_selector_all(
         "#metric-groups .groupbox", "els => els.map(e => e.dataset.family)")
-    assert families == ["continuous", "categorical", "spatial"]
+    assert families == ["continuous", "yes_or_no", "spatial"]
 
-    assert page.page.locator("#m-levels-categorical").count() == 1
+    assert page.page.locator("#m-levels-yes_or_no").count() == 1
     assert page.page.locator("#m-windows-spatial").count() == 1
     # continuous reads neither, so it is not handed a dead box to wonder about
     assert page.page.locator("#m-levels-continuous").count() == 0
@@ -341,7 +341,7 @@ def test_the_three_families_are_already_there_and_ask_only_for_their_parameters(
     assert "No parameters" in page.text()
 
     # both parameters are marked required before anything is submitted
-    assert "*" in page.page.inner_text("#m-levels-categorical >> xpath=../label")
+    assert "*" in page.page.inner_text("#m-levels-yes_or_no >> xpath=../label")
     assert "*" in page.page.inner_text("#m-windows-spatial >> xpath=../label")
     assert page.errors == []
 
@@ -357,12 +357,12 @@ def test_every_metric_in_a_family_is_verified(page, live_server):
             "els => els.map(e => e.textContent)"))
 
     assert chips("continuous") == {"me", "mae", "rmse"}
-    assert chips("categorical") == {"bias", "dts", "ets", "far", "pod", "ts"}
+    assert chips("yes_or_no") == {"bias", "dts", "ets", "far", "pod", "ts"}
     assert chips("spatial") == {"fss"}
 
 
 def test_the_families_are_titled_by_the_question_they_answer(page, live_server):
-    """Nobody reading the screen has to know what 'categorical' means."""
+    """Nobody reading the screen has to know what 'yes_or_no' means."""
     page.load(live_server).tab("create")
     page.page.wait_for_timeout(400)
     titles = page.page.eval_on_selector_all(
@@ -375,7 +375,7 @@ def test_a_family_reads_only_the_parameters_it_has(page, live_server):
     cannot end up attached to another that has no threshold at all."""
     page.load(live_server).tab("create")
     page.page.wait_for_timeout(400)
-    page.page.fill("#m-levels-categorical", "181, 219")
+    page.page.fill("#m-levels-yes_or_no", "181, 219")
     page.page.fill("#m-levels-spatial", "181")
     page.page.fill("#m-windows-spatial", "2, 4")
 
@@ -388,8 +388,8 @@ def test_a_family_reads_only_the_parameters_it_has(page, live_server):
     by = {m["family"]: m for m in spec}
     assert by["continuous"]["levels"] == []
     assert by["continuous"]["half_windows"] == []
-    assert by["categorical"]["levels"] == [181, 219]
-    assert by["categorical"]["half_windows"] == [], "continuous' windows leaked in"
+    assert by["yes_or_no"]["levels"] == [181, 219]
+    assert by["yes_or_no"]["half_windows"] == [], "continuous' windows leaked in"
     assert by["spatial"]["levels"] == [181]
     assert by["spatial"]["half_windows"] == [2, 4]
 
@@ -410,7 +410,7 @@ def test_a_family_is_dropped_and_put_back_with_one_click(page, live_server):
     page.page.wait_for_timeout(300)
     assert page.page.eval_on_selector_all(
         "#metric-groups .groupbox", "els => els.map(e => e.dataset.family)"
-    ) == ["categorical", "spatial", "continuous"]
+    ) == ["yes_or_no", "spatial", "continuous"]
     assert page.page.locator("#metric-add button").count() == 0
     assert page.errors == []
 

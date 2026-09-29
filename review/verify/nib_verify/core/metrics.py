@@ -6,7 +6,9 @@ subset of rows.  ``g`` (the expansion dimensions) never appears in this module �
 grouping happens in SQL, by summing rows.
 
 The names follow the MetEva middle-function vocabulary so the two can be talked
-about with one set of words.
+about with one set of words. A metric's ``family`` is a name from
+:mod:`nib_verify.core.quantities`, which is the same name a config file uses and
+the same name the store uses.
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 import numpy as np
+
+from .quantities import FAMILY_OF, FAMILIES, Family
 
 NAN = float("nan")
 
@@ -125,15 +129,37 @@ def fss(pob: float, pfo: float, fbs: float, n_valid: float = 0.0) -> float:
 # ----------------------------------------------------------------------
 @dataclass(frozen=True)
 class MetricSpec:
-    """Everything the query layer needs to know about one metric."""
+    """Everything the query layer needs to know about one metric.
+
+    ``family`` must name a block that exists and that the metric's columns
+    actually live in — the two are checked against each other in
+    :func:`spec_for`, because a metric filed under a family it does not read
+    would be a formula over columns that are not there, and every answer it gave
+    would be a gap rather than an error.
+    """
 
     name: str
     family: str
     columns: tuple[str, ...]
     fn: Callable[..., float]
     label: str
-    needs_level: bool = False
-    needs_window: bool = False
+
+    @property
+    def block(self) -> Family:
+        return FAMILY_OF[self.family]
+
+    @property
+    def needs_level(self) -> bool:
+        """Whether the block is keyed by a threshold.
+
+        Read off the block rather than declared per metric: a metric cannot want
+        a threshold its block does not have.
+        """
+        return self.block.needs_level
+
+    @property
+    def needs_window(self) -> bool:
+        return self.block.needs_window
 
     def compute(self, row: Mapping[str, float]) -> float:
         args = [row.get(c, 0.0) for c in self.columns]
@@ -143,37 +169,33 @@ class MetricSpec:
             return NAN
 
 
-_CAT = ("H", "F", "M", "C")
-_CONT = ("T", "E", "A", "S")
-_MOM = ("T", "MX", "MY", "SX", "SY", "SXY")
-_SPA = ("pob", "pfo", "fbs", "n_valid")
+_CONT = FAMILY_OF["continuous"].columns
+_YES = FAMILY_OF["yes_or_no"].columns
+_MOM = FAMILY_OF["moments"].columns
+_SPA = FAMILY_OF["spatial"].columns
 
 
 REGISTRY: dict[str, MetricSpec] = {
-    # categorical — shared level, one row per level
-    "ts": MetricSpec("ts", "cat", _CAT, csi, "Threat score (CSI)", needs_level=True),
-    "bias": MetricSpec("bias", "cat", _CAT, bias, "Frequency bias", needs_level=True),
-    "ets": MetricSpec("ets", "cat", _CAT, ets, "Equitable threat score", needs_level=True),
-    "pod": MetricSpec("pod", "cat", _CAT, pod, "Probability of detection", needs_level=True),
-    "far": MetricSpec("far", "cat", _CAT, far, "False alarm ratio", needs_level=True),
-    "dts": MetricSpec("dts", "cat", _CAT, dts, "Detection threat score", needs_level=True),
+    # yes_or_no — one row per threshold, shared by every metric in the family
+    "ts": MetricSpec("ts", "yes_or_no", _YES, csi, "Threat score (CSI)"),
+    "bias": MetricSpec("bias", "yes_or_no", _YES, bias, "Frequency bias"),
+    "ets": MetricSpec("ets", "yes_or_no", _YES, ets, "Equitable threat score"),
+    "pod": MetricSpec("pod", "yes_or_no", _YES, pod, "Probability of detection"),
+    "far": MetricSpec("far", "yes_or_no", _YES, far, "False alarm ratio"),
+    "dts": MetricSpec("dts", "yes_or_no", _YES, dts, "Detection threat score"),
     # continuous — no threshold
-    "me": MetricSpec("me", "cont", _CONT, me, "Mean error"),
-    "mae": MetricSpec("mae", "cont", _CONT, mae, "Mean absolute error"),
-    "rmse": MetricSpec("rmse", "cont", _CONT, rmse, "Root mean square error"),
+    "me": MetricSpec("me", "continuous", _CONT, me, "Mean error"),
+    "mae": MetricSpec("mae", "continuous", _CONT, mae, "Mean absolute error"),
+    "rmse": MetricSpec("rmse", "continuous", _CONT, rmse, "Root mean square error"),
     # moments
-    "corr": MetricSpec("corr", "mom", _MOM, corr, "Correlation"),
-    # spatial
-    "fss": MetricSpec("fss", "spatial", _SPA, fss, "Fractions skill score",
-                      needs_level=True, needs_window=True),
+    "corr": MetricSpec("corr", "moments", _MOM, corr, "Correlation"),
+    # spatial — a threshold and a neighbourhood
+    "fss": MetricSpec("fss", "spatial", _SPA, fss, "Fractions skill score"),
 }
 
-#: families that need a level in the storage key
-LEVEL_METRICS = tuple(sorted({s.name for s in REGISTRY.values() if s.needs_level}))
-#: families that need a half-window in the storage key
-WINDOW_METRICS = tuple(sorted({s.name for s in REGISTRY.values() if s.needs_window}))
-
-STORAGE_FAMILIES = ("cat", "cont", "mom", "spatial")
+#: metrics whose storage key carries a level, and those that carry a window
+LEVEL_METRICS = tuple(sorted(n for n, s in REGISTRY.items() if s.needs_level))
+WINDOW_METRICS = tuple(sorted(n for n, s in REGISTRY.items() if s.needs_window))
 
 
 #: other names for the same formula.  ``ts`` and ``csi`` are one metric, and
@@ -194,7 +216,17 @@ def spec_for(method: str) -> MetricSpec:
     if key not in REGISTRY:
         known = ", ".join(sorted(REGISTRY))
         raise KeyError(f"unknown metric {method!r}; known metrics: {known}")
-    return REGISTRY[key]
+    spec = REGISTRY[key]
+    block = FAMILY_OF.get(spec.family)
+    if block is None:
+        raise KeyError(f"metric {key!r} names a family that does not exist: {spec.family!r}")
+    missing = [c for c in spec.columns if c not in block.columns]
+    if missing:
+        raise KeyError(
+            f"metric {key!r} is filed under {spec.family!r} but reads "
+            f"{', '.join(missing)}, which that family does not store"
+        )
+    return spec
 
 
 def list_metrics() -> list[dict]:
@@ -216,3 +248,23 @@ def list_metrics() -> list[dict]:
             }
         )
     return out
+
+
+def list_families() -> list[dict]:
+    """The families, with the words and the defaults the page needs.
+
+    Sent to the interface rather than repeated there, so the words on the screen
+    and the words in a config file cannot drift apart — the same rule the
+    catalogue follows for what a ground truth package declares.
+    """
+    return [
+        {
+            "family": f.name,
+            "label": f.label,
+            "added_by_default": f.added_by_default,
+            "needs_level": f.needs_level,
+            "needs_window": f.needs_window,
+            "metrics": sorted(n for n, s in REGISTRY.items() if s.family == f.name),
+        }
+        for f in FAMILIES
+    ]

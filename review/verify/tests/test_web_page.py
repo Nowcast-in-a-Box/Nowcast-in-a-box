@@ -224,19 +224,33 @@ def test_the_metrics_section_asks_for_no_selection():
     assert "m-windows" not in section
 
 
-def test_the_page_adds_the_three_families_it_was_told_to():
-    """Read from the registry, but this is the list, and it is short."""
+def test_the_page_owns_no_list_of_families():
+    """The families, their words and the defaults all come from the service.
+
+    The page having a list of its own is the whole bug class: a family added on
+    the server would not show up here until the page was edited, and a family
+    renamed on the server would show up under the old name.
+    """
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    assert 'const DEFAULT_FAMILIES = ["continuous", "categorical", "spatial"]' in app
+    assert "DEFAULT_FAMILIES" not in app
+    assert "FAMILY_LABEL" not in app
+    assert "familyLabel" in app
+    assert "defaultFamilies" in app
 
 
-def test_the_family_titles_are_the_question_each_one_answers():
-    """A family is named for what it asks, not for the first metric that landed
-    in it: 'FSS' stops being true the day a second spatial metric arrives."""
-    app = (STATIC / "app.js").read_text(encoding="utf-8")
-    assert 'categorical: "Yes or no"' in app
-    assert 'spatial: "Spatial"' in app
-    assert "FSS" not in app, "the metric is not the family"
+def test_the_family_words_are_sent_with_the_registry():
+    """On the service, not in the page: one definition of each word."""
+    from nib_verify.core.metrics import list_families
+
+    words = {f["family"]: f["label"] for f in list_families()}
+    assert words == {"continuous": "Continuous", "yes_or_no": "Yes or no",
+                     "spatial": "Spatial", "moments": "Moments"}
+    defaults = {f["family"] for f in list_families() if f["added_by_default"]}
+    assert defaults == {"continuous", "yes_or_no", "spatial"}
+    # and the names are the ones the store knows, because they are one name
+    from nib_verify.core.quantities import FAMILY_OF
+
+    assert set(FAMILY_OF) == set(words)
 
 
 def test_each_group_owns_its_own_parameter_boxes():

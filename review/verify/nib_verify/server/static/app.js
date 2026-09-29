@@ -202,7 +202,7 @@ function renderConfigDetail(cfg) {
   // ---- metrics
   const metricBlocks = cfg.metrics.map(g => h("div", { class: "groupbox" },
     h("div", { class: "head" },
-      h("strong", { text: `${g.family} → ${g.storage_family}` }), h("span", { class: "spacer" }),
+      h("strong", { text: familyLabel(g.family) }), h("span", { class: "spacer" }),
       g.levels && g.levels.length ? pill(`levels ${g.levels.join(", ")}`) : null,
       g.half_windows && g.half_windows.length ? pill(`windows ${g.half_windows.join(", ")}`) : null),
     h("div", { class: "chips", style: "margin-top:6px" },
@@ -489,29 +489,32 @@ async function loadMetrics() {
   seedMetricGroups();
 }
 
-// The three families a config starts with. The registry decides what is *in* a
-// family; this only decides the order and the words on screen. The words are the
-// question each family answers: did it happen (yes or no), how far off was it
-// (continuous), and how does it look over a neighbourhood (spatial).
-const DEFAULT_FAMILIES = ["continuous", "categorical", "spatial"];
-const FAMILY_LABEL = { continuous: "Continuous", categorical: "Yes or no",
-                       moments: "Moments", spatial: "Spatial" };
+// The families, their words and their defaults all come from the service. The
+// page has no list of its own: a family added on the server shows up here, and a
+// family renamed on the server is renamed here.
+function familyInfo(family) {
+  return (state.metrics.families || []).find(f => f.family === family) || null;
+}
 
-function familyItems(family) {
-  return (state.metrics.metrics || [])
-    .filter(m => m.family === family).map(m => m.method);
+function familyLabel(family) {
+  const info = familyInfo(family);
+  return info ? info.label : family;
+}
+
+function defaultFamilies() {
+  return (state.metrics.families || []).filter(f => f.added_by_default);
 }
 
 function defaultGroup(family) {
-  return { family, items: familyItems(family), levels: "", half_windows: "" };
+  const info = familyInfo(family);
+  return { family, items: info ? info.metrics.slice() : [], levels: "", half_windows: "" };
 }
 
 // Seeded from what the registry actually offers, so a family the server does not
 // have is not added and everything in one it does have is. That is the whole
 // point of the section: there is nothing here to tick.
 function seedMetricGroups() {
-  const known = new Set((state.metrics.families || []).map(f => f.family));
-  state.metricGroups = DEFAULT_FAMILIES.filter(f => known.has(f)).map(defaultGroup);
+  state.metricGroups = defaultFamilies().map(f => defaultGroup(f.family));
   renderMetricGroups();
 }
 
@@ -981,7 +984,7 @@ function renderMetricGroups() {
   mount($("#metric-groups"), groups.length
     ? groups.map((g, i) => h("div", { class: "groupbox", "data-family": g.family },
         h("div", { class: "head" },
-          h("strong", { text: FAMILY_LABEL[g.family] || g.family }),
+          h("strong", { text: familyLabel(g.family) }),
           h("span", { class: "spacer" }),
           h("button", { class: "link danger", text: "remove",
             onclick: () => { groups.splice(i, 1); renderMetricGroups(); } })),
@@ -993,9 +996,9 @@ function renderMetricGroups() {
   // A family dropped by mistake comes back with one click, and nothing else can
   // be added: the three are the three.
   const have = new Set(groups.map(g => g.family));
-  mount($("#metric-add"), DEFAULT_FAMILIES.filter(f => !have.has(f)).map(f =>
-    h("button", { class: "act quiet", text: `+ ${FAMILY_LABEL[f]}`,
-      onclick: () => { groups.push(defaultGroup(f)); renderMetricGroups(); } })));
+  mount($("#metric-add"), defaultFamilies().filter(f => !have.has(f.family)).map(f =>
+    h("button", { class: "act quiet", text: `+ ${f.label}`,
+      onclick: () => { groups.push(defaultGroup(f.family)); renderMetricGroups(); } })));
 }
 
 async function boot() {

@@ -146,15 +146,15 @@ def test_accumulate_dispatches_by_family():
     valid = np.ones((8, 8), dtype=bool)
     out = accumulate(
         truth, pred, valid,
-        families=("cat", "cont", "mom", "spatial"),
+        families=("yes_or_no", "continuous", "moments", "spatial"),
         levels=(5.0,),
         half_windows=(1,),
     )
-    assert set(out) == {"cat", "cont", "mom", "spatial"}
-    assert set(out["cat"]) == {5.0}
+    assert set(out) == {"yes_or_no", "continuous", "moments", "spatial"}
+    assert set(out["yes_or_no"]) == {5.0}
     assert set(out["spatial"]) == {(5.0, 1)}
-    assert out["cont"]["T"] == 64.0
-    assert out["cat"][5.0]["H"] == 9.0
+    assert out["continuous"]["T"] == 64.0
+    assert out["yes_or_no"][5.0]["H"] == 9.0
 
 
 def test_accumulate_rejects_unknown_family():

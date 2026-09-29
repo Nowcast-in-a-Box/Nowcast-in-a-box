@@ -82,7 +82,7 @@ def test_the_static_files_are_served(client):
 def test_the_metric_catalogue_is_grouped_by_family(client):
     body = client.get("/api/metrics").json()
     families = {f["family"] for f in body["families"]}
-    assert "categorical" in families
+    assert "yes_or_no" in families
     methods = {m["method"] for m in body["metrics"]}
     assert {"ts", "dts", "me", "corr", "fss"} <= methods
     # dts sits with the other thresholded metrics, and is asked for by name
@@ -198,14 +198,13 @@ def test_metrics_are_appended(client):
     before = client.get("/api/configs/a-config").json()["metrics"]
 
     response = client.post("/api/configs/a-config/metrics",
-                           json={"family": "categorical", "items": ["pod"],
+                           json={"family": "yes_or_no", "items": ["pod"],
                                  "levels": [181]})
     assert response.status_code == 201, response.text
 
     after = client.get("/api/configs/a-config").json()["metrics"]
     assert len(after) == len(before) + 1
-    assert after[-1]["family"] == "categorical"
-    assert after[-1]["storage_family"] == "cat"
+    assert after[-1]["family"] == "yes_or_no"
     assert after[-1]["items"] == ["pod"]
 
 
@@ -231,7 +230,7 @@ def test_a_neighbourhood_metric_needs_both_parameters(client):
 def test_a_metric_that_needs_a_level_without_one_is_refused(client):
     create(client, group={"id": "a-config", "name": "A config"})
     response = client.post("/api/configs/a-config/metrics",
-                           json={"family": "categorical", "items": ["ts"], "levels": []})
+                           json={"family": "yes_or_no", "items": ["ts"], "levels": []})
     assert response.status_code == 400
     assert "level" in response.json()["detail"]
 
@@ -624,7 +623,7 @@ def bare(**ruler):
         "group": {"id": "derived", "name": "Derived"},
         "ruler": {"ground_truth": "radar-composite", **ruler},
         "members": [{"name": "mlcast-det", "leads": [10, 20, 30]}],
-        "metrics": [{"family": "categorical", "items": ["ts"], "levels": [181.0]}],
+        "metrics": [{"family": "yes_or_no", "items": ["ts"], "levels": [181.0]}],
     }
 
 

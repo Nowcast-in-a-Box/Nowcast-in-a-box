@@ -131,9 +131,9 @@ def test_recomputing_overwrites_rather_than_appends():
     cfg = make_config()
 
     run_tasks(access, store, cfg, _runs())
-    before = store.count_rows("cat", filters={"group_id": cfg.group_id})
+    before = store.count_rows("yes_or_no", filters={"group_id": cfg.group_id})
     run_tasks(access, store, cfg, _runs(), force=True)
-    after = store.count_rows("cat", filters={"group_id": cfg.group_id})
+    after = store.count_rows("yes_or_no", filters={"group_id": cfg.group_id})
 
     assert before == after, "a re-run must replace rows, not pile them up"
 
@@ -175,3 +175,23 @@ def test_lock_refuses_a_second_holder(tmp_path):
 def test_lock_takes_over_a_stale_pid_file(tmp_path):
     (tmp_path / "verify.lock").write_text("999999999", encoding="utf-8")
     SingleInstanceLock(tmp_path).acquire().release()
+
+
+def test_a_store_from_an_older_version_is_refused_not_quietly_ignored(tmp_path):
+    """The tables are named after the families. A file from before the names were
+    unified would answer every query with a gap, which reads as "no data" rather
+    than as "wrong file"."""
+    import sqlite3
+
+    import pytest
+
+    from nib_verify.store.db import Store
+
+    path = tmp_path / "old.sqlite"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE q_cat (group_id TEXT)")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ValueError, match="q_cat"):
+        Store(path)

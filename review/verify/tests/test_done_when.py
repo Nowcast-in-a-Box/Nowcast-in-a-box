@@ -144,9 +144,9 @@ def test_force_recomputes():
     assert forced.ran == 3
     assert access.field_reads > before
 
-    assert store.count_rows("cat", filters={"group_id": cfg.group_id}) == 6
-    assert store.count_rows("cont", filters={"group_id": cfg.group_id}) == 3
-    assert store.count_rows("mom", filters={"group_id": cfg.group_id}) == 3
+    assert store.count_rows("yes_or_no", filters={"group_id": cfg.group_id}) == 6
+    assert store.count_rows("continuous", filters={"group_id": cfg.group_id}) == 3
+    assert store.count_rows("moments", filters={"group_id": cfg.group_id}) == 3
     assert store.count_rows("spatial", filters={"group_id": cfg.group_id}) == 12
 
 
@@ -173,7 +173,7 @@ def test_a_new_metric_over_the_same_block_reads_nothing():
 
     # same ruler, same roster, same thresholds; the metric list is the difference
     after = replace(before, metrics=before.metrics + (MetricGroup(
-        family="categorical", items=("dts",), levels=tuple(LEVELS_SUB)),))
+        family="yes_or_no", items=("dts",), levels=tuple(LEVELS_SUB)),))
     again = run_tasks(access, store, after, runs)
 
     assert again.ran == 0 and again.skipped == 3, "adding a metric must not re-run"

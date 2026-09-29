@@ -73,7 +73,7 @@ def make_config(levels=LEVELS_FULL, *, group_id: str = "vil-test") -> Verificati
         ),
         metrics=(
             MetricGroup(
-                family="categorical",
+                family="yes_or_no",
                 items=("ts", "bias", "ets"),
                 levels=tuple(levels),
             ),

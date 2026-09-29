@@ -13,35 +13,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from ..core.quantities import FAMILIES
+
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 UTC = timezone.utc
 
 TASK_STATES = ("pending", "running", "done", "skipped", "failed", "unavailable")
 
-#: non-value columns, per family, in key order
+#: non-value columns, per family, in key order. Read off the family itself, so
+#: the store cannot disagree with what was written into it.
 KEY_COLUMNS: dict[str, tuple[str, ...]] = {
-    "cat": ("group_id", "member", "init_time", "valid_time", "lead_minutes", "level"),
-    "cont": ("group_id", "member", "init_time", "valid_time", "lead_minutes"),
-    "mom": ("group_id", "member", "init_time", "valid_time", "lead_minutes"),
-    "spatial": ("group_id", "member", "init_time", "valid_time", "lead_minutes",
-                "level", "half_window"),
+    f.name: f.key_columns for f in FAMILIES
 }
 
 #: additive columns, per family — the only things ever summed
 VALUE_COLUMNS: dict[str, tuple[str, ...]] = {
-    "cat": ("H", "F", "M", "C"),
-    "cont": ("T", "E", "A", "S"),
-    "mom": ("T", "MX", "MY", "SX", "SY", "SXY"),
-    "spatial": ("pob", "pfo", "fbs", "n_valid"),
+    f.name: f.columns for f in FAMILIES
 }
 
-TABLE_OF = {
-    "cat": "q_cat",
-    "cont": "q_cont",
-    "mom": "q_mom",
-    "spatial": "q_spatial",
-}
+TABLE_OF: dict[str, str] = {f.name: f.table for f in FAMILIES}
 
 #: columns that may appear in a WHERE clause
 FILTERABLE = frozenset(
@@ -80,8 +71,30 @@ class Store:
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path)
         self.conn.row_factory = sqlite3.Row
+        self._refuse_an_older_layout()
         self.conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         self.conn.commit()
+
+    def _refuse_an_older_layout(self) -> None:
+        """Say so if this file was written when the families had other names.
+
+        The tables are named after the families, so a store from before the
+        names were unified has data under names nothing reads any more. Creating
+        the new tables alongside the old ones would leave a store that answers
+        every query with a gap — which reads as "no data", not as "wrong file".
+        """
+        known = set(TABLE_OF.values())
+        rows = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'q\\_%' ESCAPE '\\'"
+        ).fetchall()
+        stale = sorted(r["name"] for r in rows if r["name"] not in known)
+        if stale:
+            raise ValueError(
+                f"{self.path} was written by an older version: it holds "
+                f"{', '.join(stale)}, and the quantities now live in "
+                f"{', '.join(sorted(known))}. Rebuild the workspace — nothing "
+                "here can be carried over, because the names are the keys."
+            )
 
     # -- lifecycle ------------------------------------------------------
     def close(self) -> None:
