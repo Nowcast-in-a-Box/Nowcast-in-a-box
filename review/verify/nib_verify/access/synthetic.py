@@ -29,6 +29,20 @@ UTC = timezone.utc
 
 DEFAULT_T0 = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
 
+DEFAULT_EXTENT = (110.0, 30.0, 120.0, 42.0)
+
+#: The domain the generator's fractional parameters are measured on.
+#:
+#: ``sigma``, ``drift`` and the background are fractions of *this*, not of whatever
+#: extent the caller asks for. Otherwise a storm would be a thing in whatever box
+#: you happened to sample it in: the same instant observed on a wider grid would
+#: be a bigger, faster storm, and two products of one storm -- a radar's footprint
+#: and a satellite's -- would stop being the same storm. That shows up as skill
+#: collapsing for no reason in the weather, which is the worst kind of wrong
+#: answer to debug.
+REFERENCE_SPAN = (DEFAULT_EXTENT[2] - DEFAULT_EXTENT[0],
+                  DEFAULT_EXTENT[3] - DEFAULT_EXTENT[1])
+
 #: How a provider can be missing data. ``random`` is speckle, the way an
 #: individual bad gate looks; ``range`` is the shape coverage leaves behind.
 MISSING_KINDS = ("none", "random", "range")
@@ -62,13 +76,15 @@ class Source:
     noise: float = 0.0
     missing_kind: str = "random"
     missing_points: int = 0
+    extent: tuple[float, float, float, float] | None = None
+    shape: tuple[int, int] | None = None
 
 
 #: what a per-source override may say. Anything else is a typo, and a typo that
 #: silently did nothing would serve the wrong field.
 SOURCE_FIELDS = frozenset(
     {"variable", "unit", "scale", "vmin", "vmax", "noise", "missing_kind",
-     "missing_points"}
+     "missing_points", "extent", "shape"}
 )
 
 
@@ -86,9 +102,9 @@ class SyntheticAccess:
         sources: Mapping[str, Mapping[str, Any]] = {},
         model_sources: Mapping[str, str] = {},
         obs_shape: tuple[int, int] = (48, 64),
-        obs_extent: tuple[float, float, float, float] = (110.0, 30.0, 120.0, 42.0),
+        obs_extent: tuple[float, float, float, float] = DEFAULT_EXTENT,
         model_shape: tuple[int, int] = (40, 52),
-        model_extent: tuple[float, float, float, float] = (110.0, 30.0, 120.0, 42.0),
+        model_extent: tuple[float, float, float, float] = DEFAULT_EXTENT,
         variable: str = "reflectivity",
         unit: str = "dBZ",
         peak: float = 52.0,
@@ -167,6 +183,8 @@ class SyntheticAccess:
 
         self.obs_coords = coords_from_extent(obs_extent, obs_shape)
         self.model_coords = coords_from_extent(model_extent, model_shape)
+        self.obs_shape = tuple(obs_shape)
+        self.obs_extent = tuple(obs_extent)
         self._unavailable = {_as_utc(t) for t in unavailable_times}
         self.sources = self._resolve_sources(sources)
         self.model_sources = self._resolve_model_sources(model_sources)
@@ -209,6 +227,8 @@ class SyntheticAccess:
                 noise=float(given.get("noise", self.truth_noise)),
                 missing_kind=str(given.get("missing_kind", self.missing_kind)),
                 missing_points=int(given.get("missing_points", self.missing_points)),
+                extent=given.get("extent"),
+                shape=(tuple(given["shape"]) if given.get("shape") else None),
             )
         return out
 
@@ -277,10 +297,24 @@ class SyntheticAccess:
                 f"observation {name!r} was not recorded at {valid_time.isoformat()}"
             )
         return self._make_field(
-            self.obs_coords, valid_time, name=name,
+            self._observation_coords(name), valid_time, name=name,
             noise=self.sources[name].noise, stream=1, bias=0.0,
             source=self.sources[name],
         )
+
+    def _observation_coords(self, name: str) -> Coords:
+        """The grid this product comes on.
+
+        Products do not share a footprint. An infrared satellite covers a whole
+        hemisphere and a radar composite covers the range of one radar, so an
+        observation arrives on whatever grid its own instrument has and the
+        regridding is ours to do.
+        """
+        extent = self.sources[name].extent
+        shape = self.sources[name].shape or self.obs_shape
+        if extent is None and shape == self.obs_shape:
+            return self.obs_coords
+        return coords_from_extent(extent or self.obs_extent, shape)
 
     # ------------------------------------------------------------------
     # predictions
@@ -342,12 +376,18 @@ class SyntheticAccess:
         # not, so a high threshold loses it entirely while a low one barely
         # notices — which is exactly what thresholds are for.
         data = self.blob(coords, valid_time - timedelta(minutes=lag_minutes))
-        if source is not None and source.scale != 1.0:
-            data = data * source.scale
         if noise:
             data = data + self._noise(coords.shape, valid_time, stream, noise)
         if bias:
             data = data + bias
+        # The product's unit change comes last, and it takes the noise and the
+        # bias with it. Those numbers describe how wrong a forecast is, which is a
+        # fraction of the field rather than a quantity of anything: a model that
+        # is 2% wrong about a 255-scale field is 2% wrong about a 40-scale one,
+        # and adding 5 to both would make the second prediction useless while the
+        # first one looked fine. Measured in the truth's units and converted once.
+        if source is not None and source.scale != 1.0:
+            data = data * source.scale
         vmin = self.vmin if source is None else source.vmin
         vmax = self.vmax if source is None else source.vmax
         if vmin is not None or vmax is not None:
@@ -394,15 +434,16 @@ class SyntheticAccess:
         rewritten if the default field moved by a bit.
         """
         lon0, lat0, lon1, lat1 = coords.extent
-        lon_span = max(lon1 - lon0, 1e-9)
-        lat_span = max(lat1 - lat0, 1e-9)
+        centre_lon = 0.5 * (lon0 + lon1)
+        centre_lat = 0.5 * (lat0 + lat1)
+        ref_lon, ref_lat = REFERENCE_SPAN
         grid_lon, grid_lat = np.meshgrid(coords.lon, coords.lat)
         minutes = self._minutes(valid_time)
 
         if index == 0 and self.drift == 0.0:
             phase = (minutes % 360.0) / 360.0
-            cx = lon0 + (0.20 + 0.60 * phase) * lon_span
-            cy = lat0 + (0.35 + 0.30 * math.sin(2.0 * math.pi * phase)) * lat_span
+            cx = centre_lon + (0.20 + 0.60 * phase - 0.5) * ref_lon
+            cy = centre_lat + (0.35 + 0.30 * math.sin(2.0 * math.pi * phase) - 0.5) * ref_lat
             amplitude = self.peak
             size = self.sigma
         else:
@@ -411,11 +452,11 @@ class SyntheticAccess:
             # A steady flow, and no wrapping. A forecast that lags the truth is
             # then displaced the way a real one is, and a cell that leaves the
             # domain has genuinely left it.
-            cx = lon0 + (home_lon + self.drift * hours) * lon_span
-            cy = lat0 + (home_lat + 0.25 * self.drift * hours) * lat_span
+            cx = centre_lon + (home_lon + self.drift * hours - 0.5) * ref_lon
+            cy = centre_lat + (home_lat + 0.25 * self.drift * hours - 0.5) * ref_lat
 
-        sx = max(size * lon_span, 1e-9)
-        sy = max(size * lat_span, 1e-9)
+        sx = max(size * ref_lon, 1e-9)
+        sy = max(size * ref_lat, 1e-9)
         d2 = ((grid_lon - cx) / sx) ** 2 + ((grid_lat - cy) / sy) ** 2
         return amplitude * np.exp(-0.5 * d2)
 
@@ -442,11 +483,9 @@ class SyntheticAccess:
         and a low threshold has no area to be right or wrong about.
         """
         lon0, lat0, lon1, lat1 = coords.extent
-        lon_span = max(lon1 - lon0, 1e-9)
-        lat_span = max(lat1 - lat0, 1e-9)
         grid_lon, grid_lat = np.meshgrid(coords.lon, coords.lat)
-        dx = (grid_lon - (lon0 + 0.5 * lon_span)) / lon_span
-        dy = (grid_lat - (lat0 + 0.5 * lat_span)) / lat_span
+        dx = (grid_lon - 0.5 * (lon0 + lon1)) / REFERENCE_SPAN[0]
+        dy = (grid_lat - 0.5 * (lat0 + lat1)) / REFERENCE_SPAN[1]
         return self.background * np.exp(-2.0 * (dx * dx + dy * dy))
 
     def _noise(

@@ -394,3 +394,52 @@ def test_a_model_pointed_at_a_source_that_does_not_exist_is_refused():
         SyntheticAccess(t_start=T0, observation_names=("radar-composite",),
                         model_ids=("mlcast-det",),
                         model_sources={"mlcast-det": "nope"})
+
+
+def test_the_same_storm_sampled_on_two_extents_is_the_same_storm():
+    """Not two storms of different sizes.
+
+    ``sigma`` and ``drift`` are fractions of the reference domain, not of whatever
+    the caller asks for. Measured against the caller's own extent, a product on a
+    wider footprint would get a bigger, faster storm, and two products of one
+    storm would stop agreeing -- which shows up as skill collapsing for no reason
+    in the weather, the worst kind of wrong answer to go looking for.
+    """
+    wide = SyntheticAccess(t_start=T0, vmin=None, vmax=None,
+                           obs_extent=(104.0, 24.0, 126.0, 48.0), obs_shape=(56, 72))
+    narrow = SyntheticAccess(t_start=T0, vmin=None, vmax=None)
+
+    inner = wide.get_observation("radar-composite", T0)
+    outer = narrow.get_observation("radar-composite", T0)
+    # the narrow grid's points all exist in the wide one
+    lon_index = [int(np.argmin(np.abs(wide.obs_coords.lon - x))) for x in outer.coords.lon]
+    lat_index = [int(np.argmin(np.abs(wide.obs_coords.lat - y))) for y in outer.coords.lat]
+    sampled = inner.data[np.ix_(lat_index, lon_index)]
+    # The two grids sample different points, and the wide one's cells are twice as
+    # far apart, so half a coarse cell of gradient is the whole of the tolerance.
+    # A storm that changed size or speed with the footprint would be out by 100%.
+    worst = float(np.max(np.abs(sampled - outer.data)))
+    assert worst < 0.12 * float(outer.data.max()), worst
+
+
+def test_noise_and_bias_are_measured_in_the_truths_units():
+    """A model that is 2% wrong about a 255-scale field is 2% wrong about a
+    40-scale one. Added after the unit change it would be 5 of one and 5 of the
+    other, which is 2% and 12%: the same number meaning two different forecasts.
+    """
+    access = SyntheticAccess(
+        t_start=T0, vmin=None, vmax=None, truth_noise=0.0, forecast_noise=5.0,
+        observation_names=("vil", "rain"), model_ids=("m",),
+        sources={"rain": {"scale": 0.1, "noise": 0.0}},
+        model_sources={"m": "rain"},
+    )
+    scaled = access.get_observation("rain", T0).data
+    plain = access.get_observation("vil", T0).data
+    assert np.allclose(plain * 0.1, scaled)
+
+    # and the model's error is a fraction of the field it is wrong about, so the
+    # same scenario produces the same relative spread on either scale
+    here = access.get_prediction("m", T0, 10).data
+    there = SyntheticAccess(t_start=T0, forecast_noise=5.0).get_prediction(
+        "mlcast-det", T0, 10).data
+    assert abs(float(np.std(here)) / float(np.std(there)) - 0.1) < 0.02
