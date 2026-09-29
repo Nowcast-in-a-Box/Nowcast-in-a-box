@@ -195,3 +195,72 @@ def test_a_store_from_an_older_version_is_refused_not_quietly_ignored(tmp_path):
 
     with pytest.raises(ValueError, match="q_cat"):
         Store(path)
+
+
+def test_a_pass_is_recorded_and_survives_the_process_that_ran_it(tmp_path):
+    """`when was this last verified` is a question about the record.
+
+    Held in the daemon's memory it could be erased by a page reload, and the
+    person opening the page the next morning would be looking at counts with no
+    date on them and no way to tell stale from fresh.
+    """
+    path = tmp_path / "verify.sqlite"
+    cfg = make_config()
+    refs = [RunRef("mlcast-det", T0), RunRef("mlcast-det", T0 + timedelta(minutes=10))]
+
+    first = Store(path)
+    stats = run_tasks(make_access(), first, cfg, refs)
+    first.close()
+    assert stats.started_at is not None and stats.finished_at is not None
+    assert stats.seconds >= 0.0
+
+    # a new process opens the same file
+    second = Store(path)
+    history = second.run_history(cfg.group_id)
+    second.close()
+    assert len(history) == 1
+    row = history[0]
+    assert row["ran"] == stats.ran
+    assert row["total"] == stats.total
+    assert row["failed"] == 0
+    assert row["started_at"].endswith("Z") and row["finished_at"].endswith("Z")
+    assert row["seconds"] >= 0.0
+
+
+def test_running_again_is_a_second_event_not_an_overwrite(store):
+    """`I ran it again and it still failed` is a different fact from `it failed`,
+    and the one worth knowing is usually the second one."""
+    cfg = make_config()
+    run_tasks(make_access(), store, cfg, [RunRef("mlcast-det", T0)])
+    run_tasks(make_access(), store, cfg, [RunRef("mlcast-det", T0)], force=True)
+
+    history = store.run_history(cfg.group_id)
+    assert len(history) == 2
+    assert [r["started_at"] for r in history] == sorted(
+        (r["started_at"] for r in history), reverse=True), "newest first"
+
+
+def test_a_run_record_carries_the_reason_a_pass_went_wrong(store):
+    cfg = make_config()
+    stats = run_tasks(make_access(), store, cfg, [RunRef("mlcast-det", T0 + timedelta(days=30))])
+    assert stats.failed or stats.unavailable or stats.ran
+
+    row = store.run_history(cfg.group_id)[0]
+    assert set(row) >= {"ran", "skipped", "unavailable", "failed", "obs_missing"}
+    assert isinstance(row["messages"], list)
+
+
+def test_a_history_is_per_config(store):
+    """Numbers from two configs are not comparable, and neither are their runs."""
+    one, two = make_config(), make_config(group_id="other")
+    run_tasks(make_access(), store, one, [RunRef("mlcast-det", T0)])
+    assert store.run_history("other") == []
+    assert len(store.run_history(one.group_id)) == 1
+
+
+def test_only_a_bounded_number_of_passes_comes_back(store):
+    cfg = make_config()
+    for i in range(4):
+        run_tasks(make_access(), store, cfg, [RunRef("mlcast-det", T0 + timedelta(minutes=10 * i))],
+                  force=True)
+    assert len(store.run_history(cfg.group_id, limit=2)) == 2

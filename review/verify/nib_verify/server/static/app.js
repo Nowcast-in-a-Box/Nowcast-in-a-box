@@ -154,6 +154,7 @@ async function openConfig(groupId) {
     const cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`);
     state.selected = cfg;
     mount(host, renderConfigDetail(cfg));
+    resumeRun(cfg);
   } catch (error) {
     mount(host, h("div", { class: "card" }, notice("bad", error.message)));
   }
@@ -218,9 +219,44 @@ function renderConfigDetail(cfg) {
 
   const storedCard = h("div", { class: "card" },
     h("h2", {}, "Stored"),
-    h("div", { id: "stored-body" }, renderStored(cfg)));
+    h("div", { id: "stored-body" }, renderStored(cfg)),
+    h("h2", { style: "margin-top:18px" }, "Runs"),
+    h("p", { class: "hint" },
+      "Every pass that finished, newest first. Kept in the store, so it survives " +
+      "a restart — 'when was this last verified' is a question about the record."),
+    h("div", { id: "runs-body" }, renderRuns(cfg)));
 
   return h("div", {}, rulerCard, rosterCard, metricsCard, runCard(cfg), storedCard);
+}
+
+/// What has been verified, and when it was last looked at.
+///
+/// The counts alone cannot answer the question somebody opening this page the
+/// next morning actually has, which is whether they need to run it again.
+function renderRuns(cfg) {
+  const runs = (cfg.stored || {}).runs || [];
+  if (!runs.length) return empty("No pass has finished under this config yet.");
+  return h("div", { class: "scroll" }, h("table", {},
+    h("thead", {}, h("tr", {},
+      h("th", { text: "started" }), h("th", { text: "took" }),
+      h("th", { text: "ran" }), h("th", { text: "unavailable" }),
+      h("th", { text: "failed" }), h("th", { text: "skipped" }),
+      h("th", {}, ""))),
+    h("tbody", {}, runs.map((r, i) => h("tr", {},
+      h("td", {}, h("code", { class: "tiny", text: r.started_at })),
+      h("td", { class: "num", text: seconds(r.seconds) }),
+      h("td", { class: "num", text: num(r.ran) }),
+      h("td", { class: "num", text: num(r.unavailable) }),
+      h("td", { class: "num", text: num(r.failed) }),
+      h("td", { class: "num", text: num(r.skipped) }),
+      h("td", {}, r.failed ? pill("failed", "bad")
+        : i === 0 ? pill("latest", "ok") : null),
+    )))));
+}
+
+function seconds(value) {
+  const n = Number(value) || 0;
+  return n < 60 ? `${n.toFixed(1)} s` : `${(n / 60).toFixed(1)} min`;
 }
 
 function renderStored(cfg) {
@@ -244,7 +280,10 @@ async function refreshStored(groupId) {
   const host = $("#stored-body");
   if (!host) return;
   try {
-    mount(host, renderStored(await api(`/api/configs/${encodeURIComponent(groupId)}`)));
+    const cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`);
+    mount(host, renderStored(cfg));
+    const runs = $("#runs-body");
+    if (runs) mount(runs, renderRuns(cfg));
   } catch (error) {
     mount(host, notice("bad", error.message));
   }
@@ -319,40 +358,7 @@ async function startRun(cfg, ui) {
     return;
   }
 
-  state.job = started.job;
-  let cursor = 0;
-  const poll = async () => {
-    let view;
-    try {
-      view = await api(`/api/jobs/${encodeURIComponent(started.job)}?after=${cursor}`);
-    } catch (error) {
-      ui.log.textContent += `\n${error.message}`;
-      ui.button.disabled = false;
-      return;
-    }
-    cursor = view.cursor;
-    for (const line of view.lines) ui.log.textContent += line + "\n";
-    ui.log.scrollTop = ui.log.scrollHeight;
-    ui.status.textContent = `${view.state} · ${view.elapsed_seconds}s · ${view.cursor} line(s)`;
-
-    if (view.state === "running") {
-      state.poll = setTimeout(poll, 400);
-      return;
-    }
-    ui.button.disabled = false;
-    state.job = null;
-    if (view.state === "failed") {
-      mount(ui.verdict, notice("bad", `The run failed: ${view.error}`));
-    } else {
-      const stats = (view.result || {}).stats || {};
-      mount(ui.verdict, notice(stats.failed ? "warn" : "ok",
-        `${num(stats.total || 0)} task(s): ${num(stats.ran || 0)} ran, ` +
-        `${num(stats.skipped || 0)} skipped, ${num(stats.unavailable || 0)} unavailable, ` +
-        `${num(stats.failed || 0)} failed.`));
-      await refreshStored(cfg.group_id);
-    }
-  };
-  state.poll = setTimeout(poll, 200);
+  watchRun(started.job, cfg, ui, 0);
 }
 
 function fact(label, value) {
@@ -1033,3 +1039,73 @@ async function boot() {
 }
 
 boot();
+
+
+/// Follow a run to its end, and refresh what it changed when it gets there.
+///
+/// Shared by the button and by a page that has just loaded: the run lives in
+/// the daemon, and the page does not.
+function watchRun(jobId, cfg, ui, cursor) {
+  if (state.poll) { clearTimeout(state.poll); state.poll = null; }
+  state.job = jobId;
+
+  const poll = async () => {
+    let view;
+    try {
+      view = await api(`/api/jobs/${encodeURIComponent(jobId)}?after=${cursor}`);
+    } catch (error) {
+      ui.log.textContent += `\n${error.message}`;
+      ui.button.disabled = false;
+      return;
+    }
+    cursor = view.cursor;
+    for (const line of view.lines) ui.log.textContent += line + "\n";
+    ui.log.scrollTop = ui.log.scrollHeight;
+    ui.status.textContent = `${view.state} · ${view.elapsed_seconds}s · ${view.cursor} line(s)`;
+
+    if (view.state === "running") {
+      state.poll = setTimeout(poll, 400);
+      return;
+    }
+    ui.button.disabled = false;
+    state.job = null;
+    if (view.state === "failed") {
+      mount(ui.verdict, notice("bad", `The run failed: ${view.error}`));
+    } else {
+      const stats = (view.result || {}).stats || {};
+      mount(ui.verdict, notice(stats.failed ? "warn" : "ok",
+        `${num(stats.total || 0)} task(s): ${num(stats.ran || 0)} ran, ` +
+        `${num(stats.skipped || 0)} skipped, ${num(stats.unavailable || 0)} unavailable, ` +
+        `${num(stats.failed || 0)} failed.`));
+      await refreshStored(cfg.group_id);
+    }
+  };
+  state.poll = setTimeout(poll, 200);
+}
+
+/// Pick up a run that was already going when this page arrived.
+///
+/// Without it the page forgets a run the moment it reloads or somebody reopens
+/// the config: the work carries on in the daemon, the tab has no idea, and the
+/// person who started it clicks Run again and is told the server is busy with
+/// their own job.
+async function resumeRun(cfg) {
+  if (state.job) return;
+  let live = null;
+  try {
+    live = ((await api("/api/jobs")).jobs || []).find(
+      j => j.kind === "run" && j.state === "running" && j.group === cfg.group_id);
+  } catch (error) {
+    return;                  // the Run card still works; it can only fail later
+  }
+  const ui = {
+    log: $("#run-log"), verdict: $("#run-verdict"),
+    status: $("#run-status"), button: $("#btn-run"),
+  };
+  if (!live || !ui.log || !ui.verdict || !ui.status || !ui.button) return;
+  ui.log.hidden = false;
+  ui.log.textContent = "attached to a run that was already going" + String.fromCharCode(10);
+  mount(ui.verdict, notice("warn", "A run under this config is in progress."));
+  ui.button.disabled = true;
+  watchRun(live.id, cfg, ui, 0);
+}

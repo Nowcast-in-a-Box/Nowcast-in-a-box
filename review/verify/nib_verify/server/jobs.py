@@ -46,6 +46,9 @@ class Job:
     id: str
     kind: str
     label: str
+    #: what this job is about, so a page that reloaded can find its own work
+    #: again without matching on a human-readable label
+    group: str | None = None
     state: str = RUNNING
     started: datetime = field(default_factory=lambda: datetime.now(UTC))
     finished: datetime | None = None
@@ -66,6 +69,7 @@ class Job:
             "id": self.id,
             "kind": self.kind,
             "label": self.label,
+            "group": self.group,
             "state": self.state,
             "started": self.started.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "finished": self.finished.strftime("%Y-%m-%dT%H:%M:%SZ") if self.finished else None,
@@ -93,9 +97,11 @@ class JobRegistry:
         work: Callable[[Callable[[str], None]], dict | None],
         *,
         job_id: str | None = None,
+        group: str | None = None,
     ) -> Job:
         """Run ``work`` on a thread.  It receives a ``report(line)`` callback."""
-        job = Job(id=job_id or uuid.uuid4().hex[:12], kind=kind, label=label)
+        job = Job(id=job_id or uuid.uuid4().hex[:12], kind=kind, label=label,
+                  group=group)
 
         with self._lock:
             self._prune_locked()

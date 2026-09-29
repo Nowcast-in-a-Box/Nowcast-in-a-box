@@ -23,6 +23,10 @@ UTC = timezone.utc
 ProgressFn = Callable[[str], None]
 
 
+def _stamp(when: datetime | None) -> str | None:
+    return None if when is None else iso_utc(when)
+
+
 @dataclass(frozen=True)
 class RunRef:
     """One init time for one member."""
@@ -39,7 +43,15 @@ class RunStats:
     unavailable: int = 0
     failed: int = 0
     obs_missing: int = 0
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     messages: list[str] = field(default_factory=list)
+
+    @property
+    def seconds(self) -> float:
+        if self.started_at is None or self.finished_at is None:
+            return 0.0
+        return (self.finished_at - self.started_at).total_seconds()
 
     def note(self, message: str, limit: int = 50) -> None:
         if len(self.messages) < limit:
@@ -53,6 +65,9 @@ class RunStats:
             "unavailable": self.unavailable,
             "failed": self.failed,
             "obs_missing": self.obs_missing,
+            "seconds": round(self.seconds, 3),
+            "started_at": _stamp(self.started_at),
+            "finished_at": _stamp(self.finished_at),
             "messages": self.messages,
         }
 
@@ -73,6 +88,7 @@ def run_tasks(
     already there and the provider is never called.
     """
     stats = RunStats()
+    stats.started_at = datetime.now(UTC)
     target = target_coords(cfg.ruler.extent, cfg.ruler.resolution)
     families = cfg.families()
     levels = cfg.levels()
@@ -129,6 +145,19 @@ def run_tasks(
                     f"{member.name} {init_iso} +{lead} "
                     f"({stats.ran} done / {stats.total} total)"
                 )
+
+    # The pass is recorded before it is returned, and in the store rather than in
+    # the process, because "when was this last verified" is a question about the
+    # record: a page reload or a restart of the daemon must not erase the answer.
+    stats.finished_at = datetime.now(UTC)
+    store.record_run(
+        cfg.group_id,
+        started_at=iso_utc(stats.started_at),
+        finished_at=iso_utc(stats.finished_at),
+        seconds=stats.seconds,
+        stats=stats.as_dict(),
+        messages=stats.messages,
+    )
     return stats
 
 

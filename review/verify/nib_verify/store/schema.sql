@@ -112,3 +112,37 @@ CREATE TABLE IF NOT EXISTS q_spatial (
 );
 
 CREATE INDEX IF NOT EXISTS ix_spatial_vt ON q_spatial(group_id, valid_time, lead_minutes);
+
+-- ---------------------------------------------------------------------
+-- One row per verification pass that finished.
+--
+-- The task table says what is done.  This says when it was done and how it went,
+-- and it lives in the store rather than in the process because "when was this
+-- last verified" is a question about the record.  A page reload or a restart of
+-- the daemon must not be able to erase the answer, and in memory it could.
+--
+-- Nothing here is additive and nothing here is summed: a pass is an event, not a
+-- quantity.  It carries the counts the pass ended with, which is what somebody
+-- opening the page the next morning is asking for.
+--
+-- A pass therefore has no primary key.  Two passes can start in the same second
+-- and they are still two passes; keying on the timestamp would let the second
+-- one replace the first, which is the quietest way to lose the record of a run
+-- somebody watched fail.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS run_record (
+    group_id    TEXT    NOT NULL,
+    started_at  TEXT    NOT NULL,
+    finished_at TEXT    NOT NULL,
+    seconds     REAL    NOT NULL,
+    total       INTEGER NOT NULL,
+    ran         INTEGER NOT NULL,
+    skipped     INTEGER NOT NULL,
+    unavailable INTEGER NOT NULL,
+    failed      INTEGER NOT NULL,
+    obs_missing INTEGER NOT NULL,
+    messages    TEXT    NOT NULL DEFAULT ''
+);
+
+-- `rowid` cannot appear in an index; the query uses it only to break a tie.
+CREATE INDEX IF NOT EXISTS ix_run_record_when ON run_record(group_id, started_at DESC);

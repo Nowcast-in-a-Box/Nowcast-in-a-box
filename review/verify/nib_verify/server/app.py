@@ -229,6 +229,7 @@ def create_app(
                 "tasks": s.task_counts(group_id),
                 "families": s.families_present(group_id),
                 "missing_obs_times": len(s.obs_gaps(group_id)),
+                "runs": s.run_history(group_id, limit=10),
             }
         payload["metrics_available"] = available_metrics(cfg)
         return payload
@@ -357,7 +358,8 @@ def create_app(
                     s.close()
             return {"stats": stats.as_dict(), "plan": plan_payload}
 
-        job = jobs.submit("run", f"{cfg.group_id}: {len(refs)} run(s)", work)
+        job = jobs.submit("run", f"{cfg.group_id}: {len(refs)} run(s)", work,
+                          group=cfg.group_id)
         return {"started": True, "job": job.id, "state": job.state,
                 "runs": len(refs), "plan": plan_payload}
 

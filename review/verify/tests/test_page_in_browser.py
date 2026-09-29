@@ -642,3 +642,108 @@ def test_the_detail_panel_shows_nothing_the_config_does_not_have(page, live_serv
     assert "NaN" not in text
     panel = page.page.eval_on_selector("#config-detail .grid", "e => e.textContent")
     assert "variable" not in panel, panel
+
+
+@pytest.fixture
+def slow_server(platform, tmp_path):
+    """The same app, with a provider that takes its time.
+
+    A run over the fixture's handful of tasks finishes in milliseconds, which is
+    too fast to reload a page in the middle of. Slowing the two calls that read a
+    field is the whole difference, and it is the field reads -- not the timing --
+    that the test is about.
+    """
+    import uvicorn
+
+    inner = make_access()
+
+    class Slow:
+        def capabilities(self):
+            return inner.capabilities()
+
+        def list_observations(self, name, start, end):
+            return inner.list_observations(name, start, end)
+
+        def get_observation(self, name, valid_time):
+            time.sleep(0.35)
+            return inner.get_observation(name, valid_time)
+
+        def get_prediction(self, model_id, init_time, lead_minutes):
+            time.sleep(0.35)
+            return inner.get_prediction(model_id, init_time, lead_minutes)
+
+    app = create_app(
+        root=tmp_path / "verify-root",
+        configs=tmp_path / "configs",
+        packages=platform.packages,
+        runs=[platform.runs_root],
+        host=load_host(platform.config_path),
+        access=Slow(),
+    )
+    from nib_verify.server.library import ConfigLibrary
+
+    ConfigLibrary(tmp_path / "configs").create(make_config())
+
+    config = uvicorn.Config(app, host="127.0.0.1", port=0,
+                            log_level="error", access_log=False)
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(300):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:  # pragma: no cover
+        pytest.skip("uvicorn did not start")
+    port = server.servers[0].sockets[0].getsockname()[1]
+    yield f"http://127.0.0.1:{port}"
+    server.should_exit = True
+
+
+def test_a_page_that_reloads_attaches_to_the_run_it_started(browser, slow_server):
+    """The work is in the daemon and the page is not.
+
+    Reloading used to lose the run entirely: the tab went quiet, the person who
+    started it clicked Run again, and the answer was "busy" -- busy with their
+    own job, which they had no way to see.
+    """
+    # `browser` and not `page`: the `page` fixture brings its own server, and two
+    # servers in one test would share the config directory and collide.
+    context = browser.new_context(viewport={"width": 1400, "height": 1000})
+    page = Page(context.new_page())
+    page.load(slow_server).tab("configs")
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(400)
+    page.page.click("#btn-run")
+    page.page.wait_for_timeout(600)
+
+    page.page.reload(wait_until="networkidle")
+    page.page.wait_for_timeout(300)
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(900)
+
+    log = page.page.eval_on_selector("#run-log", "e => e.textContent") or ""
+    assert "attached to a run that was already going" in log, log
+    assert page.page.eval_on_selector("#btn-run", "e => e.disabled") is True
+    assert "in progress" in page.page.eval_on_selector(
+        "#run-verdict", "e => e.textContent")
+
+    # and it still finishes, on this page, and writes down that it did
+    for _ in range(40):
+        page.page.wait_for_timeout(500)
+        if "task(s)" in page.page.eval_on_selector("#run-verdict", "e => e.textContent"):
+            break
+    assert "task(s)" in page.page.eval_on_selector("#run-verdict", "e => e.textContent")
+    rows = page.page.eval_on_selector_all("#runs-body tbody tr", "e => e.length")
+    assert rows == 1, rows
+    assert page.errors == []
+    context.close()
+
+
+def test_the_runs_card_is_empty_before_anything_has_run(page, live_server):
+    page.load(live_server).tab("configs")
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(400)
+    assert "No pass has finished" in page.page.eval_on_selector(
+        "#runs-body", "e => e.textContent")
+    assert page.errors == []

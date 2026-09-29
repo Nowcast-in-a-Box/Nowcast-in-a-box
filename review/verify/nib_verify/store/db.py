@@ -19,6 +19,9 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 UTC = timezone.utc
 
+#: what a run record joins its log lines with, and only that
+NEWLINE = "\n"
+
 TASK_STATES = ("pending", "running", "done", "skipped", "failed", "unavailable")
 
 #: non-value columns, per family, in key order. Read off the family itself, so
@@ -33,6 +36,9 @@ VALUE_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 TABLE_OF: dict[str, str] = {f.name: f.table for f in FAMILIES}
+
+#: the counts a run record keeps from the pass that produced it
+RUN_FIELDS = ("total", "ran", "skipped", "unavailable", "failed", "obs_missing")
 
 #: columns that may appear in a WHERE clause
 FILTERABLE = frozenset(
@@ -186,6 +192,48 @@ class Store:
             params.extend(states)
         sql += " ORDER BY init_time, member, lead_minutes"
         return [dict(r) for r in self.conn.execute(sql, params)]
+
+    # -- run records ----------------------------------------------------
+    def record_run(
+        self,
+        group_id: str,
+        *,
+        started_at: str,
+        finished_at: str,
+        seconds: float,
+        stats: Mapping[str, Any],
+        messages: Sequence[str] = (),
+    ) -> None:
+        """Write down that a pass happened, and how it went.
+
+        Recomputed passes are separate events, not overwrites: "I ran it again
+        and it still failed" is a different fact from "it failed", and the one
+        worth knowing is often the second one.  So this appends, and two passes
+        in the same second stay two rows.
+        """
+        values = [int(stats.get(k) or 0) for k in RUN_FIELDS]
+        self.conn.execute(
+            "INSERT INTO run_record (group_id, started_at, finished_at,"
+            " seconds, " + ", ".join(RUN_FIELDS) + ", messages)"
+            " VALUES (?, ?, ?, ?, " + ", ".join("?" * (len(RUN_FIELDS) + 1)) + ")",
+            (group_id, started_at, finished_at, float(seconds), *values,
+             NEWLINE.join(messages)),
+        )
+        self.conn.commit()
+
+    def run_history(self, group_id: str, *, limit: int = 10) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM run_record WHERE group_id = ?"
+            " ORDER BY started_at DESC, rowid DESC LIMIT ?",
+            (group_id, max(1, int(limit))),
+        ).fetchall()
+        out = []
+        for row in rows:
+            item = dict(row)
+            item["messages"] = [line for line in (item.get("messages") or "").split(NEWLINE)
+                                if line]
+            out.append(item)
+        return out
 
     def task_counts(self, group_id: str) -> dict[str, int]:
         rows = self.conn.execute(
