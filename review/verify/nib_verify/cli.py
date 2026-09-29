@@ -488,6 +488,75 @@ def cmd_expansions(args) -> int:
     return EXIT_OK
 
 
+def cmd_demo(args) -> int:
+    """Build a workspace, verify through a live service, serve the page.
+
+    One command, because the alternative is asking somebody to assemble a
+    platform before they can see the module work — and an audience asked to do
+    that reads the setup, not the module.
+    """
+    from . import demo as demo_module
+
+    say = print if args.progress != "quiet" else (lambda _message: None)
+    try:
+        demo = demo_module.build(
+            Path(args.where), scenario=args.scenario,
+            review_port=args.port, force=args.force, say=say,
+        )
+    except (FileExistsError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_FAILURE
+
+    demo_module.survey(demo, say=say)
+    demo_module.show_config(demo, say=say)
+
+    try:
+        with demo_module.datafeed(demo, say=say) as (access, url):
+            demo_module.verify(demo, access=access, data_url=url, say=say)
+            demo_module.headline(demo, say=say)
+            demo_module.next_steps(demo, say=say)
+
+            if args.no_serve:
+                say("")
+                say("  (--no-serve: the workspace is ready; start the page with)")
+                say(f"    python -m nib_verify serve --root {demo.store} "
+                    f"--configs {demo.configs} --packages {demo.packages[0]} "
+                    f"--runs {demo.runs_root} --access real --data-url {url}")
+                return EXIT_OK
+
+            if args.open:
+                _open_when_ready(f"http://127.0.0.1:{demo.review_port}/")
+            try:
+                demo_module.serve_review(demo, data_url=url, log_level=args.log_level)
+            except ModuleNotFoundError:
+                print("error: the review page needs fastapi and uvicorn: "
+                      "pip install -e '.[web]'", file=sys.stderr)
+                return EXIT_FAILURE
+    except KeyboardInterrupt:
+        say("")
+        say("  stopped.")
+    return EXIT_OK
+
+
+def _open_when_ready(url: str) -> None:
+    """Open a browser once the page is actually answering.
+
+    On a thread, and only after the port answers, because ``serve_review`` has not
+    bound anything at this point — a browser opened too early shows a connection
+    error, which is a poor opening for a demonstration.
+    """
+    import threading
+    import webbrowser
+
+    def open_later() -> None:
+        from .demo import wait_for
+
+        if wait_for(url, timeout=20.0):
+            webbrowser.open(url)
+
+    threading.Thread(target=open_later, daemon=True, name="nib-open").start()
+
+
 def cmd_chart(args) -> int:
     """Draw one query as SVG.
 
@@ -861,6 +930,32 @@ def _build_parser() -> argparse.ArgumentParser:
     c.add_argument("--y-max", dest="y_max", type=float)
     c.add_argument("--progress", choices=("quiet", "plain"), default="plain")
     c.set_defaults(handler=cmd_chart)
+
+    # -- demo -----------------------------------------------------------
+    d = sub.add_parser(
+        "demo",
+        help="build a whole workspace and show the module working, end to end",
+        description="Fabricate a platform, serve simulated fields on a real "
+                    "socket, verify through it, and bring up the review page. "
+                    "Everything it writes is fabricated and says so.",
+    )
+    d.add_argument("--where", default="nib-demo", metavar="DIR",
+                   help="where to build it (default: ./nib-demo)")
+    d.add_argument("--scenario", default="convective", metavar="NAME",
+                   help="which simulated weather to serve:\n" + scenario_catalogue())
+    d.add_argument("--port", type=int, default=8766,
+                   help="the review page's port (default: 8766)")
+    d.add_argument("--force", action="store_true",
+                   help="rebuild over a non-empty directory")
+    d.add_argument("--no-serve", dest="no_serve", action="store_true",
+                   help="set up and verify, then exit instead of serving")
+    d.add_argument("--open", action="store_true",
+                   help="open the review page in a browser")
+    d.add_argument("--log-level", dest="log_level",
+                   choices=("critical", "error", "warning", "info", "debug"),
+                   default="warning")
+    d.add_argument("--progress", choices=("quiet", "plain"), default="plain")
+    d.set_defaults(handler=cmd_demo)
 
     # -- datafeed -------------------------------------------------------
     # The simulated data interface. Serves any provider at the addresses in

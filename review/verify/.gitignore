@@ -5,3 +5,6 @@ _tmp/
 *.sqlite-shm
 _shot/
 _demo/
+
+# What `nib-verify demo` builds by default.
+nib-demo/
