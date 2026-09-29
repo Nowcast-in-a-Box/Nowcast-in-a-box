@@ -272,7 +272,7 @@ def cmd_config_roster(args) -> int:
     if args.roster_action == "add":
         member = Member(
             name=args.member,
-            variable=args.variable or cfg.ruler.variable,
+            variable=args.variable or "",
             unit=args.unit or cfg.ruler.unit,
             leads=tuple(_lead_list(args.leads)),
             active_from=_date(args.active_from),
@@ -1175,7 +1175,7 @@ def _print_roots(roots, skipped) -> None:
 def _print_config(cfg: VerificationConfig) -> None:
     r = cfg.ruler
     print(f"config   {cfg.group_id}  ({cfg.name})")
-    print(f"ruler    {r.ground_truth} / {r.variable} [{r.unit}] "
+    print(f"ruler    {r.ground_truth} [{r.unit}] "
           f"step {r.time_step_minutes} min")
     print(f"         extent {list(r.extent)} @ {r.resolution}  "
           f"fingerprint {r.fingerprint}")

@@ -43,10 +43,14 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class Ruler:
-    """The immutable part."""
+    """The immutable part.
+
+    There is no ``variable`` here. The ground truth package already names the
+    field it serves, so asking for it again was asking a person to retype what
+    the platform had declared — and nothing ever compared the answer to anything.
+    """
 
     ground_truth: str
-    variable: str
     unit: str
     time_step_minutes: int
     extent: tuple[float, float, float, float]
@@ -71,7 +75,6 @@ class Ruler:
         payload = json.dumps(
             {
                 "ground_truth": self.ground_truth,
-                "variable": self.variable,
                 "unit": self.unit,
                 "time_step_minutes": self.time_step_minutes,
                 "extent": list(self.extent),
@@ -242,7 +245,6 @@ class VerificationConfig:
             "group": {"id": self.group_id, "name": self.name},
             "ruler": {
                 "ground_truth": self.ruler.ground_truth,
-                "variable": self.ruler.variable,
                 "unit": self.ruler.unit,
                 "time_step_minutes": self.ruler.time_step_minutes,
                 "extent": list(self.ruler.extent),
@@ -284,12 +286,11 @@ class VerificationConfig:
             raise ConfigError("group must be a mapping")
         ruler_in = data.get("ruler")
         if not isinstance(ruler_in, Mapping):
-            raise ConfigError("ruler is required (ground_truth, variable, unit, "
+            raise ConfigError("ruler is required (ground_truth, unit, "
                               "time_step_minutes, extent, resolution)")
         try:
             ruler = Ruler(
                 ground_truth=str(ruler_in["ground_truth"]),
-                variable=str(ruler_in["variable"]),
                 unit=str(ruler_in["unit"]),
                 time_step_minutes=int(ruler_in["time_step_minutes"]),
                 extent=tuple(float(x) for x in ruler_in["extent"]),
@@ -305,7 +306,7 @@ class VerificationConfig:
             members.append(
                 Member(
                     name=str(raw["name"]),
-                    variable=str(raw.get("variable", ruler.variable)),
+                    variable=str(raw.get("variable", "")),
                     unit=str(raw.get("unit", ruler.unit)),
                     leads=tuple(int(x) for x in raw["leads"]),
                     active_from=_parse_date(raw.get("active_from")),

@@ -209,7 +209,6 @@ def _meta(
             "name": cfg.name,
             "ruler": {
                 "ground_truth": cfg.ruler.ground_truth,
-                "variable": cfg.ruler.variable,
                 "unit": cfg.ruler.unit,
                 "time_step_minutes": cfg.ruler.time_step_minutes,
                 "extent": list(cfg.ruler.extent),
