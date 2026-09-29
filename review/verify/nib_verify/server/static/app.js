@@ -492,10 +492,10 @@ async function loadMetrics() {
 // The three families a config starts with. The registry decides what is *in* a
 // family; this only decides the order and the words on screen. The words are the
 // question each family answers: did it happen (yes or no), how far off was it
-// (continuous), and how does it look over a neighbourhood (special).
+// (continuous), and how does it look over a neighbourhood (spatial).
 const DEFAULT_FAMILIES = ["continuous", "categorical", "spatial"];
 const FAMILY_LABEL = { continuous: "Continuous", categorical: "Yes or no",
-                       moments: "Moments", spatial: "Special" };
+                       moments: "Moments", spatial: "Spatial" };
 
 function familyItems(family) {
   return (state.metrics.metrics || [])

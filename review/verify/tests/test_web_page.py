@@ -235,7 +235,7 @@ def test_the_family_titles_are_the_question_each_one_answers():
     in it: 'FSS' stops being true the day a second spatial metric arrives."""
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert 'categorical: "Yes or no"' in app
-    assert 'spatial: "Special"' in app
+    assert 'spatial: "Spatial"' in app
     assert "FSS" not in app, "the metric is not the family"
 
 

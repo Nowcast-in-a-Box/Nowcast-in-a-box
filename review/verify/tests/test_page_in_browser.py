@@ -367,7 +367,7 @@ def test_the_families_are_titled_by_the_question_they_answer(page, live_server):
     page.page.wait_for_timeout(400)
     titles = page.page.eval_on_selector_all(
         "#metric-groups .groupbox strong", "els => els.map(e => e.textContent)")
-    assert titles == ["Continuous", "Yes or no", "Special"]
+    assert titles == ["Continuous", "Yes or no", "Spatial"]
 
 
 def test_a_family_reads_only_the_parameters_it_has(page, live_server):

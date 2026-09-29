@@ -140,7 +140,7 @@ a valid family (hand-written configs may carry it), but it is not among the
 defaults.
 
 On screen the families are named for the question each one answers — `Yes or no`,
-`Continuous`, `Special` — because a family outlives the first metric that landed
+`Continuous`, `Spatial` — because a family outlives the first metric that landed
 in it.
 
 ### Metrics are append-only
