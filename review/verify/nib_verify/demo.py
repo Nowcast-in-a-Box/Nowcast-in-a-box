@@ -65,6 +65,8 @@ class Product:
     noise: float
     missing_kind: str
     missing_points: int
+    frames: int
+    resolution: float
 
 
 @dataclass(frozen=True)
@@ -81,18 +83,24 @@ class Forecast:
 
 @dataclass(frozen=True)
 class Exercise:
-    """One config: a ruler, and the thresholds that belong to it.
+    """One config: a ruler, its thresholds, and the leads worth asking for.
 
-    Two of them, in two units, and that is the whole reason for the pair.
-    Thresholds are the ruler's business, so 133 is a number about ``kg m-2`` and
-    16 is a number about ``mm h-1``; the store keeps their answers apart because
-    the configs are apart, and neither one's levels can be read off the other's.
+    Two of them, and they share almost nothing, because the two products share
+    almost nothing. A radar composite is a fine grid and a short question — will
+    the core still be there in an hour. An infrared rain estimate is a coarse grid
+    and a longer one, and its thresholds are in different units altogether.
+
+    So the thresholds are the ruler's business: 133 is a number about ``kg m-2``
+    and 8 is a number about ``mm h-1``, and neither can be read off the other.
+    The store keeps their answers apart because the configs are apart.
     """
 
     id: str
     name: str
     source: str
+    leads: tuple[int, ...]
     levels: tuple[float, ...]
+    window: tuple[int, ...]
 
     @property
     def headline_level(self) -> float:
@@ -104,15 +112,19 @@ class Exercise:
 #: radar, one from the satellite. Different instruments, different units,
 #: different coverage, and the same storm underneath both of them.
 #:
-#: The satellite product is an estimate of the same rain, so it is smoother,
-#: coarser and more scattered in what it misses. A radar sees the cores; an
-#: infrared estimate sees the anvil over them. Both are ``vil``-shaped fields
-#: here, which is the one place the fabrication is cheaper than the world.
+#: The satellite product is an estimate of the same rain from above, so it is on a
+#: coarser grid and reaches further ahead: half-hourly steps out to two hours is a
+#: claim an infrared estimate can make and a radar extrapolation cannot. A radar
+#: sees the cores; an infrared estimate sees the anvil over them. Both are
+#: ``vil``-shaped fields here, which is the one place the fabrication is cheaper
+#: than the world.
 SOURCES: tuple[Product, ...] = (
     Product("radar-composite", "vil", "kg m-2", scale=1.0, vmin=0.0, vmax=255.0,
-            noise=4.0, missing_kind="range", missing_points=60),
+            noise=4.0, missing_kind="range", missing_points=60,
+            frames=6, resolution=0.25),
     Product("satellite-rain", "rain_rate", "mm h-1", scale=0.16, vmin=0.0, vmax=45.0,
-            noise=2.5, missing_kind="random", missing_points=150),
+            noise=2.5, missing_kind="random", missing_points=150,
+            frames=12, resolution=0.5),
 )
 
 #: Two models for each product, in order of skill: the generator makes the second
@@ -126,12 +138,16 @@ FORECASTS: tuple[Forecast, ...] = (
     Forecast("satcast-alt", "satellite-rain"),
 )
 
-#: One config per product. Two rulers, two rosters, two sets of thresholds.
+#: One config per product, and each one answers its own product's question.
 EXERCISES: tuple[Exercise, ...] = (
     Exercise(CONFIG_ID, DEMO_NAME, "radar-composite",
-             levels=(16.0, 74.0, 133.0, 181.0, 219.0)),
+             leads=(10, 20, 30, 60),
+             levels=(16.0, 74.0, 133.0, 181.0, 219.0),
+             window=(1, 2)),
     Exercise("rain-demo", "Rain rate verification, demonstration", "satellite-rain",
-             levels=(2.0, 8.0, 16.0, 32.0)),
+             leads=(30, 60, 90, 120),
+             levels=(0.5, 2.0, 5.0, 12.0),
+             window=(2, 4)),
 )
 
 #: The demonstration config's own numbers, named so a reader does not have to
@@ -140,6 +156,7 @@ CONFIG_SOURCE = EXERCISES[0].source
 DATA_ID = CONFIG_SOURCE
 VARIABLE = "vil"
 UNIT = "kg m-2"
+LEADS = EXERCISES[0].leads
 LEVELS = EXERCISES[0].levels
 
 
@@ -180,32 +197,28 @@ MODELS = tuple(f.id for f in FORECASTS if f.source == CONFIG_SOURCE)
 #: the fifth model lags the truth by an hour.
 SKILL_SPREAD = 0.4
 
-#: The 0-255 VIL scale. Five thresholds, chosen so that the answers differ at
-#: each one — a single threshold would make the whole exercise look like a
-#: pass/fail test.
-LEVELS = (16.0, 74.0, 133.0, 181.0, 219.0)
+SKILL_SPREAD = 0.4
 
-#: Leads are the config's, and the runs carry them; the generator's horizon has
-#: to cover the largest or the planner clips it.
-LEADS = (10, 20, 30, 60)
+#: The time step. Both products report on the same cadence, which is what lets
+#: one provider serve them; how far ahead each is asked to look is not the same
+#: question and is not asked in the same units of time.
 CADENCE_MINUTES = 10
 
 #: The manifest numbers have to agree with each other or the Matcher is right to
 #: refuse the pair, and a demo whose first act is a rejection teaches the wrong
 #: thing. The data package supplies history *and* the target window; a model
-#: consumes some of the history and produces the target frames.
+#: consumes some of the history and produces the target frames. How many target
+#: frames is the product's own: a radar composite offers an hour, an infrared
+#: rain estimate two.
 CONTEXT_FRAMES = 3
-TARGET_FRAMES = 6                       # 6 x 10 minutes = the 60-minute lead
-SOURCE_FRAMES = CONTEXT_FRAMES + TARGET_FRAMES
-FORECAST_HORIZON_FRAMES = TARGET_FRAMES
 
 #: How many init times the fabricated platform has produced.
 INIT_TIMES = 6
 
-#: The extent and resolution the config declares. Entered by hand today; the
-#: module resamples whatever it is given onto this grid.
+#: The domain both products cover. Entered by hand today; the module resamples
+#: whatever it is given onto the ruler's grid, and the two rulers differ in how
+#: fine that grid is.
 EXTENT = (110.0, 30.0, 120.0, 42.0)
-RESOLUTION = 0.5
 
 
 @dataclass
@@ -259,8 +272,8 @@ def data_manifest(source: Product) -> dict:
             "dtype": "float32",
             "shape": [48, 64],
             "cadence_minutes": CADENCE_MINUTES,
-            "frame_count": SOURCE_FRAMES,
-            "target_frame_count": TARGET_FRAMES,
+            "frame_count": CONTEXT_FRAMES + source.frames,
+            "target_frame_count": source.frames,
         }],
     }
 
@@ -279,20 +292,24 @@ def model_manifest(forecast: Forecast, source: Product) -> dict:
             "dtype": "float32",
             "shape": [48, 64],
             "cadence_minutes": CADENCE_MINUTES,
-            "frame_count": TARGET_FRAMES,
+            "frame_count": source.frames,
         }],
     }
 
 
 def run_config_text(forecast: Forecast, source: Product, start: str) -> str:
-    """A run config, byte for byte the shape ``contracts/README.md`` describes."""
+    """A run config, byte for byte the shape ``contracts/README.md`` describes.
+
+    The horizon is the product's, in frames: the number that becomes minutes is
+    the config's time step, and a run cannot reach a lead the model never claimed.
+    """
     return (
         "version: 1\n"
         f"data:\n  id: {source.id}\n"
         f"model:\n  id: {forecast.id}\n"
         "run:\n"
         f"  start_time: \"{start}\"\n"
-        f"  forecast_horizon: {FORECAST_HORIZON_FRAMES}\n"
+        f"  forecast_horizon: {source.frames}\n"
     )
 
 
@@ -312,6 +329,10 @@ def catalogue(scenario: str) -> dict:
         "observation_names": tuple(s.id for s in SOURCES),
         "model_ids": tuple(f.id for f in FORECASTS),
         "skill_spread": SKILL_SPREAD,
+        # The provider has to be able to serve the longest horizon any model
+        # claims, which is the satellite's. A scenario's own horizon is about the
+        # weather; how far ahead anybody looks is the catalogue's business.
+        "horizon_minutes": max(s.frames for s in SOURCES) * CADENCE_MINUTES,
         "sources": {
             s.id: {
                 "variable": s.variable, "unit": s.unit, "scale": s.scale,
@@ -351,10 +372,11 @@ def verification_config(spec: Exercise | None = None):
         name=spec.name,
         ruler=Ruler(
             ground_truth=spec.source, unit=source.unit,
-            time_step_minutes=CADENCE_MINUTES, extent=EXTENT, resolution=RESOLUTION,
+            time_step_minutes=CADENCE_MINUTES, extent=EXTENT,
+            resolution=source.resolution,
         ),
         members=tuple(
-            Member(name=f.id, variable=source.variable, unit=source.unit, leads=LEADS)
+            Member(name=f.id, variable=source.variable, unit=source.unit, leads=spec.leads)
             for f in FORECASTS if f.source == spec.source
         ),
         metrics=(
@@ -364,7 +386,7 @@ def verification_config(spec: Exercise | None = None):
             MetricGroup(family="continuous", items=("me", "mae", "rmse")),
             MetricGroup(family="moments", items=("corr",)),
             MetricGroup(family="spatial", items=("fss",), levels=spec.levels,
-                        half_windows=(1, 2)),
+                        half_windows=spec.window),
         ),
     )
 
@@ -530,7 +552,7 @@ def show_configs(demo: Demo, *, say: Callable[[str], None] = print) -> list:
                cfg.ruler.unit, cfg.ruler.resolution))
         say("         %-10s %d members %s, leads %s, levels %s"
             % ("", len(cfg.members), "/".join(m.name for m in cfg.members),
-               list(LEADS), list(spec.levels)))
+               list(spec.leads), list(spec.levels)))
         families = sorted({g.family for g in cfg.metrics})
         say("         %-10s %d metric families: %s"
             % ("", len(families), ", ".join(families)))
@@ -648,17 +670,17 @@ def headline(demo: Demo, *, say: Callable[[str], None] = print) -> list[dict]:
             level = spec.headline_level
             result = query_scores(store, cfg, method="ts", s={"level": [level]},
                                   g=["member", "lead_minutes"])
-            rows = _pivot(result["records"], LEADS)
+            rows = _pivot(result["records"], spec.leads)
             out.extend(rows)
             say("")
             say("         %s: CSI at %g %s, by lead time"
                 % (spec.id, level, cfg.ruler.unit))
-            say("           " + "".join("%7s" % lead for lead in LEADS))
+            say("           " + "".join("%7s" % lead for lead in spec.leads))
             for row in rows:
                 cells = "".join(
                     "%7s" % ("--" if row["values"].get(lead) is None
                              else f"{row['values'][lead]:.3f}")
-                    for lead in LEADS
+                    for lead in spec.leads
                 )
                 say("         %-11s%s" % (row["member"], cells))
     finally:

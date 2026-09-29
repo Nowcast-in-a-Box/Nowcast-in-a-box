@@ -23,6 +23,7 @@ from nib_verify.catalog import discover_packages, discover_runs
 from nib_verify.catalog.matching import check_pair
 from nib_verify.cli import EXIT_FAILURE, EXIT_OK, main
 from nib_verify.config.schema import load
+from nib_verify.core.planner import plan
 
 QUIET = ["--progress", "quiet"]
 
@@ -342,3 +343,46 @@ def test_the_two_configs_answer_in_two_units(built, capsys):
     for spec in demo_module.EXERCISES:
         assert spec.id in text, spec.id
         assert demo_module.source_of(spec.source).unit in text
+
+
+def test_the_two_configs_share_almost_no_parameters(built):
+    """Two products, two answers to every question a config asks: how fine, how
+    far ahead, and at what numbers. Sharing one set would have made the second
+    product the first one wearing another unit."""
+    a = load(built.configs / "vil-demo.json")
+    b = load(built.configs / "rain-demo.json")
+
+    assert a.ruler.resolution != b.ruler.resolution
+    assert a.ruler.extent == b.ruler.extent, "one domain, two grids laid over it"
+    assert [m.leads for m in a.members] != [m.leads for m in b.members]
+    assert a.metrics[0].levels != b.metrics[0].levels
+    assert a.metrics[-1].half_windows != b.metrics[-1].half_windows
+    # and the sets of levels are not the same numbers on another scale: the
+    # satellite's top threshold is below the radar's bottom one
+    assert max(b.metrics[0].levels) < min(a.metrics[0].levels)
+
+
+def test_a_run_reaches_exactly_as_far_as_its_product_claims(built):
+    """In frames, which is the only place frames become minutes."""
+    book = discover_runs([built.runs_root])
+    for run in book.runs:
+        product = demo_module.source_of(run.data_id)
+        assert run.forecast_horizon == product.frames, run.path
+        reach = run.forecast_horizon * demo_module.CADENCE_MINUTES
+        exercise = demo_module.exercise(
+            "vil-demo" if run.data_id == "radar-composite" else "rain-demo")
+        assert max(exercise.leads) <= reach, run.path
+
+
+def test_each_config_asks_only_for_the_leads_its_own_product_can_reach(built):
+    """The satellite reaches two hours and the radar one. A config that asked the
+    radar for 120 minutes would get a plan full of rejections, not answers."""
+    catalog = discover_packages(built.packages)
+    book = discover_runs([built.runs_root])
+    for spec in demo_module.EXERCISES:
+        cfg = load(built.configs / f"{spec.id}.json")
+        result = plan(cfg, book, catalog=catalog)
+        # the other product's runs are another config's business, and the only
+        # thing this plan should have to say about them is that they are not its
+        assert set(result.reasons()) <= {"not-on-roster"}, (spec.id, result.reasons())
+        assert result.leads == sorted(spec.leads)

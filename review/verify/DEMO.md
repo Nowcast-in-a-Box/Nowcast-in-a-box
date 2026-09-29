@@ -35,25 +35,25 @@ python -m nib_verify demo --open
          run configs         24 runs (6 init times x 4 model/source pairs)
 
   2/6  catalog      read by content, not by layout
-         data packages       2   radar-composite, satellite-rain
-         model packages      4   satcast-alt, satcast-det, mlcast-det, mlcast-alt
+         data packages       2   satellite-rain, radar-composite
+         model packages      4   mlcast-det, satcast-det, mlcast-alt, satcast-alt
          compatible pairs    4 of 8 pass the Matcher   <- 跨单位的 4 对被拒
-         runs                24, satcast-alt, satcast-det, mlcast-det, mlcast-alt
+         runs                24, mlcast-det, satcast-det, mlcast-alt, satcast-alt
 
-  3/6  config       2 configs, one per product
-         vil-demo   ruler 256416deac63ca02  radar-composite [kg m-2] @ 0.5
-                    2 members mlcast-det/mlcast-alt, leads [10, 20, 30, 60],
-                    levels [16.0, 74.0, 133.0, 181.0, 219.0]
+  3/6  config       2 configs, one per product        <- 两套参数几乎不共享
+         vil-demo   ruler c1fa754e1f3939f8  radar-composite [kg m-2] @ 0.25
+                    2 members mlcast-det/mlcast-alt
+                    leads [10, 20, 30, 60]   levels [16, 74, 133, 181, 219]   window (1, 2)
                     4 metric families: continuous, moments, spatial, yes_or_no
          rain-demo  ruler 0db36ae64e983d13  satellite-rain [mm h-1] @ 0.5
-                    2 members satcast-det/satcast-alt, leads [10, 20, 30, 60],
-                    levels [2.0, 8.0, 16.0, 32.0]
+                    2 members satcast-det/satcast-alt
+                    leads [30, 60, 90, 120]  levels [0.5, 2, 5, 12]          window (2, 4)
                     4 metric families: continuous, moments, spatial, yes_or_no
 
   4/6  datafeed     serving the 'convective' scenario
          10-minute cadence, observations radar-composite [kg m-2],
          satellite-rain [mm h-1], 4 models
-         http://127.0.0.1:64387   <- a real service on a real socket
+         http://127.0.0.1:7834   <- a real service on a real socket
 
   5/6  verify       through that service, over HTTP -- not in process
          vil-demo    planned  48 tasks over 6 init time(s)
@@ -65,13 +65,13 @@ python -m nib_verify demo --open
 
          vil-demo: CSI at 133 kg m-2, by lead time
                 10     20     30     60
-         mlcast-alt   0.835  0.847  0.856  0.818
-         mlcast-det   0.849  0.899  0.898  0.894
+         mlcast-alt   0.866  0.833  0.840  0.860
+         mlcast-det   0.879  0.879  0.889  0.920
 
-         rain-demo: CSI at 16 mm h-1, by lead time
-                10     20     30     60
-         satcast-alt  0.496  0.502  0.481  0.494
-         satcast-det  0.606  0.617  0.606  0.599
+         rain-demo: CSI at 5 mm h-1, by lead time
+                30     60     90    120
+         satcast-alt  0.352  0.341  0.326  0.309
+         satcast-det  0.390  0.377  0.367  0.349
 
   6/6  review       http://127.0.0.1:8766/
 ```
