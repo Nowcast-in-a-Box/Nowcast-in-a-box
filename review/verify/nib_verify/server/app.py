@@ -405,9 +405,12 @@ def create_app(
         this with ``<img src>``, so it has to answer with an image and not with
         JSON, and it has to be able to fail as an image too.
         """
-        from ..report import chart_for, line_chart
+        from ..report import chart_for, line_chart, mesh_for, mesh_svg
 
         params = request.query_params
+        kind = (params.get("kind") or "line").lower()
+        if kind not in ("line", "mesh"):
+            raise QueryError(f"unknown chart kind {kind!r}; line or mesh")
         method = params.get("method")
         if not method:
             raise QueryError("method is required")

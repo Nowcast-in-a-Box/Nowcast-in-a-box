@@ -52,6 +52,30 @@ GROUPABLE = frozenset(
      "level", "half_window"}
 )
 
+#: Dimensions that are not columns but are a function of one.
+#:
+#: ``hour`` is the hour the run *started*, taken off ``init_time``. Off
+#: ``valid_time`` it would be a different quantity wearing the same name -- two
+#: runs at the same starting hour but different leads land on different valid
+#: hours -- and the question this one answers is "does the 06Z cycle forecast
+#: better than the 12Z one". ``valid_time`` is a column, so anyone who wants the
+#: other question can ask for it directly.
+#:
+#: Kept here rather than computed in Python because grouping is the database's
+#: job: pulling the rows back to bucket them would be the one read path this
+#: store does not have.
+DERIVED = {
+    "hour": "CAST(substr(init_time, 12, 2) AS INTEGER)",
+}
+
+#: everything a caller may name in an expansion
+EXPANDABLE = GROUPABLE | frozenset(DERIVED)
+
+
+def _selected(name: str) -> str:
+    """A dimension as something SELECT and GROUP BY both accept."""
+    return f"{DERIVED[name]} AS {name}" if name in DERIVED else name
+
 
 @dataclass(frozen=True)
 class Between:
@@ -256,6 +280,23 @@ class Store:
         ).fetchall()
         return [r["valid_time"] for r in rows]
 
+    def task_axes(self, group_id: str) -> tuple[list[str], list[int]]:
+        """Every init time and lead the plan contains, answered or not.
+
+        The axes of a grid have to come from what was *asked for*, not from what
+        came back. Built from the results, an init time that produced nothing
+        does not leave a hole in the chart -- it leaves nothing, and the chart
+        closes the gap up and reads as complete. That is the failure this method
+        exists to prevent: the missing run is exactly what the reader is looking
+        for.
+        """
+        rows = self.conn.execute(
+            "SELECT DISTINCT init_time, lead_minutes FROM task WHERE group_id = ?",
+            (group_id,),
+        ).fetchall()
+        return (sorted({r["init_time"] for r in rows}),
+                sorted({int(r["lead_minutes"]) for r in rows}))
+
     # -- reads ----------------------------------------------------------
     def sum_rows(
         self,
@@ -271,11 +312,12 @@ class Store:
         """
         cols = list(group_by)
         for c in cols:
-            if c not in GROUPABLE:
+            if c not in EXPANDABLE:
                 raise ValueError(f"cannot group by {c!r}")
         values = list(VALUE_COLUMNS[family])
 
-        select = ", ".join(cols + [f"SUM({v}) AS {v}" for v in values])
+        select = ", ".join([_selected(c) for c in cols]
+                           + [f"SUM({v}) AS {v}" for v in values])
         sql = f"SELECT {select} FROM {TABLE_OF[family]}"
         where, params = _build_where(filters or {})
         if where:

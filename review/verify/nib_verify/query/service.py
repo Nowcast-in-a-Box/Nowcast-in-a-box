@@ -129,9 +129,11 @@ def _params(spec: MetricSpec) -> list[str]:
 
 
 def _groupable(family: str) -> frozenset[str]:
-    from ..store.db import KEY_COLUMNS
+    from ..store.db import DERIVED, KEY_COLUMNS
 
-    return frozenset(KEY_COLUMNS[family]) - {"group_id"}
+    # ``DERIVED`` is in here so a caller can expand by ``hour``; it is not in
+    # ``KEY_COLUMNS`` because it is nobody's storage key.
+    return (frozenset(KEY_COLUMNS[family]) - {"group_id"}) | frozenset(DERIVED)
 
 
 def _translate(s: Mapping[str, Any]) -> dict[str, Any]:

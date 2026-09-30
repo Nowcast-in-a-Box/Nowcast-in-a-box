@@ -13,14 +13,19 @@ from typing import Any, Mapping, Sequence
 
 from ..query.service import DEFAULT_LIMIT
 from .chart import PALETTE, Chart, Series, from_query, line_chart
+from .mesh import Mesh, Panel, mesh_for, mesh_svg
 
 __all__ = [
     "Chart",
+    "Mesh",
     "PALETTE",
+    "Panel",
     "Series",
     "chart_for",
     "from_query",
     "line_chart",
+    "mesh_for",
+    "mesh_svg",
 ]
 
 

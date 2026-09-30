@@ -12,6 +12,7 @@ socket, no port, no uvicorn.
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -821,3 +822,25 @@ def test_a_config_can_be_removed_and_says_what_that_cost(client):
     assert "task" in removed and "yes_or_no" in removed, removed
     assert client.get("/api/configs/vil-test").status_code == 404
     assert "vil-test" not in [c["group_id"] for c in client.get("/api/configs").json()["configs"]]
+
+
+def test_the_chart_endpoint_can_draw_a_mesh_and_still_draws_a_line(client):
+    create(client)
+    started = client.post("/api/runs", json={"config": "vil-test",
+                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    wait(client, started["job"])
+
+    line = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
+                                            "level": 35})
+    assert line.status_code == 200, line.text
+    assert line.headers["content-type"].startswith("image/svg+xml")
+
+    mesh = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
+                                            "level": 35, "kind": "mesh"})
+    assert mesh.status_code == 200, mesh.text
+    ET.fromstring(mesh.text)          # it is a document, not a string
+
+    bad = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
+                                           "kind": "scatter"})
+    assert bad.status_code == 400
+    assert "scatter" in bad.json()["detail"]
