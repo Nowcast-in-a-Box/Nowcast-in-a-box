@@ -259,3 +259,22 @@ def test_each_group_owns_its_own_parameter_boxes():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert "m-levels-${group.family}" in app
     assert "m-windows-${group.family}" in app
+
+
+def test_the_page_does_not_keep_its_own_copy_of_the_plan_reasons():
+    """It did, and it went stale.
+
+    The server's table gained `other-source` and the page's did not, so a run
+    turned away for using another observation source was rendered with an empty
+    'what it means' cell -- a rejection with no reason shown, which reads like
+    nothing being wrong. The sentence now comes down with the rejection.
+    """
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "REASON_TEXT" not in app
+    for sentence in ("is not on this config's roster",
+                     "different observation source",
+                     "was not on the roster on that date",
+                     "no start_time",
+                     "forecast horizon",
+                     "packages do not match"):
+        assert sentence not in app, sentence

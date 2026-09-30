@@ -747,3 +747,44 @@ def test_the_runs_card_is_empty_before_anything_has_run(page, live_server):
     assert "No pass has finished" in page.page.eval_on_selector(
         "#runs-body", "e => e.textContent")
     assert page.errors == []
+
+
+def test_the_plan_preview_shows_both_halves_of_the_decision(page, live_server, platform):
+    """It showed the no's and hid the yes's.
+
+    `tasks: 48` is a total with nothing behind it, and `not-on-roster: 12` did not
+    say which twelve -- which is exactly the report shape that let two radar
+    models sit on a satellite ruler with the page saying nothing about it.
+    """
+    # a run for a model the config's roster does not have, so there is something
+    # for the second half of the plan to be about. Written here rather than into
+    # the shared fixture, which several discovery tests count.
+    from .conftest import run_config_text, write_yaml
+
+    write_yaml(platform.runs_root / "c" / "run.yaml",
+               run_config_text(model="not-on-the-roster"))
+    page.load(live_server).tab("configs")
+    page.page.click("#configs-list button.link")
+    page.page.wait_for_timeout(400)
+    page.page.evaluate("""async () => {
+      mount($("#preview"), renderPlan(await api("/api/plan",
+        { method: "POST", body: { config: state.selected.group_id } })));
+    }""")
+    page.page.wait_for_timeout(1200)
+    text = page.page.eval_on_selector("#preview", "e => e.innerText")
+    flat = " ".join(text.split())
+
+    assert "What would be verified" in flat
+    assert "What was left out" in flat
+    # the accepted half: a row per member, with its leads and its frame count
+    assert "mlcast-det" in flat
+    assert "10, 20, 30" in flat
+    # the rejected half names the models, and says what the reason means
+    assert "not-on-roster" in flat
+    assert "not on this config's roster" in flat
+    # and the totals add up out loud instead of leaving the subtraction to us
+    assert "usable" in flat and "rejected" in flat
+    names = page.page.eval_on_selector_all(
+        "#preview tbody tr td:nth-child(3)", "e => e.map(x => x.textContent)")
+    assert any("not-on-the-roster" in n for n in names), names
+    assert page.errors == []

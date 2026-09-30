@@ -244,3 +244,32 @@ def test_two_members_plan_independently():
     assert len(result.tasks) == 4, "3 for one member, 1 for the other"
     assert result.members == ["mlcast-det", "simvp"]
     assert result.leads == [10, 20, 30]
+
+
+def test_every_reason_carries_its_own_sentence_to_the_client():
+    """The page is not allowed to hold a second copy of these -- it did, and it
+    fell a reason behind, so one kind of rejection rendered with nothing said
+    about it."""
+    from nib_verify.core import planner as P
+
+    assert set(P.REASONS) == set(P.REASON_TEXT), "a reason without a sentence"
+    for reason in P.REASONS:
+        payload = P.Rejection(model_id="m", reason=reason, detail="d").as_dict()
+        assert payload["meaning"] == P.REASON_TEXT[reason]
+        assert payload["meaning"], reason
+
+
+def test_the_plan_says_which_models_it_turned_away():
+    """`12 not-on-roster` was the whole report, and it is the shape of report
+    that hides things: two radar models on a satellite ruler were in the twelve
+    and the page named neither."""
+    cfg = make_config()          # roster: mlcast-det only
+    result = plan(cfg, _runbook(_run_dict(model="mlcast-det"),
+                                _run_dict(model="mlcast-alt"),
+                                _run_dict(model="satcast-det")))
+
+    assert result.as_dict()["reasons"] == {"not-on-roster": 2}
+    turned_away = {r["model"] for r in result.as_dict()["rejections"]}
+    assert turned_away == {"mlcast-alt", "satcast-det"}
+    # and every one of them can say what it was
+    assert all(r["meaning"] for r in result.as_dict()["rejections"])

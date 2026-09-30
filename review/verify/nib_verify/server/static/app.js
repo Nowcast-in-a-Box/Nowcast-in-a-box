@@ -779,31 +779,68 @@ async function previewPlan() {
 
 function renderPlan(plan) {
   const parts = [];
+  const found = Number(plan.runs_discovered) || 0;
+  const refusals = groupRejections(plan.rejections || []);
+  const rejected = (plan.rejections || []).length;
+  const usable = Math.max(0, found - rejected);
+  // distinct: one per task would count 72 where there are six
+  const inits = [...new Set((plan.tasks_detail || []).map(t => t.init_time))].sort();
+
   if (plan.warnings && plan.warnings.length) {
     parts.push(notice("warn", "The catalog disagrees:", plan.warnings));
   }
+
   parts.push(h("div", { class: "grid tight" },
     fact("tasks", num(plan.tasks)),
-    fact("init times", num(plan.init_times)),
+    fact("runs found", found
+      ? `${num(found)} — ${num(usable)} usable, ${num(rejected)} rejected`
+      : num(found)),
     fact("members", plan.members.join(", ") || "—"),
-    fact("leads", plan.leads.join(", ") || "—"),
-    fact("runs found", num(plan.runs_discovered)),
-    fact("from", plan.span.from || "—"),
-    fact("to", plan.span.to || "—")));
+    fact("leads", plan.leads.length ? plan.leads.join(", ") : "—"),
+    fact("init times", inits.length
+      ? `${num(inits.length)} — ${inits[0]} → ${inits[inits.length - 1]}`
+      : "—")));
 
-  if (!plan.tasks && plan.runs_discovered) {
+  if (!plan.tasks && found) {
     parts.push(notice("bad",
       "Every run was rejected, so this config would verify nothing. That is an error, not an empty success."));
   }
-  if (plan.rejections && plan.rejections.length) {
-    const reasons = Object.entries(plan.reasons || {});
-    parts.push(h("table", {},
-      h("thead", {}, h("tr", {}, h("th", { text: "reason" }), h("th", { class: "num", text: "runs" }), h("th", { text: "what it means" }))),
-      h("tbody", {}, reasons.map(([reason, count]) => h("tr", {},
-        h("td", {}, h("code", { text: reason })),
-        h("td", { class: "num", text: num(count) }),
-        h("td", { class: "muted", text: REASON_TEXT[reason] || "" }))))));
+
+  const byMember = planByMember(plan.tasks_detail || []);
+  if (byMember.length) {
+    parts.push(h("div", { class: "plan-title", text: "What would be verified" }));
+    parts.push(h("div", { class: "scroll" }, h("table", {},
+      h("thead", {}, h("tr", {},
+        h("th", { text: "member" }),
+        h("th", { text: "leads (min)" }),
+        h("th", { class: "num", text: "frames" }),
+        h("th", { class: "num", text: "init times" }),
+        h("th", { text: "valid times" }))),
+      h("tbody", {}, byMember.map(m => h("tr", {},
+        h("td", {}, h("code", { text: m.member })),
+        h("td", { text: m.leads.join(", ") }),
+        h("td", { class: "num", text: num(m.frames) }),
+        h("td", { class: "num", text: num(m.inits) }),
+        h("td", {}, h("code", { class: "tiny", text: m.span }))))))));
   }
+
+  if (refusals.length) {
+    parts.push(h("div", { class: "plan-title", text: "What was left out" }));
+    parts.push(h("div", { class: "scroll" }, h("table", {},
+      h("thead", {}, h("tr", {},
+        h("th", { text: "reason" }),
+        h("th", { class: "num", text: "runs" }),
+        h("th", { text: "which models" }),
+        h("th", { text: "what it means" }))),
+      h("tbody", {}, refusals.map(r => h("tr", {},
+        h("td", {}, h("code", { text: r.reason })),
+        h("td", { class: "num", text: num(r.runs) }),
+        h("td", {}, r.models.join(", ")),
+        h("td", { class: "muted" }, r.meaning,
+          r.details.length === 1
+            ? h("div", { class: "tiny", text: r.details[0] }) : null)))))));
+  }
+
   if (plan.coverage) {
     const c = plan.coverage;
     parts.push(notice("ok", `The provider can serve ${num(c.available)} of ${num(c.expected)} planned frames.`));
@@ -814,13 +851,53 @@ function renderPlan(plan) {
   return h("div", {}, parts);
 }
 
-const REASON_TEXT = {
-  "not-on-roster": "the run's model is not on this config's roster",
-  inactive: "the member was not on the roster on that date",
-  "no-start-time": "the run is identified by sample_id, so it has no place on a time series",
-  "beyond-horizon": "no requested lead falls inside the run's forecast horizon",
-  "incompatible-pair": "the data and model packages do not match",
-};
+/// The accepted half of the plan, by member.
+///
+/// `tasks: 72` is a total with nothing behind it. The detail is already in the
+/// response, and a plan is a decision: which frames, for which member, at which
+/// lead, over which init times.
+function planByMember(detail) {
+  const by = new Map();
+  for (const t of detail) {
+    if (!by.has(t.member)) by.set(t.member, { member: t.member, leads: new Set(), inits: new Set(), valid: [], frames: 0 });
+    const g = by.get(t.member);
+    g.frames += 1;
+    g.leads.add(t.lead_minutes);
+    g.inits.add(t.init_time);
+    g.valid.push(t.valid_time);
+  }
+  return [...by.values()].map(g => ({
+    member: g.member,
+    frames: g.frames,
+    leads: [...g.leads].sort((a, b) => a - b),
+    inits: g.inits.size,
+    span: `${g.valid.sort()[0]} → ${g.valid[g.valid.length - 1]}`,
+  })).sort((a, b) => a.member.localeCompare(b.member));
+}
+
+/// The rejected half, grouped by reason and with the models named.
+///
+/// `12 not-on-roster` was the whole report, and it is the shape of report that
+/// hides things: the two radar models that had been added to a satellite ruler
+/// were in the twelve, and nothing on the page said so. The server had already
+/// sent each one's model id and its own sentence about why.
+function groupRejections(rejections) {
+  const by = new Map();
+  for (const r of rejections) {
+    if (!by.has(r.reason)) {
+      by.set(r.reason, { reason: r.reason, meaning: r.meaning || "",
+                         runs: 0, models: new Set(), details: new Set() });
+    }
+    const g = by.get(r.reason);
+    g.runs += 1;
+    g.models.add(r.model);
+    if (r.detail) g.details.add(r.detail);
+  }
+  return [...by.values()].map(g => ({
+    reason: g.reason, meaning: g.meaning, runs: g.runs,
+    models: [...g.models].sort(), details: [...g.details],
+  })).sort((a, b) => b.runs - a.runs || a.reason.localeCompare(b.reason));
+}
 
 async function saveConfig() {
   const host = $("#preview");

@@ -40,6 +40,11 @@ NO_START_TIME = "no-start-time"
 BEYOND_HORIZON = "beyond-horizon"
 INCOMPATIBLE = "incompatible-pair"
 
+#: every reason a plan can give, so a new one cannot be added without a sentence
+#: to go with it -- and without the page being able to keep a stale copy
+REASONS = (NOT_ON_ROSTER, OTHER_SOURCE, INACTIVE, NO_START_TIME, BEYOND_HORIZON,
+           INCOMPATIBLE)
+
 REASON_TEXT = {
     NOT_ON_ROSTER: "the run's model is not on this config's roster",
     OTHER_SOURCE: "the run used a different observation source than the ruler names",
@@ -84,6 +89,7 @@ class Rejection:
         return {
             "model": self.model_id,
             "reason": self.reason,
+            "meaning": REASON_TEXT.get(self.reason, ""),
             "detail": self.detail,
             "init_time": _stamp(self.init_time) if self.init_time else None,
             "path": self.path,

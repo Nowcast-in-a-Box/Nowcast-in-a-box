@@ -243,3 +243,14 @@ pre.log {
 .groupbox .head strong { font-size: 13px; }
 
 .scroll { overflow-x: auto; }
+
+/* A caption for a table that is not inside a card — the plan preview is not a
+   card, it is an answer, and it arrives in two halves. */
+.plan-title {
+  margin: 16px 0 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
