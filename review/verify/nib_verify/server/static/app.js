@@ -361,10 +361,11 @@ async function startRun(cfg, ui) {
   watchRun(started.job, cfg, ui, 0);
 }
 
-function fact(label, value) {
+function fact(label, value, note) {
   return h("div", { class: "field" },
     h("label", { text: label }),
-    h("code", { text: String(value) }));
+    h("code", { text: String(value) }),
+    note ? h("span", { class: "note", text: note }) : null);
 }
 
 async function retireMember(cfg, name) {
@@ -763,19 +764,6 @@ function buildSpec() {
   };
 }
 
-async function previewPlan() {
-  const host = $("#preview");
-  mount(host, empty("Planning…"));
-  try {
-    const spec = buildSpec();
-    const probe = $("#c-probe").checked;
-    const plan = await api("/api/plan", { method: "POST", body: { spec, probe } });
-    state.preview = plan;
-    mount(host, renderPlan(plan));
-  } catch (error) {
-    mount(host, notice("bad", error.message));
-  }
-}
 
 function renderPlan(plan) {
   const parts = [];
@@ -790,11 +778,21 @@ function renderPlan(plan) {
     parts.push(notice("warn", "The catalog disagrees:", plan.warnings));
   }
 
+  // A number that is a product of three other numbers should be shown as that
+  // product. `tasks: 72` on its own is a total with nothing behind it, and the
+  // question it raises -- 72 of what? -- is the one the preview exists to answer.
+  const possible = plan.members.length * inits.length * plan.leads.length;
+  const maths = !plan.tasks ? ""
+    : plan.tasks === possible
+      ? `${plan.members.length} members x ${inits.length} init times x ${plan.leads.length} leads`
+      : `${num(plan.tasks)} of a possible ${num(possible)}: not every member covers every lead at every init time`;
+
   parts.push(h("div", { class: "grid tight" },
-    fact("tasks", num(plan.tasks)),
+    fact("tasks", num(plan.tasks), maths),
     fact("runs found", found
       ? `${num(found)} — ${num(usable)} usable, ${num(rejected)} rejected`
-      : num(found)),
+      : num(found),
+      "every run the platform has, not just this config's"),
     fact("members", plan.members.join(", ") || "—"),
     fact("leads", plan.leads.length ? plan.leads.join(", ") : "—"),
     fact("init times", inits.length
@@ -900,7 +898,7 @@ function groupRejections(rejections) {
 }
 
 async function saveConfig() {
-  const host = $("#preview");
+  const host = $("#create-result");
   try {
     const spec = buildSpec();
     const strict = $("#c-strict").checked;
@@ -1076,7 +1074,6 @@ $("#btn-add-member").addEventListener("click", () => {
   state.memberRows.push({ name: id, leads: leadsFor(id) });
   renderMembers();
 });
-$("#btn-preview").addEventListener("click", previewPlan);
 $("#btn-save").addEventListener("click", saveConfig);
 // Choosing the ground truth is what fills the ruler in, so it is also what has to
 // clear it again when the choice changes to a package that declares less.

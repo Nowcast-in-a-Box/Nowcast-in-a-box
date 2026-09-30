@@ -81,12 +81,18 @@ def test_the_page_uses_the_endpoints_it_was_given(app):
 
     Not every route has to be used — some exist for scripts — but the page is
     expected to reach for the ones it is built on.
+
+    ``/api/plan`` is deliberately absent from this list. The wizard had a Preview
+    plan button and this is what it called; the button is gone. The endpoint
+    stays, because it is the only way to ask what a config would do without
+    starting a run, and the page itself no longer asks it.
     """
     calls = page_calls()
     assert len(calls) >= 10, sorted(calls)
     for expected in ("/api/configs", "/api/catalog", "/api/metrics",
-                     "/api/plan", "/api/runs", "/api/scores", "/api/chart"):
+                     "/api/runs", "/api/scores", "/api/chart"):
         assert expected in calls, expected
+    assert "/api/plan" not in calls
 
 
 def test_every_static_file_the_page_loads_is_served(app):
@@ -132,12 +138,29 @@ def test_the_form_fields_the_page_reads_are_the_ones_it_has():
 
 
 def test_the_wizard_has_four_numbered_sections():
-    """Four, and the numbers are the sections. The preview bar carries no step
-    number, because it is an action rather than a fifth thing to fill in."""
+    """Four, and the numbers are the sections. The foot carries no step number,
+    because saving is an action rather than a fifth thing to fill in."""
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     steps = re.findall(r'<span class="step">(\d)</span>', html)
     assert steps == ["1", "2", "3", "4"]
-    assert 'id="btn-preview"' in html and 'id="btn-save"' in html
+    assert 'id="btn-save"' in html
+
+
+def test_the_wizard_does_not_preview_a_plan():
+    """There was a `Preview plan` button and a panel under it. A plan is a
+    decision the platform makes against whatever runs happen to exist, and in the
+    middle of filling a form it answers a question nobody asked yet. It is gone
+    from here; the explanation of an empty plan stays where an empty plan
+    happens, which is a Run that came back with nothing to do.
+    """
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert 'id="btn-preview"' not in html
+    assert 'id="preview"' not in html
+    assert 'id="c-probe"' not in html
+    assert "previewPlan" not in js
+    # and the response of the save still has somewhere to land
+    assert 'id="create-result"' in html
 
 
 def test_the_wizard_sections_are_named_what_they_are():

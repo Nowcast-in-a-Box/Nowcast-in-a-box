@@ -161,14 +161,15 @@ def test_the_configs_tab_renders_the_config_and_says_nothing_unhappy(page, live_
 
 
 def test_the_wizard_renders_its_four_sections(page, live_server):
-    """Four, and numbered 1 to 4. The preview is an action, not a section — it
-    sits in the sticky bar at the bottom so it is reachable from any of them."""
+    """Four, and numbered 1 to 4. Saving is an action, not a section — it sits in
+    the sticky bar at the bottom so it is reachable from any of them."""
     page.load(live_server).tab("create")
 
     body = page.text()
     for block in ("Identity", "Basic set", "Forecasts", "Metrics"):
         assert block in body, f"the wizard is missing {block!r}"
-    assert "Preview plan" in body
+    assert "Preview plan" not in body
+    assert "Create config" in body
     steps = page.page.eval_on_selector_all("#tab-create .card > h2 .step",
                                            "els => els.map(e => e.textContent.trim())")
     assert steps == ["1", "2", "3", "4"], steps
@@ -343,7 +344,7 @@ def test_opening_a_config_shows_its_ruler_roster_and_metrics(page, live_server):
     assert page.errors == []
 
 
-def test_a_preview_plans_and_reports(page, live_server):
+def test_the_wizard_creates_a_config_and_says_so(page, live_server):
     page.load(live_server).tab("create")
     page.page.fill("#c-id", "shot-config")
     page.page.fill("#c-name", "A config from the wizard")
@@ -364,13 +365,18 @@ def test_a_preview_plans_and_reports(page, live_server):
     page.page.fill("#m-levels-yes_or_no", "181, 219")
     page.page.fill("#m-levels-spatial", "181")
     page.page.fill("#m-windows-spatial", "2, 4")
-    page.page.click("#btn-preview")
+    page.page.click("#btn-save")
     page.page.wait_for_timeout(900)
 
-    body = page.text()
-    assert "tasks" in body
-    assert "Every run was rejected" not in body
+    result = page.page.eval_on_selector("#create-result", "e => e.textContent")
+    assert "Created" in result, result
     assert page.errors == []
+    # and it is in the table
+    page.page.click('#tabs button[data-tab="configs"]')
+    page.page.wait_for_timeout(600)
+    ids = page.page.eval_on_selector_all("#configs-list tbody tr td:first-child",
+                                         "e => e.map(x => x.textContent)")
+    assert "shot-config" in ids, ids
 
 
 def test_the_three_families_are_already_there_and_ask_only_for_their_parameters(page, live_server):
@@ -749,42 +755,38 @@ def test_the_runs_card_is_empty_before_anything_has_run(page, live_server):
     assert page.errors == []
 
 
-def test_the_plan_preview_shows_both_halves_of_the_decision(page, live_server, platform):
-    """It showed the no's and hid the yes's.
+def test_a_run_with_nothing_to_do_names_the_runs_it_turned_away(page, live_server, tmp_path):
+    """The preview panel is gone, and this is where its useful half went.
 
-    `tasks: 48` is a total with nothing behind it, and `not-on-roster: 12` did not
-    say which twelve -- which is exactly the report shape that let two radar
-    models sit on a satellite ruler with the page saying nothing about it.
+    `Nothing to do` on its own is an empty plan with a shrug. The runs it turned
+    away are named, because that is the difference between "no data yet" and "the
+    model on the roster is spelled wrong", and the page can only say which by
+    saying who. It is also the difference that hid two radar models sitting on a
+    satellite ruler.
     """
-    # a run for a model the config's roster does not have, so there is something
-    # for the second half of the plan to be about. Written here rather than into
-    # the shared fixture, which several discovery tests count.
-    from .conftest import run_config_text, write_yaml
+    from dataclasses import replace
 
-    write_yaml(platform.runs_root / "c" / "run.yaml",
-               run_config_text(model="not-on-the-roster"))
+    from nib_verify.config import Member
+    from nib_verify.server.library import ConfigLibrary
+
+    from .conftest import make_config
+
+    # a config whose roster names a model that nothing on disk produces
+    ghost = replace(
+        make_config(group_id="ghost-roster"),
+        members=(Member(name="nothing-produces-this", variable="vil",
+                        unit="kg m-2", leads=(10,)),))
+    ConfigLibrary(tmp_path / "configs").create(ghost)
+
     page.load(live_server).tab("configs")
-    page.page.click("#configs-list button.link")
-    page.page.wait_for_timeout(400)
-    page.page.evaluate("""async () => {
-      mount($("#preview"), renderPlan(await api("/api/plan",
-        { method: "POST", body: { config: state.selected.group_id } })));
-    }""")
-    page.page.wait_for_timeout(1200)
-    text = page.page.eval_on_selector("#preview", "e => e.innerText")
-    flat = " ".join(text.split())
+    page.page.click('#configs-list tbody tr:has(td:has-text("ghost-roster")) button.link')
+    page.page.wait_for_timeout(500)
+    page.page.click("#btn-run")
+    page.page.wait_for_timeout(1500)
 
-    assert "What would be verified" in flat
-    assert "What was left out" in flat
-    # the accepted half: a row per member, with its leads and its frame count
-    assert "mlcast-det" in flat
-    assert "10, 20, 30" in flat
-    # the rejected half names the models, and says what the reason means
+    flat = " ".join(page.page.eval_on_selector("#run-verdict", "e => e.innerText").split())
+    assert "Nothing to do" in flat
     assert "not-on-roster" in flat
+    assert "mlcast-det" in flat, flat          # the run it turned away, named
     assert "not on this config's roster" in flat
-    # and the totals add up out loud instead of leaving the subtraction to us
-    assert "usable" in flat and "rejected" in flat
-    names = page.page.eval_on_selector_all(
-        "#preview tbody tr td:nth-child(3)", "e => e.map(x => x.textContent)")
-    assert any("not-on-the-roster" in n for n in names), names
     assert page.errors == []
