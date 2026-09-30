@@ -261,7 +261,13 @@ def create_app(
     @app.post("/api/configs/{group_id}/roster", status_code=201)
     def add_member(group_id: str, body: dict = Body(...)):
         cfg = library.get(group_id)
-        unit = body.get("unit") or cfg.ruler.unit
+        name = _required(body, "name")
+        # Changing the leads of a member already on the roster should not require
+        # restating what it produces. The config already knows, and asking again
+        # turns a one-field edit into an easy way to get the unit wrong -- which
+        # is the failure this whole check exists to catch.
+        existing = next((m for m in cfg.members if m.name == name), None)
+        unit = body.get("unit") or (existing.unit if existing else cfg.ruler.unit)
         if unit != cfg.ruler.unit:
             raise ConfigError(
                 f"a member cannot be in {unit!r} when the ruler is in "
@@ -269,8 +275,8 @@ def create_app(
                 "so a member in another unit would make them meaningless"
             )
         member = Member(
-            name=_required(body, "name"),
-            variable=body.get("variable") or "",
+            name=name,
+            variable=body.get("variable") or (existing.variable if existing else ""),
             unit=unit,
             leads=tuple(_int_list(body.get("leads"))),
             active_from=_parse_date(body.get("active_from")),

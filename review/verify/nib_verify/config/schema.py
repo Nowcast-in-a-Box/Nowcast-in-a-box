@@ -340,7 +340,18 @@ class VerificationConfig:
 
     # -- roster edits ----------------------------------------------------
     def with_member(self, member: Member, *, retire_on: date | None = None):
-        """Add a member, or stop an existing one with ``retire_on``."""
+        """Add a member, change the leads of one already there, or stop one.
+
+        The leads are the one part of a membership record that can be rewritten.
+        They say which frames would be verified *next*; they do not say what a
+        stored number means, because every stored row carries its own lead. So
+        shortening the list cannot orphan anything.
+
+        Everything else about a member is either its identity or its unit, and
+        both decide what the numbers under it are numbers *of*. Changing one
+        silently would re-attribute rows that are already in the store, so it is
+        refused by name rather than done quietly.
+        """
         members = list(self.members)
         if retire_on is not None:
             for i, m in enumerate(members):
@@ -348,9 +359,23 @@ class VerificationConfig:
                     members[i] = replace(m, active_to=retire_on)
                     return replace(self, members=tuple(members))
             raise KeyError(member.name)
-        for m in members:
-            if m.name == member.name:
-                raise ConfigError(f"member {member.name!r} is already on the roster")
+        for i, m in enumerate(members):
+            if m.name != member.name:
+                continue
+            if (m.unit, m.variable) != (member.unit, member.variable):
+                raise ConfigError(
+                    f"{member.name!r} is already on the roster as "
+                    f"{m.variable!r} in {m.unit!r}; that is what its stored "
+                    f"numbers are numbers of, so it cannot become "
+                    f"{member.variable!r} in {member.unit!r}. Make a new config."
+                )
+            if m.active_to is not None:
+                raise ConfigError(
+                    f"{member.name!r} was retired on {m.active_to}; a roster "
+                    "cannot be reopened, only extended with a new config"
+                )
+            members[i] = replace(m, leads=member.leads)
+            return replace(self, members=tuple(members))
         members.append(member)
         return replace(self, members=tuple(members))
 

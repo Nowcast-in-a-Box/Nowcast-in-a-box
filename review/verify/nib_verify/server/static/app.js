@@ -136,7 +136,18 @@ function renderConfigTable(configs, broken) {
     h("td", { class: "num", text: cfg.n_members }),
     h("td", { class: "num", text: cfg.n_metrics }),
     h("td", {}, h("code", { class: "tiny", text: cfg.ruler_fingerprint })),
-    h("td", {}, h("button", { class: "link", text: "Open", onclick: () => openConfig(cfg.group_id) })),
+    h("td", {},
+      h("button", { class: "link", text: "Edit", onclick: () => openConfig(cfg.group_id) }),
+      state.removing === cfg.group_id
+        ? h("span", { class: "row", style: "display:inline-flex;margin-left:10px" },
+            h("span", { class: "tiny muted", text: "remove it?" }),
+            h("button", { class: "link danger", text: "Yes",
+                          onclick: () => removeConfig(cfg.group_id) }),
+            h("button", { class: "link", text: "No",
+                          onclick: () => { state.removing = null; loadConfigs(); } }))
+        : h("button", { class: "link danger", text: "Remove",
+                        style: "margin-left:10px",
+                        onclick: () => { state.removing = cfg.group_id; loadConfigs(); } })),
   ));
   return h("div", { class: "scroll" }, h("table", {},
     h("thead", {}, h("tr", {},
@@ -179,26 +190,43 @@ function renderConfigDetail(cfg) {
     cfg.warnings && cfg.warnings.length ? notice("warn", "Worth knowing:", cfg.warnings) : null);
 
   // ---- roster
+  const retired = (m) => Boolean(m.active_to);
   const rosterRows = cfg.members.map(m => h("tr", {},
-    h("td", {}, h("code", { text: m.name })),
-    h("td", { text: m.leads.join(", ") }),
+    h("td", {}, h("code", { text: m.name }),
+      retired(m) ? pill(`retired ${m.active_to}`, "") : null),
+    h("td", {}, retired(m)
+      ? h("span", { class: "muted", text: m.leads.join(", ") })
+      : h("input", {
+          value: m.leads.join(", "), style: "max-width:220px",
+          title: "the leads this member is verified at, in minutes",
+          onchange: (e) => saveMemberLeads(cfg, m, e.target.value),
+        })),
     h("td", { text: m.active_from || "anytime" }),
     h("td", { text: m.active_to || "ongoing" }),
-    h("td", {}, h("button", {
-      class: "link danger", text: "Retire",
-      onclick: () => retireMember(cfg, m.name),
-    })),
+    h("td", {}, retired(m)
+      ? h("span", { class: "tiny muted", text: "off the roster" })
+      : state.removingMember === m.name
+        ? h("span", { class: "row", style: "display:inline-flex" },
+            h("span", { class: "tiny muted", text: "remove?" }),
+            h("button", { class: "link danger", text: "Yes",
+                          onclick: () => removeMember(cfg, m.name) }),
+            h("button", { class: "link", text: "No",
+                          onclick: () => { state.removingMember = null; openConfig(cfg.group_id); } }))
+        : h("button", {
+            class: "link danger", text: "Remove",
+            onclick: () => { state.removingMember = m.name; openConfig(cfg.group_id); },
+          })),
   ));
   const rosterCard = h("div", { class: "card" },
     h("h2", {}, "Forecasts"),
-    h("p", { class: "hint" }, "Add a member, or give one a last day. Membership records are never rewritten — a retired member keeps its numbers."),
+    h("p", { class: "hint" }, "Leads are editable. Removing a member gives it a last day rather than deleting the record, because the numbers it already contributed have to keep their meaning."),
     h("div", { class: "scroll" }, h("table", {},
       h("thead", {}, h("tr", {},
         h("th", { text: "member" }), h("th", { text: "leads (min)" }),
         h("th", { text: "from" }), h("th", { text: "to" }), h("th", {}))),
       h("tbody", {}, rosterRows))),
     h("div", { class: "row", style: "margin-top:10px" },
-      h("input", { id: "roster-name", placeholder: "new member id", style: "max-width:200px" }),
+      rosterPicker(cfg),
       h("input", { id: "roster-leads", placeholder: "10, 30, 60", style: "max-width:160px" }),
       h("button", { class: "act quiet", text: "Add", onclick: () => addMemberTo(cfg) })));
 
@@ -213,9 +241,8 @@ function renderConfigDetail(cfg) {
 
   const metricsCard = h("div", { class: "card" },
     h("h2", {}, "Metrics ", pill("append-only", "ok")),
-    h("p", { class: "hint" }, "A metric can be added, never removed: removing it would change what a stored number means. Adding one adds no rows."),
-    h("div", {}, metricBlocks),
-    renderMetricAdder(cfg, (group) => appendMetrics(cfg, group)));
+    h("p", { class: "hint" }, "Not editable yet. A group can be appended and never removed — removing one would change what a stored number means — and the form for appending is not built."),
+    h("div", {}, metricBlocks));
 
   const storedCard = h("div", { class: "card" },
     h("h2", {}, "Stored"),
@@ -368,23 +395,86 @@ function fact(label, value, note) {
     note ? h("span", { class: "note", text: note }) : null);
 }
 
-async function retireMember(cfg, name) {
-  const on = window.prompt(`Last day ${name} is on the roster (YYYY-MM-DD):`, new Date().toISOString().slice(0, 10));
-  if (!on) return;
+/// Save the leads a member is verified at.
+///
+/// Leads are the one part of a membership record that can be rewritten: they
+/// decide which frames would be verified, not what a stored number means. Every
+/// stored row carries its own lead, so shortening this list cannot orphan
+/// anything -- it only says what to do next time.
+async function saveMemberLeads(cfg, member, text) {
+  const leads = numbers(text).map(Number);
+  if (!leads.length) {
+    window.alert("A member needs at least one lead.");
+    return openConfig(cfg.group_id);
+  }
   try {
-    await api(`/api/configs/${encodeURIComponent(cfg.group_id)}/roster/${encodeURIComponent(name)}/retire`,
-      { method: "POST", body: { on } });
+    await api(`/api/configs/${encodeURIComponent(cfg.group_id)}/roster`, {
+      method: "POST",
+      body: {
+        name: member.name, variable: member.variable, unit: member.unit, leads,
+        active_from: member.active_from, active_to: member.active_to,
+      },
+    });
     await loadConfigs();
     await openConfig(cfg.group_id);
   } catch (error) {
     window.alert(error.message);
+    await openConfig(cfg.group_id);
   }
+}
+
+/// Take a member off the roster, as of today.
+///
+/// A last day and not a deletion. The numbers this member contributed up to that
+/// day are in the store keyed by its name, and a config that no longer names it
+/// leaves them with nothing to be a number *of*.
+async function removeMember(cfg, name) {
+  const on = new Date().toISOString().slice(0, 10);
+  try {
+    await api(`/api/configs/${encodeURIComponent(cfg.group_id)}/roster/`
+              + `${encodeURIComponent(name)}/retire`, { method: "POST", body: { on } });
+    state.removingMember = null;
+    await loadConfigs();
+    await openConfig(cfg.group_id);
+  } catch (error) {
+    window.alert(error.message);
+    await openConfig(cfg.group_id);
+  }
+}
+
+/// The models this config could still put on its roster.
+///
+/// One unit only: every member has to be in the ruler's unit or the thresholds
+/// mean nothing. Typing a name by hand was how a model in another unit got on --
+/// and then verified nothing, with the reason somewhere the reader could not see.
+function rosterChoices(cfg) {
+  const tree = state.catalog && state.catalog.packages;
+  const packages = (tree && tree.packages) || [];
+  const on = new Set(cfg.members.filter(m => !m.active_to).map(m => m.name));
+  return packages
+    .filter(p => p.kind === "model" && !on.has(p.id))
+    .filter(p => (((p.ruler_defaults || {}).unit) || cfg.ruler.unit) === cfg.ruler.unit)
+    .map(p => p.id);
+}
+
+function rosterPicker(cfg) {
+  const choices = rosterChoices(cfg);
+  const pick = h("select", { id: "roster-name", style: "max-width:220px" },
+    (choices.length ? choices : [""]).map(id => h("option", {
+      value: id,
+      text: id || (cfg.members.length
+        ? "every model in this unit is on the roster"
+        : `no model the catalog found produces ${cfg.ruler.unit}`),
+    })));
+  pick.disabled = !choices.length;
+  return pick;
 }
 
 async function addMemberTo(cfg) {
   const name = $("#roster-name").value.trim();
-  const leads = $("#roster-leads").value.trim();
-  if (!name) return window.alert("A member id is required.");
+  const leads = numbers($("#roster-leads").value).map(Number);
+  if (!name) return window.alert("Pick a model to add.");
+  if (!leads.length) return window.alert("A member needs at least one lead.");
   try {
     await api(`/api/configs/${encodeURIComponent(cfg.group_id)}/roster`,
       { method: "POST", body: { name, leads } });
@@ -395,16 +485,27 @@ async function addMemberTo(cfg) {
   }
 }
 
-async function appendMetrics(cfg, group) {
+/// Remove a whole config.
+///
+/// This one does destroy things: the file, and every stored row under it. That is
+/// what "remove" means, so it asks first and it is asked twice -- once on the row
+/// and once by the second click.
+async function removeConfig(groupId) {
   try {
-    await api(`/api/configs/${encodeURIComponent(cfg.group_id)}/metrics`,
-      { method: "POST", body: group });
+    await api(`/api/configs/${encodeURIComponent(groupId)}`, { method: "DELETE" });
+    state.removing = null;
+    if (state.selected && state.selected.group_id === groupId) {
+      state.selected = null;
+      $("#config-detail").hidden = true;
+      mount($("#config-detail"), "");
+    }
     await loadConfigs();
-    await openConfig(cfg.group_id);
   } catch (error) {
     window.alert(error.message);
   }
 }
+
+
 
 // ==================================================================
 // New config
@@ -572,13 +673,6 @@ function metricParamFields(group) {
 ///
 /// Tolerates a detached input: the metric adder builds its fields and then
 /// refreshes them, so at that instant ``closest`` finds nothing.
-function markRequired(input, needed) {
-  input.disabled = !needed;
-  input.required = needed;
-  const field = input.closest(".field");
-  const label = field ? field.querySelector("label") : null;
-  if (label) label.textContent = label.textContent.replace(/ \*$/, "") + (needed ? " *" : "");
-}
 
 function emptyMember() {
   return { name: "", leads: "" };
@@ -659,56 +753,6 @@ function renderMembers() {
     : "";
 }
 
-function renderMetricAdder(cfg, onAdd) {
-  const family = h("select", {}, (state.metrics.families || []).map(f => h("option", { value: f.family, text: f.family })));
-  const levels = h("input", { placeholder: "181, 219" });
-  const windows = h("input", { placeholder: "2, 4" });
-  const chips = h("div", { class: "chips" });
-  const chosen = new Set();
-
-  function refresh() {
-    const itemRows = (state.metrics.metrics || []).filter(m => m.family === family.value);
-    const needs = paramsForFamily(family.value);
-    markRequired(levels, needs.has("level"));
-    markRequired(windows, needs.has("half_window"));
-    chosen.clear();
-    mount(chips, itemRows.map(m => h("button", {
-      class: "chip", type: "button", "aria-pressed": "false", text: m.method,
-      onclick: (event) => {
-        const button = event.currentTarget;
-        const on = button.getAttribute("aria-pressed") !== "true";
-        button.setAttribute("aria-pressed", String(on));
-        if (on) chosen.add(m.method); else chosen.delete(m.method);
-      },
-    })));
-  }
-  family.addEventListener("change", refresh);
-  refresh();
-
-  const needs = paramsForFamily(family.value);
-  return h("div", { class: "groupbox", style: "background:#fafbfe" },
-    h("div", { class: "grid" },
-      h("div", { class: "field" }, h("label", { text: "family" }), family),
-      h("div", { class: "field" }, h("label", { text: "levels" }), levels),
-      h("div", { class: "field" }, h("label", { text: "half windows" }), windows)),
-    h("div", { class: "field", style: "margin-top:10px" }, h("label", { text: "metrics" }), chips),
-    h("div", { class: "row end", style: "margin-top:10px" },
-      h("button", {
-        class: "act ghost", text: "Add this group",
-        onclick: () => {
-          if (!chosen.size) return window.alert("Pick at least one metric.");
-          const needed = paramsForFamily(family.value);
-          onAdd({
-            family: family.value,
-            items: Array.from(chosen),
-            // A disabled input keeps its text. Reading it anyway is how a
-            // continuous group ends up carrying thresholds it cannot use.
-            levels: needed.has("level") ? numbers(levels.value) : [],
-            half_windows: needed.has("half_window") ? numbers(windows.value).map(Number) : [],
-          });
-        },
-      })));
-}
 
 function numbers(text) {
   return String(text || "").split(",").map(s => s.trim()).filter(Boolean).map(Number);

@@ -227,10 +227,10 @@ def test_the_wizard_does_not_ask_when_a_forecast_ran():
     only reason the dates still exist at all."""
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     wizard = app[app.index("function emptyMember"):
-                 app.index("function renderMetricAdder")]
+                 app.index("function renderMembers")]
     assert "active_from" not in wizard
     assert "active_to" not in wizard
-    assert "active_from" in app, "the detail panel still retires a member"
+    assert "active_from" in app, "the detail panel still gives a member a last day"
 
 
 def test_the_metrics_section_asks_for_no_selection():

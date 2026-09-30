@@ -96,11 +96,52 @@ def test_active_window_is_respected():
     assert not m.active_on(date(2026, 3, 2))
 
 
-def test_roster_rejects_a_duplicate_name():
+def test_a_member_on_the_roster_can_have_its_leads_changed():
+    """Leads say which frames would be verified *next*. They do not say what a
+    stored number means, because every stored row carries its own lead, so
+    shortening the list cannot orphan anything.
+
+    This was refused outright until the page grew an Edit button and the button
+    could not do anything.
+    """
     cfg = make_config()
-    with pytest.raises(ConfigError, match="already on the roster"):
+    edited = cfg.with_member(Member(name="mlcast-det", variable="vil",
+                                    unit="kg m-2", leads=(10, 90)))
+    assert edited.member("mlcast-det").leads == (10, 90)
+    assert len(edited.members) == len(cfg.members), "it edited, it did not append"
+    assert cfg.member("mlcast-det").leads == (10, 20, 30), "the original moved"
+
+
+def test_a_members_unit_and_variable_cannot_be_changed_under_it():
+    """Both decide what the numbers already in the store are numbers *of*, so a
+    silent change would re-attribute rows that are already written."""
+    cfg = make_config()
+    with pytest.raises(ConfigError, match="already on the roster as"):
+        cfg.with_member(Member(name="mlcast-det", variable="rain_rate",
+                               unit="mm h-1", leads=(10,)))
+
+
+def test_a_retired_member_cannot_have_its_leads_changed():
+    cfg = make_config().with_member(
+        Member(name="mlcast-det", variable="vil", unit="kg m-2", leads=(10,)),
+        retire_on=date(2026, 5, 1))
+    with pytest.raises(ConfigError, match="was retired on"):
         cfg.with_member(Member(name="mlcast-det", variable="vil",
-                               unit="kg m-2", leads=(10,)))
+                               unit="kg m-2", leads=(10, 90)))
+
+
+def test_editing_the_leads_leaves_the_roster_dates_where_they_were():
+    """The dates are the record of when the member was on the roster. A leads
+    edit is not allowed to reopen one or move one."""
+    on = Member(name="mlcast-det", variable="vil", unit="kg m-2",
+                leads=(10, 20), active_from=date(2026, 1, 1))
+    cfg = replace(make_config(), members=(on,))
+    edited = cfg.with_member(Member(name="mlcast-det", variable="vil",
+                                    unit="kg m-2", leads=(90,),
+                                    active_from=date(2026, 6, 1)))
+    got = edited.member("mlcast-det")
+    assert got.leads == (90,)
+    assert got.active_from == date(2026, 1, 1)
 
 
 def test_roster_rejects_a_backwards_window():

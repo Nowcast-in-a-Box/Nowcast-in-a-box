@@ -776,3 +776,48 @@ def test_no_runs_at_all_is_not_an_error(platform):
     got = available_leads(platform.catalog(), None)
     assert got["by_model"] == {}
     assert got["note"] == "no run configs"
+
+
+def test_the_roster_endpoint_changes_the_leads_of_a_member_already_there(client):
+    """It only ever added.
+
+    Its own docstring said "add a member, or change one already on the roster",
+    and the config refused the second half by name, so a member's leads could not
+    be edited at all -- which is the one thing the page's Edit button is for.
+    """
+    create(client)
+    first = client.post("/api/configs/vil-test/roster",
+                        json={"name": "mlcast-det", "leads": [10, 90]})
+    assert first.status_code == 201, first.text
+    cfg = client.get("/api/configs/vil-test").json()
+    leads = {m["name"]: m["leads"] for m in cfg["members"]}
+    assert leads["mlcast-det"] == [10, 90]
+    assert cfg["n_members"] == 1, "it edited, it did not append"
+
+
+def test_the_roster_endpoint_will_not_restate_a_member_in_another_unit(client):
+    """The unit is what the stored thresholds are measured in."""
+    create(client)
+    response = client.post("/api/configs/vil-test/roster",
+                           json={"name": "mlcast-det", "leads": [10],
+                                 "unit": "mm h-1"})
+    assert response.status_code == 400
+    assert "mm h-1" in response.json()["detail"]
+
+
+def test_a_config_can_be_removed_and_says_what_that_cost(client):
+    """`Remove` means remove: the file and every stored row under it. The reply
+    carries the count so the page can say what it just did."""
+    create(client)
+    started = client.post("/api/runs", json={"config": "vil-test",
+                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    wait(client, started["job"])
+
+    gone = client.delete("/api/configs/vil-test")
+    assert gone.status_code == 200
+    # a count per table, so the page can say what the removal cost
+    removed = gone.json()["removed_rows"]
+    assert removed and sum(removed.values()) > 0, removed
+    assert "task" in removed and "yes_or_no" in removed, removed
+    assert client.get("/api/configs/vil-test").status_code == 404
+    assert "vil-test" not in [c["group_id"] for c in client.get("/api/configs").json()["configs"]]

@@ -790,3 +790,55 @@ def test_a_run_with_nothing_to_do_names_the_runs_it_turned_away(page, live_serve
     assert "mlcast-det" in flat, flat          # the run it turned away, named
     assert "not on this config's roster" in flat
     assert page.errors == []
+
+
+def test_a_config_is_edited_from_the_row_and_the_panel_below(page, live_server):
+    """Edit and Remove on the row, the content below, and the part that can be
+    changed is changed there.
+
+    For now that part is the forecasts only. The extent and the metrics are shown
+    and not editable: changing either changes what the stored numbers mean, and
+    that is a new config rather than an edit.
+    """
+    page.load(live_server).tab("configs")
+    assert page.page.eval_on_selector_all(
+        "#configs-list tbody tr:first-child button", "e => e.map(x => x.textContent)"
+    ) == ["Edit", "Remove"]
+
+    page.page.click('#configs-list tbody tr:first-child button:text-is("Edit")')
+    page.page.wait_for_timeout(600)
+
+    # the leads are boxes, not text
+    leads = page.page.eval_on_selector_all(
+        "#config-detail .card:nth-of-type(2) input",
+        "e => e.map(i => ({ value: i.value, readonly: i.readOnly }))")
+    assert leads[0] == {"value": "10, 20, 30", "readonly": False}, leads
+
+    # and saving one sticks
+    page.page.fill("#config-detail .card:nth-of-type(2) input", "10, 60")
+    page.page.dispatch_event("#config-detail .card:nth-of-type(2) input", "change")
+    page.page.wait_for_timeout(1200)
+    assert page.page.eval_on_selector(
+        "#config-detail .card:nth-of-type(2) input", "e => e.value") == "10, 60"
+
+    # the ruler says locked and stays that way; the metrics have no adder
+    detail = page.page.eval_on_selector("#config-detail", "e => e.innerText")
+    assert "locked" in detail
+    assert "Add this group" not in detail
+    assert "Not editable yet" in " ".join(detail.split())
+    assert page.errors == []
+
+
+def test_removing_a_config_asks_twice(page, live_server):
+    """It destroys the file and every stored row under it, so the first click
+    only asks."""
+    page.load(live_server).tab("configs")
+    page.page.click('#configs-list tbody tr:first-child button:text-is("Remove")')
+    page.page.wait_for_timeout(600)
+    assert "remove it?" in page.page.eval_on_selector("#configs-list", "e => e.innerText")
+
+    page.page.click('#configs-list button:text-is("No")')
+    page.page.wait_for_timeout(600)
+    rows = page.page.eval_on_selector_all("#configs-list tbody tr", "e => e.length")
+    assert rows == 1, "No cancelled, and cancelling means it is still there"
+    assert page.errors == []
