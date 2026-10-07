@@ -1,6 +1,6 @@
 # Diagnostics 镜像
 
-该目录下包含所有的 `visualization` 和 `metrics computation` 功能和实现代码。
+该目录下包含所有的 `visualization` 和 `metrics computation` 实现代码。
 
 ## 构建
 
