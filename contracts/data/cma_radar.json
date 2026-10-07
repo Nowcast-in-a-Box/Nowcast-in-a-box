@@ -1,0 +1,24 @@
+{
+  "id": "cma_radar",
+  "version": "1.0.0",
+  "title": "CMA Radar",
+  "instrument": "CREF mosaic",
+  "path": "cma_radar",
+  "requirements": "cma_radar/requirements.txt",
+  "channels": {
+    "mode": "closed",
+    "variables": [
+      {
+        "id": "CREF",
+        "long_name": "composite_reflectivity",
+        "units": "dBZ"
+      }
+    ]
+  },
+  "spatial": {
+    "crop": true,
+    "bbox_order": ["west", "south", "east", "north"]
+  },
+  "native_cadence_minutes": 6,
+  "formats": ["npz", "bin"]
+}

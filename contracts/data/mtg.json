@@ -1,0 +1,15 @@
+{
+  "id": "mtg",
+  "version": "1.0.0",
+  "title": "MTG FCI L1c",
+  "instrument": "FCI",
+  "path": "mtg",
+  "requirements": "mtg/requirements.txt",
+  "channels": {"mode": "open"},
+  "spatial": {
+    "crop": false,
+    "bbox_order": ["west", "south", "east", "north"]
+  },
+  "native_cadence_minutes": 10,
+  "formats": ["fci-l1c"]
+}

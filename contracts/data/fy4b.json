@@ -1,0 +1,15 @@
+{
+  "id": "fy4b",
+  "version": "1.0.0",
+  "title": "FY-4B AGRI L1",
+  "instrument": "AGRI",
+  "path": "fy4b",
+  "requirements": "fy4b/requirements.txt",
+  "channels": {"mode": "open"},
+  "spatial": {
+    "crop": false,
+    "bbox_order": ["west", "south", "east", "north"]
+  },
+  "native_cadence_minutes": 15,
+  "formats": ["agri-l1"]
+}
