@@ -1,0 +1,35 @@
+{
+  "id": "nowcastnet",
+  "version": "0.1.0",
+  "data_adapter_id": "sevir",
+  "task": "precip-nowcast.v1",
+  "status": "reference",
+  "weights": {
+    "status": "pinned",
+    "download_url": "https://huggingface.co/sonderlau/nib-nowcastnet/resolve/main/NowcastNet.onnx",
+    "sha256": "773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d",
+    "filename": "NowcastNet.onnx",
+    "hf": {
+      "repo": "sonderlau/nib-nowcastnet",
+      "revision": "main",
+      "filename": "NowcastNet.onnx"
+    },
+    "artifacts_relpath": "sevir/nowcastnet/NowcastNet.onnx"
+  },
+  "onnx": {
+    "input_name": "input_sequence",
+    "output_name": "forecast",
+    "scale": 255.0
+  },
+  "input": {
+    "context_frames": 5,
+    "spatial": [128, 128],
+    "dtype": "float32"
+  },
+  "output": {
+    "dims": ["batch", "lead", "y", "x"],
+    "dtype": "float32",
+    "lead_frames": 20,
+    "spatial": [128, 128]
+  }
+}

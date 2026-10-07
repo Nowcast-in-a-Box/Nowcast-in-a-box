@@ -1,0 +1,35 @@
+{
+  "id": "wadepre",
+  "version": "0.1.0",
+  "data_adapter_id": "sevir",
+  "task": "precip-nowcast.v1",
+  "status": "reference",
+  "weights": {
+    "status": "pinned",
+    "download_url": "https://huggingface.co/sonderlau/nib-wadepre/resolve/main/WADEPre.onnx",
+    "sha256": "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b",
+    "filename": "WADEPre.onnx",
+    "hf": {
+      "repo": "sonderlau/nib-wadepre",
+      "revision": "main",
+      "filename": "WADEPre.onnx"
+    },
+    "artifacts_relpath": "sevir/wadepre/WADEPre.onnx"
+  },
+  "onnx": {
+    "input_name": "input_sequence",
+    "output_name": "refined_out",
+    "scale": 255.0
+  },
+  "input": {
+    "context_frames": 5,
+    "spatial": [128, 128],
+    "dtype": "float32"
+  },
+  "output": {
+    "dims": ["batch", "lead", "y", "x"],
+    "dtype": "float32",
+    "lead_frames": 20,
+    "spatial": [128, 128]
+  }
+}

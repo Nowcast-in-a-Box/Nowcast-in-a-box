@@ -1,0 +1,35 @@
+{
+  "id": "exprecast",
+  "version": "0.1.0",
+  "data_adapter_id": "sevir",
+  "task": "precip-nowcast.v1",
+  "status": "reference",
+  "weights": {
+    "status": "pinned",
+    "download_url": "https://huggingface.co/sonderlau/nib-exprecast/resolve/main/exPreCast.onnx",
+    "sha256": "534b91b63524f775c460334385f0f0b0b92759fa1596a053d1cac489c84cd00d",
+    "filename": "exPreCast.onnx",
+    "hf": {
+      "repo": "sonderlau/nib-exprecast",
+      "revision": "main",
+      "filename": "exPreCast.onnx"
+    },
+    "artifacts_relpath": "sevir/exprecast/exPreCast.onnx"
+  },
+  "onnx": {
+    "input_name": "input_sequence",
+    "output_name": "forecast",
+    "scale": 255.0
+  },
+  "input": {
+    "context_frames": 5,
+    "spatial": [128, 128],
+    "dtype": "float32"
+  },
+  "output": {
+    "dims": ["batch", "lead", "y", "x"],
+    "dtype": "float32",
+    "lead_frames": 20,
+    "spatial": [128, 128]
+  }
+}
