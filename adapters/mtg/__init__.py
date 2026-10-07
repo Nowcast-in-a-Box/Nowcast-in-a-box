@@ -1,0 +1,1 @@
+"""MTG data adapter package."""
