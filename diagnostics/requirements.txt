@@ -1,0 +1,4 @@
+# Base image dependencies. Pin versions.
+# SQLite is the Debian sqlite3 package in the image, not a pip package.
+pyyaml==6.0.2
+
