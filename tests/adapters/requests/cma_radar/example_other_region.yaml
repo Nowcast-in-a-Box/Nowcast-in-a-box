@@ -1,0 +1,13 @@
+source: cma_radar
+data_dir: "cma_radar"
+initial_time: "2023-07-30T14:00:00Z"
+history_steps: 1
+interval_minutes: 6
+
+channels:
+  - CREF
+
+# Any valid bbox inside the available native domain is supported.
+# [west, south, east, north]
+region:
+  bbox: [110.0, 25.0, 122.0, 36.0]

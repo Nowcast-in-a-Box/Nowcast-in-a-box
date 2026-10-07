@@ -1,0 +1,11 @@
+source: mtg
+data_dir: "mtg"
+initial_time: "2024-01-13T11:50:00Z"
+history_steps: 1
+interval_minutes: 10
+
+channels:
+  - not_a_channel
+
+region:
+  bbox: [-20.0, 20.0, 30.0, 65.0]

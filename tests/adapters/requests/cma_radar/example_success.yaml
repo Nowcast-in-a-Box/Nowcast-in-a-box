@@ -1,0 +1,13 @@
+source: cma_radar
+data_dir: "cma_radar"
+initial_time: "2023-07-30T14:00:00Z"
+history_steps: 1
+interval_minutes: 6
+
+channels:
+  - CREF
+
+# [west, south, east, north]
+# First Demo v1 validation region, following the supplied reader example.
+region:
+  bbox: [104.0, 17.0, 126.0, 44.0]
