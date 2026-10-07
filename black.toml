@@ -1,0 +1,4 @@
+# Python formatter for this repository.
+[tool.black]
+line-length = 88
+target-version = ["py310"]

@@ -1,0 +1,15 @@
+{
+  "id": "gk2a",
+  "version": "2.0.0",
+  "title": "GK2A AMI L1B",
+  "instrument": "AMI",
+  "path": "gk2a",
+  "requirements": "gk2a/requirements.txt",
+  "channels": {"mode": "open"},
+  "spatial": {
+    "crop": false,
+    "bbox_order": ["west", "south", "east", "north"]
+  },
+  "native_cadence_minutes": 10,
+  "formats": ["ami-l1b"]
+}

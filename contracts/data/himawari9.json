@@ -1,0 +1,15 @@
+{
+  "id": "himawari9",
+  "version": "1.1.0",
+  "title": "Himawari-9 AHI HSD",
+  "instrument": "AHI",
+  "path": "himawari9",
+  "requirements": "himawari9/requirements.txt",
+  "channels": {"mode": "open"},
+  "spatial": {
+    "crop": false,
+    "bbox_order": ["west", "south", "east", "north"]
+  },
+  "native_cadence_minutes": 10,
+  "formats": ["hsd"]
+}

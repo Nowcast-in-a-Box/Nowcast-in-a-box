@@ -1,0 +1,14 @@
+source: sevir
+
+data_dir: "SEVIR/processed"
+
+initial_time: "2017-06-27T00:35:00Z"
+history_steps: 6
+interval_minutes: 5
+
+channels:
+  - vil
+
+# Recorded only. This adapter does not crop.
+region:
+  bbox: [0.0, 0.0, 1.0, 1.0]

@@ -1,0 +1,24 @@
+{
+  "id": "sevir",
+  "version": "1.0.0",
+  "title": "SEVIR VIL",
+  "instrument": "VIL",
+  "path": "sevir",
+  "requirements": "sevir/requirements.txt",
+  "channels": {
+    "mode": "closed",
+    "variables": [
+      {
+        "id": "vil",
+        "long_name": "vertically_integrated_liquid",
+        "units": "raw"
+      }
+    ]
+  },
+  "spatial": {
+    "crop": false,
+    "bbox_order": ["west", "south", "east", "north"]
+  },
+  "native_cadence_minutes": 5,
+  "formats": ["hdf5"]
+}

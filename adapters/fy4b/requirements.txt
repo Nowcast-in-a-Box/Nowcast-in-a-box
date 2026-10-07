@@ -1,0 +1,10 @@
+satpy==0.60.0
+xarray==2026.9.0
+dask[array]==2026.8.0
+netCDF4==1.7.4
+h5py==3.16.0
+hdf5plugin==7.1.0
+pyproj==3.8.0
+pyresample==1.35.0
+pyspectral==0.14.3
+PyYAML==6.0.3

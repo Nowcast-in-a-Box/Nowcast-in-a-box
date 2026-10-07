@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "data_adapters": [
+    {
+      "id": "cma_radar",
+      "version": "1.0.0",
+      "path": "cma_radar",
+      "title": "CMA Radar",
+      "instrument": "CREF mosaic",
+      "requirements": "cma_radar/requirements.txt",
+      "channels": {
+        "mode": "closed",
+        "variables": [
+          {
+            "id": "CREF",
+            "long_name": "composite_reflectivity",
+            "units": "dBZ"
+          }
+        ]
+      },
+      "spatial": {
+        "crop": true,
+        "bbox_order": ["west", "south", "east", "north"]
+      },
+      "native_cadence_minutes": 6,
+      "formats": ["npz", "bin"],
+      "models": []
+    },
+    {
+      "id": "gk2a",
+      "version": "2.0.0",
+      "path": "gk2a",
+      "title": "GK2A AMI L1B",
+      "instrument": "AMI",
+      "requirements": "gk2a/requirements.txt",
+      "channels": {"mode": "open"},
+      "spatial": {
+        "crop": false,
+        "bbox_order": ["west", "south", "east", "north"]
+      },
+      "native_cadence_minutes": 10,
+      "formats": ["ami-l1b"],
+      "models": []
+    },
+    {
+      "id": "himawari9",
+      "version": "1.1.0",
+      "path": "himawari9",
+      "title": "Himawari-9 AHI HSD",
+      "instrument": "AHI",
+      "requirements": "himawari9/requirements.txt",
+      "channels": {"mode": "open"},
+      "spatial": {
+        "crop": false,
+        "bbox_order": ["west", "south", "east", "north"]
+      },
+      "native_cadence_minutes": 10,
+      "formats": ["hsd"],
+      "models": []
+    },
+    {
+      "id": "fy4b",
+      "version": "1.0.0",
+      "path": "fy4b",
+      "title": "FY-4B AGRI L1",
+      "instrument": "AGRI",
+      "requirements": "fy4b/requirements.txt",
+      "channels": {"mode": "open"},
+      "spatial": {
+        "crop": false,
+        "bbox_order": ["west", "south", "east", "north"]
+      },
+      "native_cadence_minutes": 15,
+      "formats": ["agri-l1"],
+      "models": []
+    },
+    {
+      "id": "mtg",
+      "version": "1.0.0",
+      "path": "mtg",
+      "title": "MTG FCI L1c",
+      "instrument": "FCI",
+      "requirements": "mtg/requirements.txt",
+      "channels": {"mode": "open"},
+      "spatial": {
+        "crop": false,
+        "bbox_order": ["west", "south", "east", "north"]
+      },
+      "native_cadence_minutes": 10,
+      "formats": ["fci-l1c"],
+      "models": []
+    },
+    {
+      "id": "sevir",
+      "version": "1.0.0",
+      "path": "sevir",
+      "title": "SEVIR VIL",
+      "instrument": "VIL",
+      "requirements": "sevir/requirements.txt",
+      "channels": {
+        "mode": "closed",
+        "variables": [
+          {
+            "id": "vil",
+            "long_name": "vertically_integrated_liquid",
+            "units": "raw"
+          }
+        ]
+      },
+      "spatial": {
+        "crop": false,
+        "bbox_order": ["west", "south", "east", "north"]
+      },
+      "native_cadence_minutes": 5,
+      "formats": ["hdf5"],
+      "models": [
+        {
+          "id": "nowcastnet",
+          "version": "0.1.0",
+          "path": "sevir/nowcastnet",
+          "task": "precip-nowcast.v1",
+          "status": "reference",
+          "weights": {
+            "status": "pinned",
+            "download_url": "https://huggingface.co/sonderlau/nib-nowcastnet/resolve/main/NowcastNet.onnx",
+            "sha256": "773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d",
+            "filename": "NowcastNet.onnx",
+            "hf": {
+              "repo": "sonderlau/nib-nowcastnet",
+              "revision": "main",
+              "filename": "NowcastNet.onnx"
+            },
+            "artifacts_relpath": "sevir/nowcastnet/NowcastNet.onnx"
+          }
+        },
+        {
+          "id": "exprecast",
+          "version": "0.1.0",
+          "path": "sevir/exprecast",
+          "task": "precip-nowcast.v1",
+          "status": "reference",
+          "weights": {
+            "status": "pinned",
+            "download_url": "https://huggingface.co/sonderlau/nib-exprecast/resolve/main/exPreCast.onnx",
+            "sha256": "534b91b63524f775c460334385f0f0b0b92759fa1596a053d1cac489c84cd00d",
+            "filename": "exPreCast.onnx",
+            "hf": {
+              "repo": "sonderlau/nib-exprecast",
+              "revision": "main",
+              "filename": "exPreCast.onnx"
+            },
+            "artifacts_relpath": "sevir/exprecast/exPreCast.onnx"
+          }
+        },
+        {
+          "id": "wadepre",
+          "version": "0.1.0",
+          "path": "sevir/wadepre",
+          "task": "precip-nowcast.v1",
+          "status": "reference",
+          "weights": {
+            "status": "pinned",
+            "download_url": "https://huggingface.co/sonderlau/nib-wadepre/resolve/main/WADEPre.onnx",
+            "sha256": "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b",
+            "filename": "WADEPre.onnx",
+            "hf": {
+              "repo": "sonderlau/nib-wadepre",
+              "revision": "main",
+              "filename": "WADEPre.onnx"
+            },
+            "artifacts_relpath": "sevir/wadepre/WADEPre.onnx"
+          }
+        }
+      ]
+    }
+  ]
+}
