@@ -154,6 +154,7 @@ def line_chart(
     y_min: float | None = None,
     y_max: float | None = None,
     kind: str = "line",
+    legend: bool = True,
 ) -> str:
     """One x axis, one y axis, one line -- or one group of bars -- per series.
 
@@ -163,12 +164,17 @@ def line_chart(
     carries its length as meaning, so the axis it is drawn against has to start
     somewhere the length means something. A bar chart from 0.80 to 0.93 makes a
     three point difference look like a five-fold one.
+
+    ``legend=False`` is for a cell of a grid, where the legend belongs to the
+    grid and not to each cell: the same two models repeated under every panel are
+    noise pretending to be information.
     """
     if kind not in ("line", "bar"):
         raise ValueError(f"unknown chart kind {kind!r}; line or bar")
-    top, bottom = 48, 62
+    top = 48 if chart.title else 22
+    bottom = 62
     left = 76
-    legend = _legend_width(chart)
+    legend = _legend_width(chart) if legend else 0
     right = 22 + legend
     # The plot is what is left between the two margins. Getting this wrong is not
     # a cosmetic matter: the plot grows by the left margin, everything to its
@@ -300,7 +306,7 @@ def line_chart(
 
     # --- the legend ---------------------------------------------------
     legend_x = plot.x1 + 22
-    for index, series in enumerate(chart.series):
+    for index, series in enumerate(chart.series if legend else ()):
         colour = PALETTE[index % len(PALETTE)]
         y = plot.y0 + 8 + index * 20
         out.append(

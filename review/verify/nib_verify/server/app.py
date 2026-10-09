@@ -412,7 +412,8 @@ def create_app(
         this with ``<img src>``, so it has to answer with an image and not with
         JSON, and it has to be able to fail as an image too.
         """
-        from ..report import chart_for, line_chart, mesh_for, mesh_svg
+        from ..report import (chart_for, chart_panels, line_chart, mesh_for,
+                              mesh_svg, small_multiples)
 
         params = request.query_params
         kind = (params.get("kind") or "line").lower()
@@ -435,16 +436,31 @@ def create_app(
                     panel_dims=("member", *params.getlist("panel")),
                 ))
             else:
-                chart = chart_for(
-                    s, cfg,
-                    method=method,
-                    s=_filters_from_query(params),
-                    x=params.get("x") or "lead_minutes",
-                    series=tuple(params.getlist("series")) or ("member",),
-                )
-                svg = line_chart(chart, width=_int_param(params, "width", 760),
-                                 height=_int_param(params, "height", 440),
-                                 kind="bar" if kind == "bar" else "line")
+                panels = params.getlist("panel")
+                if panels:
+                    labels, charts = chart_panels(
+                        s, cfg,
+                        method=method,
+                        s=_filters_from_query(params),
+                        x=params.get("x") or "lead_minutes",
+                        series=tuple(params.getlist("series")) or ("member",),
+                        panel_dims=tuple(panels),
+                    )
+                    svg = small_multiples(
+                        charts, labels,
+                        kind="bar" if kind == "bar" else "line",
+                        width=_int_param(params, "width", 820))
+                else:
+                    chart = chart_for(
+                        s, cfg,
+                        method=method,
+                        s=_filters_from_query(params),
+                        x=params.get("x") or "lead_minutes",
+                        series=tuple(params.getlist("series")) or ("member",),
+                    )
+                    svg = line_chart(chart, width=_int_param(params, "width", 760),
+                                     height=_int_param(params, "height", 440),
+                                     kind="bar" if kind == "bar" else "line")
         return Response(
             content=svg,
             media_type="image/svg+xml",

@@ -219,9 +219,11 @@ def test_the_chart_and_the_table_expand_by_the_same_dimensions():
     chart = app[app.index("function showChart"):]
     chart = chart[: chart.index("\n}\n")]
     assert 'chart.delete("g")' in chart, "g is the table's grouping, not the chart's"
+    assert 'chart.set("series", "member")' in chart, "the models are the marks"
     assert 'chart.set("kind", kind)' in chart, "the form reaches the chart"
-    assert '["member", ...many]' in chart, \
-        "one mark per model and per parameter filtered to more than one"
+    assert 'chart.append("panel", extra)' in chart, \
+        "a parameter with more than one value is a panel, not another line"
+    assert '["member", ...many]' not in chart, "and never a second series"
 
 
 def test_the_axis_is_a_control_and_not_the_order_the_chips_were_clicked():

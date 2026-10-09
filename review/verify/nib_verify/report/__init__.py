@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence
 
 from ..query.service import DEFAULT_LIMIT
 from .chart import PALETTE, Chart, Series, from_query, line_chart
+from .grid import columns_for, small_multiples
 from .mesh import Mesh, Panel, mesh_for, mesh_svg
 
 __all__ = [
@@ -22,10 +23,13 @@ __all__ = [
     "Panel",
     "Series",
     "chart_for",
+    "chart_panels",
+    "columns_for",
     "from_query",
     "line_chart",
     "mesh_for",
     "mesh_svg",
+    "small_multiples",
 ]
 
 
@@ -52,3 +56,47 @@ def chart_for(
     expand = tuple(dict.fromkeys([*series, x]))
     result = query_scores(store, cfg, method=method, s=s, g=expand, limit=limit)
     return from_query(result, x=x, series=tuple(series))
+
+
+def chart_panels(
+    store,
+    cfg,
+    *,
+    method: str,
+    s: Mapping[str, Any] | None = None,
+    x: str = "lead_minutes",
+    series: Sequence[str] = ("member",),
+    panel_dims: Sequence[str] = (),
+    limit: int = DEFAULT_LIMIT,
+) -> tuple[list[str], list[Chart]]:
+    """One chart per value of the panel dimensions, all sharing a y axis.
+
+    A parameter filtered to more than one value is a dimension, and a dimension
+    drawn as extra lines in one panel is a different picture: three thresholds
+    overlaid read as three ways of scoring one forecast, and side by side they
+    read as one score moving with the threshold.
+    """
+    from ..query.service import query_scores
+
+    panels = tuple(dict.fromkeys(panel_dims))
+    expand = tuple(dict.fromkeys([*panels, *series, x]))
+    result = query_scores(store, cfg, method=method, s=s, g=expand, limit=limit)
+    records = result.get("records") or []
+
+    if not panels:
+        return [""], [from_query(result, x=x, series=tuple(series))]
+
+    seen: dict[tuple, None] = {}
+    for record in records:
+        seen.setdefault(tuple(str(record.get(d)) for d in panels), None)
+
+    labels, built = [], []
+    for key in sorted(seen):
+        subset = [r for r in records
+                  if tuple(str(r.get(d)) for d in panels) == key]
+        # The parameter's name, not just its value: a panel titled "133" makes the
+        # reader work out which dimension it separates.
+        labels.append(" / ".join(f"{d} {v}" for d, v in zip(panels, key) if v))
+        built.append(from_query({"records": subset, "meta": result.get("meta") or {}},
+                                x=x, series=tuple(series)))
+    return labels, built

@@ -1008,9 +1008,14 @@ const WEEK = 7 * 24 * 3600 * 1000;
 
 function fillInitDefaults() {
   const span = state.initSpan;
-  if (!span) return;
-  const end = new Date(span[1]);
-  const start = new Date(Math.max(new Date(span[0]).getTime(), end.getTime() - WEEK));
+  // The window ends now: it follows the clock on a live system. It starts a week
+  // before the data ends rather than a week before now, because on a replayed
+  // dataset those are months apart and a week before now is an empty page -- and
+  // the page cannot tell a replay from a live feed.
+  const end = new Date();
+  const anchor = span ? new Date(span[1]) : end;
+  const start = new Date(Math.max(span ? new Date(span[0]).getTime() : 0,
+                                  anchor.getTime() - WEEK));
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
 }
@@ -1181,9 +1186,12 @@ function showChart(params) {
     for (const extra of many) chart.append("panel", extra);
   } else {
     chart.set("x", $("#q-axis").value);
-    // One mark per model, and one per value of any parameter filtered to more
-    // than one -- asking for three thresholds must not draw a single line.
-    for (const name of ["member", ...many]) chart.append("series", name);
+    // One line per model. A parameter filtered to more than one value becomes a
+    // panel each, not another line: three thresholds overlaid read as three ways
+    // of scoring one forecast, and side by side they read as one score moving
+    // with the threshold.
+    chart.set("series", "member");
+    for (const extra of many) chart.append("panel", extra);
   }
 
   state.chartUrl = `/api/chart?${chart.toString()}`;
@@ -1195,7 +1203,8 @@ function showChart(params) {
   $("#chart-empty").hidden = true;
   $("#chart-hint").textContent = kind === "mesh"
     ? "grid: init time across, lead up, one panel per member and parameter"
-    : `${kind} along ${$("#q-axis").value}, one line per ${["member", ...many].join(" and ")}`;
+    : `${kind} along ${$("#q-axis").value}, one line per member`
+      + (many.length ? `, one panel per ${many.join(" and ")}` : "");
   $("#chart-note").textContent = chart.get("method") + " — drawn from the same query";
   renderKindChips();
 }

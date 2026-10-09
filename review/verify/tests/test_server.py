@@ -844,3 +844,49 @@ def test_the_chart_endpoint_can_draw_a_mesh_and_still_draws_a_line(client):
                                            "kind": "scatter"})
     assert bad.status_code == 400
     assert "scatter" in bad.json()["detail"]
+
+
+def test_more_than_one_parameter_value_is_drawn_as_a_grid(client):
+    """Three thresholds are three panels, not three lines.
+
+    Overlaid they read as three ways of scoring one forecast; side by side they
+    read as one score moving with the threshold, which is the question somebody
+    picking three thresholds is asking.
+    """
+    create(client)
+    started = client.post("/api/runs", json={"config": "vil-test",
+                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    wait(client, started["job"])
+
+    params = {"config": "vil-test", "method": "ts", "x": "lead_minutes",
+              "series": "member", "level": "16,74,133", "panel": "level"}
+    response = client.get("/api/chart", params=params)
+    assert response.status_code == 200, response.text
+    root = ET.fromstring(response.text)
+    cells = root.findall("{http://www.w3.org/2000/svg}svg")
+    assert len(cells) == 3, "one cell per threshold"
+
+    # and the page only asks for a grid when there is more than one value to
+    # separate: with one threshold there is nothing for a panel to be
+    single = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
+                                              "x": "lead_minutes", "series": "member",
+                                              "level": "133"})
+    assert single.status_code == 200
+    assert not ET.fromstring(single.text).findall("{http://www.w3.org/2000/svg}svg"), \
+        "one threshold is not a grid"
+
+
+def test_the_grid_draws_the_same_query_as_the_table(client):
+    """The chart cannot show a number the table would refuse to return."""
+    create(client)
+    started = client.post("/api/runs", json={"config": "vil-test",
+                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    wait(client, started["job"])
+
+    params = {"config": "vil-test", "method": "ts", "x": "lead_minutes",
+              "series": "member", "level": "16,74,133", "panel": "level"}
+    scores = client.get("/api/scores", params={**params, "g": ["member", "lead_minutes",
+                                                               "level"]}).json()
+    drawn = ET.fromstring(client.get("/api/chart", params=params).text)
+    cells = drawn.findall("{http://www.w3.org/2000/svg}svg")
+    assert len(cells) == len({r["level"] for r in scores["records"]})
