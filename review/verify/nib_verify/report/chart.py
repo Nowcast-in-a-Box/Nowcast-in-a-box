@@ -217,7 +217,14 @@ def line_chart(
     # The plot is what is left between the two margins. Getting this wrong is not
     # a cosmetic matter: the plot grows by the left margin, everything to its
     # right shifts with it, and the legend walks off the canvas.
-    plot = _Box(left, top, width - left - right, height - bottom)
+    #
+    # ``height - top - bottom``, not ``height - bottom``: the box starts at
+    # ``top``, so subtracting only the bottom margin left ``bottom - top`` = 14 px
+    # under the plot for a row of tick labels and the axis name together. The
+    # labels ran eight pixels past the canvas and were clipped by it -- for a long
+    # time, and only visibly once the font grew and the axis started labelling its
+    # ends.
+    plot = _Box(left, top, width - left - right, height - top - bottom)
 
     ys = chart.values()
     if kind == "bar" and ys:

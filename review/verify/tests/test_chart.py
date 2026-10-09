@@ -123,15 +123,25 @@ def test_everything_drawn_is_inside_the_canvas():
         if element.get("transform"):
             continue                          # the rotated axis label
         size = float(element.get("font-size", 11))
-        length = len("".join(element.itertext())) * size * 0.6
+        words = "".join(element.itertext())
+        length = len(words) * size * 0.6
         x = float(element.get("x"))
         anchor = element.get("text-anchor", "start")
         left = x - length if anchor == "end" else (x - length / 2 if anchor == "middle" else x)
-        assert left >= -1, f"text starts at {left}: {''.join(element.itertext())!r}"
+        assert left >= -1, f"text starts at {left}: {words!r}"
         assert left + length <= width + 1, (
-            f"text runs to {left + length:.0f} on a {width} canvas: "
-            f"{''.join(element.itertext())!r}"
+            f"text runs to {left + length:.0f} on a {width} canvas: {words!r}"
         )
+        # And down as well as across. The x tick labels sit below the plot, and
+        # the room below the plot is `bottom` minus the top margin -- which is 14
+        # pixels when the plot is built as ``height - bottom`` from a ``y0`` of
+        # ``top``. The labels then ran eight pixels past the canvas and were
+        # clipped by it, which reads as a cropped axis rather than a layout bug.
+        y = float(element.get("y"))
+        assert y + size * 0.25 <= height + 0.5, (
+            f"text descends to {y + size * 0.25:.0f} on a {height} canvas: {words!r}"
+        )
+        assert y - size * 0.8 >= -0.5, f"text rises to {y - size * 0.8:.0f}: {words!r}"
 
 
 def test_the_canvas_carries_no_legend():
