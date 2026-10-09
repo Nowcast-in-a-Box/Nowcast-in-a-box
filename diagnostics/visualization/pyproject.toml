@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nib-visualization"
+version = "0.1.0"
+description = "NiB Visualization kernel: local global basemap, headless field maps and animations (MVP)"
+requires-python = ">=3.12"
+dependencies = [
+    "geopandas>=0.14",
+    "pyogrio>=0.7.2",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+    "matplotlib>=3.8",
+    "cartopy>=0.22",
+    "xarray>=2024.1",
+    "numpy>=1.26",
+    "pillow>=8",
+    "netCDF4>=1.7.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "build>=1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

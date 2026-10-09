@@ -1,0 +1,99 @@
+{
+  "acquired_at_utc": "2026-09-22T11:44:01+00:00",
+  "source_id": "ocha-global-ab-stylized-un-geodata-simplified",
+  "service_url": "https://gis.unocha.org/server/rest/services/Hosted/Global_AB_stylized_fs_imagery/FeatureServer",
+  "item_info_url": "https://gis.unocha.org/server/rest/services/Hosted/Global_AB_stylized_fs_imagery/FeatureServer/info/iteminfo?f=json",
+  "source_record_path": "basemap_sources/selected-source.json",
+  "access_date": "2026-09-22",
+  "output_gpkg": "data/cache/basemap/global.gpkg",
+  "output_gpkg_sha256": "9bc9f79e14a77fd60433ca1d88e62e337baccc8b6ae466eb7f669bfbd6677e38",
+  "conversion": {
+    "method": "ArcGIS REST query (f=geojson, outSR=4326, orderByFields=<objectIdField>, resultOffset pagination) -> geopandas.GeoDataFrame.from_features -> GeoPackage via geopandas to_file (pyogrio)",
+    "commands": [
+      "python scripts/acquire_basemap.py --source basemap_sources/selected-source.json --output data/cache/basemap/global.gpkg"
+    ],
+    "geopandas_version": "1.1.4"
+  },
+  "layers": {
+    "country_land": {
+      "service_layer_id": 107,
+      "service_layer_name": "gbl_Country polygons_stylized",
+      "gpkg_layer": "country_land",
+      "official_count": 246,
+      "collected_count": 246,
+      "pages": 1,
+      "page_size": 2000,
+      "order_field": "objectid_1",
+      "raw_file": "data/cache/basemap/raw/country_land.geojson",
+      "raw_sha256": "be4b2c9343467821f9dd27c78b0c12fa876f1ca1cbfa9ec7d8ef752dd2ad726d",
+      "features_written": 246,
+      "crs": "EPSG:4326",
+      "bounds_wgs84": [
+        -179.999989,
+        -89.0,
+        179.999989,
+        85.485039
+      ]
+    },
+    "boundary_lines": {
+      "service_layer_id": 105,
+      "service_layer_name": "gbl_Administrative boundary lines_stylized",
+      "gpkg_layer": "boundary_lines",
+      "official_count": 743,
+      "collected_count": 743,
+      "pages": 1,
+      "page_size": 2000,
+      "order_field": "objectid_1",
+      "raw_file": "data/cache/basemap/raw/boundary_lines.geojson",
+      "raw_sha256": "a4fe296c64f55eb8def5311fbad08dae5a7e81d4a2f7f16fe2b0ed23ebf568cd",
+      "features_written": 743,
+      "crs": "EPSG:4326",
+      "bounds_wgs84": [
+        -179.999989,
+        -89.0,
+        179.999989,
+        85.485039
+      ],
+      "type_distribution_observed": {
+        "1": 397,
+        "0": 332,
+        "3": 13,
+        "4": 1
+      }
+    },
+    "lakes": {
+      "service_layer_id": 104,
+      "service_layer_name": "gbl_Lakes_25M_stylized",
+      "gpkg_layer": "lakes",
+      "official_count": 1,
+      "collected_count": 1,
+      "pages": 1,
+      "page_size": 2000,
+      "order_field": "objectid",
+      "raw_file": "data/cache/basemap/raw/lakes.geojson",
+      "raw_sha256": "624a44f275e961a67b42bec8d789b33f42c266f3ebbd99ed288a7177f51cb4a9",
+      "features_written": 1,
+      "crs": "EPSG:4326",
+      "bounds_wgs84": [
+        47.541752,
+        36.795115,
+        54.789801,
+        47.007582
+      ]
+    }
+  },
+  "completeness": {
+    "rule": "per layer, official returnCountOnly count == unique collected ids == features written",
+    "passed": true
+  },
+  "observed_global_coverage": {
+    "boundary_lines_bounds_wgs84": [
+      -179.999989,
+      -89.0,
+      179.999989,
+      85.485039
+    ],
+    "near_global": true,
+    "check": "lon span > 300 deg and lat max > 70 and lat min < -50 (generalized dataset)"
+  }
+}

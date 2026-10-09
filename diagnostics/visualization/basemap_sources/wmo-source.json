@@ -1,0 +1,23 @@
+{
+  "source_id": "wmo-agreed-basemap-wgs84",
+  "title": "WMO Agreed Basemap WGS 1984 (WKID:4326)",
+  "publisher": "World Meteorological Organization (WMO)",
+  "webmap_item_id": "c22f616a8130474eb6b8bda7d35936d9",
+  "webmap_item_url": "https://www.arcgis.com/home/item.html?id=c22f616a8130474eb6b8bda7d35936d9",
+  "vector_tile_item_id": "f278face2e254f9c846eed2a212efcd1",
+  "vector_tile_service_url": "https://tiles.arcgis.com/tiles/supi6xDj3qduY1gn/arcgis/rest/services/WMO_Agreed_Basemap_4326_/VectorTileServer",
+  "disclaimer_item_id": "92644b79d12b4973ad72dc35c4e8c634",
+  "disclaimer_service_url": "https://tiles.arcgis.com/tiles/supi6xDj3qduY1gn/arcgis/rest/services/WMOMapDisclaimerWGS1984/MapServer",
+  "lineage": "WMO item states that it is based on UNmap CORE datasets altered for the WMO Agency.",
+  "spatial_reference": "EPSG:4326",
+  "publisher_scale_statement": "Suitable for global mapping at the scale of 1:1 million and above.",
+  "target_cartographic_scale_denominator": 1000000,
+  "scale_interpretation": "The 1:1,000,000 statement is a cartographic suitability claim, not a certified positional accuracy or source geometry resolution.",
+  "tile_resampling_observed": "At Germany LOD 9 tile (row 55, column 270), the official service returned a resampled PBF from physical LOD 7 tile (row 13, column 67), reported in x-arcgis-info on 2026-09-26. Offline rendering must support parent-tile fallback.",
+  "public_service_capabilities_observed": "TilesOnly,Tilemap; exportTilesAllowed=false; no associated public Service2Data item observed on 2026-09-26.",
+  "acquisition": "Mirror official public vector PBF tiles through first LOD whose nominal scale denominator is <= 1,000,000, plus original style, sprites, glyphs and metadata; keep downloaded files under gitignored data/cache/basemap/wmo.",
+  "source_selection": "User selected WMO for subsequent NiB basemap work on 2026-09-26. An optional offline WMO vector-tile adapter was implemented on 2026-09-27 for pure basemap and 2D field maps; independent review is pending. Existing VIS-001 OCHA GeoPackage remains the default and reviewed baseline.",
+  "usage_boundary": "User confirmed this WMO basemap can be used for this project on 2026-09-26. Local cache is for project use; public redistribution or packaging is not asserted by this record.",
+  "attribution": "WMO Agreed Basemap WGS 1984; based on UNmap CORE datasets, altered for WMO.",
+  "disclaimer": "The designations and presentation do not imply an opinion by WMO or the UN on the legal status of a territory or delimitation of borders; depiction and names are not warranted error-free and do not imply official endorsement."
+}

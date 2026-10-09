@@ -1,0 +1,53 @@
+{
+  "source_id": "noaa-etopo-2022-v1-30s-surface",
+  "scope": "Source-side native crop and display preview for the existing CMA radar preview domain; not Forecast renderer integration",
+  "created_at_utc": "2026-10-08T01:22:26.712630+00:00",
+  "source_file": "data/cache/terrain/etopo2022/ETOPO_2022_v1_30s_N90W180_surface.nc",
+  "source_sha256": "3d76cea4fca0a056b6d8c4bcf7f4073465b975489849235309e65d44ed4ed404",
+  "requested_bbox_west_east_south_north": [72.995, 134.995, 12.205000000000002, 54.205],
+  "crop": {
+    "path": "data/cache/terrain/etopo2022/cma-domain.nc",
+    "sha256": "384b37658f3db551047b14431c2829f2e385e1046362e268a0aa13304da0c9aa",
+    "shape_lat_lon": [5041, 7441],
+    "cells": 37510081,
+    "cell_edges_west_east_south_north": [72.99166666666667, 135.0, 12.199999999999996, 54.20833333333332],
+    "minimum_m": -9217.25,
+    "maximum_m": 8353.8330078125,
+    "horizontal_crs": "EPSG:4326",
+    "vertical_crs": "EPSG:3855",
+    "method": "Contiguous native-grid slice covering every source cell intersecting the requested viewport; no regridding or interpolation",
+    "verification": "Saved lat, lon and z were fully reopened and compared with the in-memory source slice using exact array equality"
+  },
+  "display": {
+    "sample_shape_lat_lon": [1355, 2000],
+    "resampling": "Nearest native cell at each display-pixel centre",
+    "normalization": "Linear -10000 to 8500 m; explicit color change around 0 m; no hillshade",
+    "terrain_only": {
+      "path": "output/terrain/cma-domain/terrain-only.png",
+      "sha256": "27b7dc9c0c9f866f73a520c467ef609042fbc849ece6c293904accc7b362847d",
+      "size_px": [1800, 1500]
+    },
+    "terrain_wmo": {
+      "path": "output/terrain/cma-domain/terrain-wmo.png",
+      "sha256": "1a9019ff2299155d34fe0f6dec14452644babf24ebed5448a5e888cd16d6dd4a",
+      "size_px": [1800, 1500]
+    }
+  },
+  "script": "scripts/preview_etopo.py",
+  "script_sha256": "0f3555463b24c54e9388d515bbc7e4639d7c8b489900dc21155473481afe7af5",
+  "checks": {
+    "ruff": "passed",
+    "network_disabled_during_run": true,
+    "source_unchanged": true,
+    "native_crop_exact_equality": true,
+    "all_crop_cells_decoded": true,
+    "png_full_decode": true,
+    "visual_review": "passed by implementer at full 1800x1500 resolution: terrain, bathymetry, zero break, coordinates and WMO boundaries readable; no text overlap or clipping"
+  },
+  "limitations": [
+    "PNG display sampling is not a scientific resampling product; use the regional NetCDF for values.",
+    "Blue means elevation below zero, not a separately validated land/sea mask.",
+    "WMO overlay uses locally mirrored vector geometry and does not include official place-name labels.",
+    "No independent review, radar overlay, terrain adapter or production integration is claimed."
+  ]
+}

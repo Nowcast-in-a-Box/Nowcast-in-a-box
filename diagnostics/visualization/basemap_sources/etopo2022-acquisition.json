@@ -1,0 +1,117 @@
+{
+  "source_id": "noaa-etopo-2022-v1-30s-surface",
+  "source_record": "basemap_sources/etopo2022-source.json",
+  "source_record_sha256": "f551e0fa6d3f013e2d47c22184d1e244d29e937f02154c9cce6455fc15d869da",
+  "local_path": "data/cache/terrain/etopo2022/ETOPO_2022_v1_30s_N90W180_surface.nc",
+  "access_date_local": "2026-10-06",
+  "timezone": "Asia/Shanghai",
+  "validation_script": "scripts/verify_etopo.py",
+  "validation_script_sha256": "e5ccafea51ce01ada193c2fa6b46f531abb09e4cc67ae29fdb110ddc505fa27a",
+  "verification": {
+    "verified_at_utc": "2026-10-05T16:24:03.141779+00:00",
+    "size_bytes": 1642335281,
+    "sha256": "3d76cea4fca0a056b6d8c4bcf7f4073465b975489849235309e65d44ed4ed404",
+    "checksum_basis": "Locally computed; no publisher checksum used",
+    "format": "NETCDF4_CLASSIC",
+    "conventions": "CF-1.5",
+    "shape_lat_lon": [
+      21600,
+      43200
+    ],
+    "dtype": "float32",
+    "horizontal_crs": "EPSG:4326",
+    "vertical_crs": "EPSG:3855",
+    "vertical_datum": "EGM2008",
+    "units": "meters",
+    "geotransform": "-180 0.008333333333333333 0 90 0 -0.008333333333333333 ",
+    "coordinates": {
+      "lat": {
+        "count": 21600,
+        "first": -89.99583333333334,
+        "last": 89.99583333333334,
+        "spacing_degrees": 0.008333333333339965,
+        "units": "degrees_north"
+      },
+      "lon": {
+        "count": 43200,
+        "first": -179.99583333333334,
+        "last": 179.99583333333334,
+        "spacing_degrees": 0.008333333333325754,
+        "units": "degrees_east"
+      }
+    },
+    "full_decode": {
+      "cells": 933120000,
+      "missing": 0,
+      "nonfinite": 0,
+      "minimum_m": -10775.45703125,
+      "maximum_m": 8353.8330078125
+    },
+    "nearest_cell_samples": [
+      {
+        "requested_lat_lon": [
+          0,
+          -140
+        ],
+        "cell_lat_lon": [
+          -0.004166666666662877,
+          -140.00416666666666
+        ],
+        "elevation_m": -4323.87939453125
+      },
+      {
+        "requested_lat_lon": [
+          30,
+          90
+        ],
+        "cell_lat_lon": [
+          29.995833333333337,
+          89.99583333333334
+        ],
+        "elevation_m": 5442.0341796875
+      },
+      {
+        "requested_lat_lon": [
+          52,
+          13
+        ],
+        "cell_lat_lon": [
+          51.99583333333334,
+          12.995833333333337
+        ],
+        "elevation_m": 102.2082748413086
+      },
+      {
+        "requested_lat_lon": [
+          31,
+          114
+        ],
+        "cell_lat_lon": [
+          30.995833333333337,
+          113.99583333333334
+        ],
+        "elevation_m": 48.19105529785156
+      }
+    ],
+    "reader_versions": {
+      "netCDF4": "1.7.4",
+      "numpy": "2.5.3",
+      "HDF5": "1.14.6"
+    }
+  },
+  "transfer": {
+    "size_bytes": 1642335281,
+    "segments_including_prefix": 49,
+    "range_headers_verified": 48,
+    "repair_tail_header_verified": true,
+    "last_modified_consistent": "Tue, 04 Oct 2022 21:56:57 GMT",
+    "ranges_contiguous": true,
+    "segment_lengths_match": true,
+    "hdf5_signature_match": true,
+    "independent_8MiB_overlap_match": true,
+    "initial_parallel_exit_code": 18,
+    "repaired_segment": "009.bin",
+    "repair_exit_code": 0
+  },
+  "scope": "Download and full NetCDF decoding only; renderer integration and scientific accuracy assessment not performed."
+}
