@@ -392,7 +392,9 @@ def test_the_legend_is_the_roster_and_clicking_it_hides_a_model():
 
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'id="chart-legend"' in html
-    assert html.index('id="chart-legend"') < html.index('id="q-kind"'),         "the legend comes first in the row"
+    row = html[html.index('id="chart-legend"') - 400: html.index('id="q-kind"') + 200]
+    assert "justify-content:space-between" in row, "the two ends of one row"
+    assert html.index('id="chart-legend"') < html.index('id="q-kind"'),         "the key on the left, the buttons on the right"
 
 
 def test_the_gap_marker_is_on_the_page_because_the_canvas_has_no_legend():

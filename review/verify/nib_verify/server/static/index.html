@@ -205,12 +205,14 @@
       <div class="card">
         <h2 style="margin:0 0 6px">Chart</h2>
         <div id="chart-card" hidden>
-          <div class="row" style="margin:8px 0 10px">
-            <!-- The legend first, then the form: the key is what the eye goes to,
-                 and a key you can click is a key you will click. -->
+          <div class="row" style="margin:8px 0 10px; justify-content:space-between">
+            <!-- The key on the left and the form hard right: the key is what the
+                 eye goes to, and the two buttons are what the hand does. -->
             <div class="chips" id="chart-legend"></div>
-            <div class="chips" id="q-kind"></div>
-            <span class="muted tiny" id="q-kind-note"></span>
+            <div class="row" style="gap:8px">
+              <span class="muted tiny" id="q-kind-note"></span>
+              <div class="chips" id="q-kind"></div>
+            </div>
           </div>
           <img id="chart" alt="chart of the current query" style="width:100%; height:auto; display:block">
         </div>
