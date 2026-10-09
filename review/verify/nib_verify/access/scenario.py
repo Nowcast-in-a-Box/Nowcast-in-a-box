@@ -59,6 +59,7 @@ CONVECTIVE: dict[str, Any] = {
     "truth_noise": 4.0,
     "forecast_noise": 5.0,
     "forecast_lag_minutes": 10.0,
+    "forecast_spread": 0.45,
     "skill_spread": 0.9,
     "missing_kind": "range",
     "missing_points": 60,

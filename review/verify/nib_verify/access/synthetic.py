@@ -73,13 +73,16 @@ AGED_NOISE = 20.0
 YOUNG_LAG = 0.35
 AGED_LAG = 12.0
 
-#: How much the echoes grow as the forecast ages, as a fraction. A gain rather
-#: than an offset, because an offset rains on the clear sky as well -- see
-#: ``_make_field``.
-AGED_GAIN = 0.45
-
-#: And a little of the offset too, in truth units, for the spread at the edges.
-AGED_SPREAD = 4.0
+#: The three error kinds age by the same curve and are not the same kind of thing:
+#: ``forecast_noise`` is the edges being wrong, ``forecast_lag_minutes`` is the
+#: position being wrong, ``forecast_spread`` is the area being wrong. Aging scales
+#: *what the scenario asked for* -- a scenario that asks for no error gets none,
+#: which is what ``simple`` is and what a dozen tests stand on.
+#:
+#: The area error is a fraction, and it is a gain rather than an offset because an
+#: offset lifts the whole domain until the clear sky is raining too -- that version
+#: gave a frequency bias of six at a low threshold, and no forecast has ever had
+#: one.
 
 
 @dataclass(frozen=True)
@@ -152,6 +155,7 @@ class SyntheticAccess:
         truth_noise: float = 0.0,
         forecast_noise: float = 0.0,
         forecast_bias: float = 0.0,
+        forecast_spread: float = 0.0,
         vmin: float | None = 0.0,
         vmax: float | None = None,
         missing_points: int = 0,
@@ -200,6 +204,7 @@ class SyntheticAccess:
         self.truth_noise = float(truth_noise)
         self.forecast_noise = float(forecast_noise)
         self.forecast_bias = float(forecast_bias)
+        self.forecast_spread = float(forecast_spread)
         # Nothing is clipped unless asked: a synthetic provider that silently
         # caps the field would make high thresholds unreachable, and a test that
         # passes for the wrong reason is worse than no test.
@@ -374,6 +379,20 @@ class SyntheticAccess:
             if lead not in self.drop_leads
         ]
 
+    def lag_for(self, model_id: str, lead_minutes: int) -> float:
+        """How far behind the truth this model's field is, at this lead.
+
+        Public because a test of the *mechanism* -- that a lagging forecast is the
+        field from earlier rather than a blurred copy of this one -- needs the same
+        number the mechanism uses, and writing the formula a second time in the
+        test is how the two stop agreeing.
+        """
+        lead = int(lead_minutes)
+        rank = 1.0 + self.model_ids.index(model_id) * self.skill_spread
+        aging = lead / (lead + SKILL_TAU_MINUTES)
+        return self.forecast_lag_minutes * rank * (
+            YOUNG_LAG + (AGED_LAG - YOUNG_LAG) * aging)
+
     def get_prediction(
         self, model_id: str, init_time: datetime, lead_minutes: int
     ) -> Field:
@@ -402,16 +421,19 @@ class SyntheticAccess:
         # forecast does not stop getting worse because a configuration stopped
         # asking for it.
         lead = int(lead_minutes)
+        # A scenario that declares no error gets none. ``simple`` is the one that
+        # matters: a provider whose forecast is meant to *be* the truth is what a
+        # dozen tests stand on, and aging it would be inventing an error nobody
+        # asked for. Relative aging is a property of a forecast that is trying.
         aging = lead / (lead + SKILL_TAU_MINUTES)
         return self._make_field(
             self.model_coords, valid_time, name=model_id,
             noise=self.forecast_noise * rank * (
                 YOUNG_NOISE + (AGED_NOISE - YOUNG_NOISE) * aging),
             stream=2,
-            gain=1.0 + AGED_GAIN * aging,
-            bias=self.forecast_bias + AGED_SPREAD * aging,
-            lag_minutes=self.forecast_lag_minutes * rank * (
-                YOUNG_LAG + (AGED_LAG - YOUNG_LAG) * aging),
+            gain=1.0 + self.forecast_spread * aging,
+            bias=self.forecast_bias,
+            lag_minutes=self.lag_for(model_id, lead),
             source=self.model_sources.get(model_id),
         )
 

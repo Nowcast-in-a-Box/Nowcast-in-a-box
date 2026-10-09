@@ -191,7 +191,11 @@ def test_a_lagging_forecast_is_the_field_from_earlier_not_a_blurred_one():
     lead = 30
     predicted = access.get_prediction("mlcast-det", T0, lead)
     observed = access.get_observation("radar-composite", T0 + timedelta(minutes=lead))
-    expected = access.blob(access.model_coords, T0)      # i.e. (T0+30min) - 30min
+    # The lag is lead-dependent now, so ask the access for it rather than writing
+    # the formula a second time here where the two would drift apart.
+    lag = access.lag_for("mlcast-det", lead)
+    expected = access.blob(access.model_coords,
+                           T0 + timedelta(minutes=lead - lag))
     assert np.allclose(predicted.data, expected)
     assert not np.array_equal(predicted.data, observed.data)
 
@@ -430,22 +434,27 @@ def test_noise_and_bias_are_measured_in_the_truths_units():
     40-scale one. Added after the unit change it would be 5 of one and 5 of the
     other, which is 2% and 12%: the same number meaning two different forecasts.
     """
-    access = SyntheticAccess(
-        t_start=T0, vmin=None, vmax=None, truth_noise=0.0, forecast_noise=5.0,
-        observation_names=("vil", "rain"), model_ids=("m",),
-        sources={"rain": {"scale": 0.1, "noise": 0.0}},
-        model_sources={"m": "rain"},
-    )
+    settings = dict(t_start=T0, vmin=None, vmax=None, truth_noise=0.0,
+                    observation_names=("vil", "rain"), model_ids=("m", "n"),
+                    sources={"rain": {"scale": 0.1, "noise": 0.0}},
+                    model_sources={"m": "rain", "n": "vil"})
+    access = SyntheticAccess(forecast_noise=5.0, **settings)
     scaled = access.get_observation("rain", T0).data
     plain = access.get_observation("vil", T0).data
     assert np.allclose(plain * 0.1, scaled)
 
-    # and the model's error is a fraction of the field it is wrong about, so the
-    # same scenario produces the same relative spread on either scale
-    here = access.get_prediction("m", T0, 10).data
-    there = SyntheticAccess(t_start=T0, forecast_noise=5.0).get_prediction(
-        "mlcast-det", T0, 10).data
-    assert abs(float(np.std(here)) / float(np.std(there)) - 0.1) < 0.02
+    # And the model's error is a fraction of the field it is wrong about, so the
+    # error the noise *adds* is ten times smaller on the ten-times-smaller scale.
+    # One access and two models rather than two accesses: the noise is drawn from
+    # the coordinates and the minute, so two providers are two different draws and
+    # the comparison becomes about the draws instead of about the units.
+    def added(model: str) -> float:
+        noisy = access.get_prediction(model, T0, 10).data
+        quiet = SyntheticAccess(forecast_noise=0.0, **settings).get_prediction(
+            model, T0, 10).data
+        return float(np.std(noisy - quiet))
+
+    assert abs(added("m") * 10 / added("n") - 1) < 0.05, (added("m"), added("n"))
 
 
 def test_a_forecast_gets_worse_with_lead():
