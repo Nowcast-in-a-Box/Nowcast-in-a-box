@@ -212,7 +212,23 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
     header = 30 if mesh.direction else 0
     total_h = top + header + len(mesh.panels) * (panel_h + label_row + gap) + 44
 
-    lo, hi = min(mesh.values()), max(mesh.values())
+    # The ends of the ramp come from the 2nd and 98th percentile, not from the
+    # extremes. One long-lead cell that over-forecast by a factor of three takes
+    # the whole ramp with it: every other cell, all of them between 1.0 and 1.5,
+    # lands in the bottom tenth of a scale that now runs to 2.2 and the mesh reads
+    # as empty. Values past the ends saturate, which is what a ramp is for.
+    every = sorted(mesh.values())
+    if len(every) >= 25:
+        # Nearest rank over the *gaps* between values, not over the count: with
+        # thirty values, 0.98 * 30 is 29, which is the last one -- the outlier
+        # this is here to exclude.
+        last = len(every) - 1
+        lo = every[int(round(0.02 * last))]
+        hi = every[int(round(0.98 * last))]
+    else:
+        lo, hi = every[0], every[-1]
+    if hi <= lo:
+        hi = lo + 1e-9
     out: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="{total_h}" '
         f'viewBox="0 0 {total_w} {total_h}" font-family="Helvetica,Arial,sans-serif">',

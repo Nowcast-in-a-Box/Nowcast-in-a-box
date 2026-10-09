@@ -19,14 +19,17 @@ And throughout: the defaults have not moved. Everything here is additive.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
 
+import nib_verify.demo as demo_module
 from nib_verify.access import FieldUnavailable, scenario
 from nib_verify.access.factory import build_access
 from nib_verify.access.synthetic import MISSING_KINDS, SyntheticAccess
+
+from nib_verify.core.regrid import align_pair
 
 from .conftest import T0, make_access
 
@@ -443,3 +446,39 @@ def test_noise_and_bias_are_measured_in_the_truths_units():
     there = SyntheticAccess(t_start=T0, forecast_noise=5.0).get_prediction(
         "mlcast-det", T0, 10).data
     assert abs(float(np.std(here)) / float(np.std(there)) - 0.1) < 0.02
+
+
+def test_a_forecast_gets_worse_with_lead():
+    """The three ways it gets worse at once, and why they are three.
+
+    A nowcast is not a blurred copy of the truth: as it ages the field it started
+    from is older, it is noisier, and it has spread. One number for all three
+    would move them together in a way real forecasts do not -- it is the position
+    error that empties a high threshold and the spread that makes a low one
+    over-forecast -- and a mesh whose rows all look alike is a mesh with nothing
+    to read.
+    """
+    access = build_access("mock", **demo_module.catalogue("convective"))
+    source = demo_module.SOURCES[0].id
+    model = "mlcast-det"
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def at(lead):
+        prediction = access.get_prediction(model, start, lead)
+        truth = access.get_observation(source, prediction.valid_time)
+        t_arr, p_arr, valid = align_pair(truth, prediction, truth.coords)
+        level = 40.0
+        o = (np.nan_to_num(t_arr, nan=-999) >= level) & valid
+        f = (np.nan_to_num(p_arr, nan=-999) >= level) & valid
+        hit = int((o & f).sum())
+        false = int((~o & f).sum())
+        miss = int((o & ~f).sum())
+        return hit / (hit + false + miss), (hit + false) / (hit + miss)
+
+    young_ts, young_bias = at(10)
+    aged_ts, aged_bias = at(180)
+    assert young_ts > aged_ts + 0.1, (young_ts, aged_ts)
+    assert aged_bias > young_bias, (young_bias, aged_bias)
+    # and in the range a precipitation nowcast is actually scored in, not 0.99
+    assert 0.4 < young_ts < 0.9, young_ts
+    assert aged_ts < 0.5, aged_ts

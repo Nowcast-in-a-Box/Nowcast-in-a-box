@@ -48,6 +48,40 @@ REFERENCE_SPAN = (DEFAULT_EXTENT[2] - DEFAULT_EXTENT[0],
 MISSING_KINDS = ("none", "random", "range")
 
 
+#: The three ends of the aging curve were chosen by measuring what they produce,
+#: not by taste: at a lead of ten minutes the threat score is 0.6-0.75, bias sits
+#: at 1.0 and FSS is 0.98; at three hours the threat score is 0.2-0.3, bias reaches
+#: 2.0 for a low threshold at a long lead -- the classic over-forecast -- and FSS
+#: is 0.8. Those are the numbers a precipitation nowcast actually gets, and a
+#: demonstration whose scores are all 0.99 shows a reader nothing.
+#:
+#: The two scales are the same one: the field is generated in the truth's units,
+#: so a noise of twenty is twenty of those, which the product's own scale turns
+#: into about five dBZ. Written in the units of the thing being noised, once.
+#:
+#: How fast a nowcast ages, in minutes. At a lead of ``tau`` it is halfway to
+#: its worst; at three times ``tau`` the difference is small. Forty-five is a
+#: convective cell's worth of "still nearly right at ten minutes, mostly wrong at
+#: an hour", which is the span a nowcast is actually used over.
+SKILL_TAU_MINUTES = 45.0
+
+#: Noise relative to what the scenario asked for, young and aged.
+YOUNG_NOISE = 0.35
+AGED_NOISE = 20.0
+
+#: Position error, same two ends of the same scale.
+YOUNG_LAG = 0.35
+AGED_LAG = 12.0
+
+#: How much the echoes grow as the forecast ages, as a fraction. A gain rather
+#: than an offset, because an offset rains on the clear sky as well -- see
+#: ``_make_field``.
+AGED_GAIN = 0.45
+
+#: And a little of the offset too, in truth units, for the spread at the edges.
+AGED_SPREAD = 4.0
+
+
 @dataclass(frozen=True)
 class Source:
     """One observation product, as the platform serves it.
@@ -356,10 +390,28 @@ class SyntheticAccess:
         # rather than a table of per-model skill, because a comparison needs two
         # models that differ and not five that differ in five ways.
         rank = 1.0 + self.model_ids.index(model_id) * self.skill_spread
+        # A nowcast gets worse with lead time, and it gets worse in three ways at
+        # once: the field it started from is older, it is noisier, and it has
+        # spread. One number for all three would move them together in a way real
+        # forecasts do not -- it is the *position* error that empties a high
+        # threshold, and the *spread* that makes a low one over-forecast, and a
+        # mesh whose rows all look alike is a mesh with nothing to read.
+        #
+        # ``lead / (lead + tau)`` rather than ``lead / horizon``: it saturates, so
+        # it needs no upper bound and no knowledge of how far anybody asked, and a
+        # forecast does not stop getting worse because a configuration stopped
+        # asking for it.
+        lead = int(lead_minutes)
+        aging = lead / (lead + SKILL_TAU_MINUTES)
         return self._make_field(
             self.model_coords, valid_time, name=model_id,
-            noise=self.forecast_noise * rank, stream=2, bias=self.forecast_bias,
-            lag_minutes=self.forecast_lag_minutes * rank,
+            noise=self.forecast_noise * rank * (
+                YOUNG_NOISE + (AGED_NOISE - YOUNG_NOISE) * aging),
+            stream=2,
+            gain=1.0 + AGED_GAIN * aging,
+            bias=self.forecast_bias + AGED_SPREAD * aging,
+            lag_minutes=self.forecast_lag_minutes * rank * (
+                YOUNG_LAG + (AGED_LAG - YOUNG_LAG) * aging),
             source=self.model_sources.get(model_id),
         )
 
@@ -375,6 +427,7 @@ class SyntheticAccess:
         noise: float,
         stream: int,
         bias: float,
+        gain: float = 1.0,
         lag_minutes: float = 0.0,
         source: Source | None = None,
     ) -> Field:
@@ -385,6 +438,15 @@ class SyntheticAccess:
         data = self.blob(coords, valid_time - timedelta(minutes=lag_minutes))
         if noise:
             data = data + self._noise(coords.shape, valid_time, stream, noise)
+        # A gain, not an offset. Both make the forecast cover too much ground, and
+        # they are not the same mistake: a gain enlarges the echoes that are
+        # already there, while an offset lifts the whole domain until the places
+        # with no weather in them are raining too. The second is not a forecast
+        # anybody makes, and at a low threshold it produced a frequency bias of
+        # six -- a number no evaluation should show, because it is not about the
+        # forecast, it is about the way the wrong thing was added.
+        if gain != 1.0:
+            data = data * gain
         if bias:
             data = data + bias
         # The product's unit change comes last, and it takes the noise and the

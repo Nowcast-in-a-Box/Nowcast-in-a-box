@@ -242,3 +242,28 @@ def test_the_cells_shrink_so_the_canvas_holds_them_all():
     right = max(float(x) + float(w) for x, _, w, _ in cells)
     assert size < 22, f"the cells did not give way: {size}"
     assert right <= 800, f"the last column runs to {right}"
+
+
+def test_one_outlier_does_not_take_the_whole_ramp():
+    """The ends come from the 2nd and 98th percentile, not from the extremes.
+
+    One long-lead cell that over-forecast by a factor of three takes the ramp
+    with it: every other cell, all of them between 1.0 and 1.5, lands in the
+    bottom tenth of a scale that now runs to 2.2, and the mesh reads as empty --
+    which is what a mesh of mostly pale cells next to grey gaps was.
+    """
+    values = {(col, 0): 1.0 + 0.01 * col for col in range(30)}
+    values[(29, 0)] = 9.9                     # the one that used to win
+    wide = mesh(panels=(Panel("alpha", values),),
+                x_values=tuple(f"2026-01-01T{col:02d}:00:00Z" for col in range(30)))
+    svg = mesh_svg(wide, cell=12)
+    drawn = [t for t in labels(svg)]
+    numbers = sorted(float(t) for t in drawn if re.fullmatch(r"\d\.\d+", t))
+    assert numbers and max(numbers) < 3.0, numbers
+    fills = [f for f in _cell_fills(svg) if f != GAP_FILL]
+    assert len(set(fills)) > 8, f"the ramp collapsed to {len(set(fills))} colours"
+
+
+def _cell_fills(svg: str) -> list[str]:
+    return [r.get("fill") for r in ET.fromstring(svg).iter(f"{SVG}rect")
+            if r.get("width") == r.get("height") and r.get("fill") not in (None, "none")]
