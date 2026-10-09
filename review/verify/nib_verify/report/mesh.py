@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from .chart import PALETTE, _esc, _filters_note, _short, fs
+from .chart import PALETTE, _esc, _filters_note, _short, _short_time, fs
 
 #: A sequential ramp for a score. Paled to dark, so a printed copy reads the same
 #: way round as a screen. It is not perceptually uniform; it is short, it prints,
@@ -172,17 +172,6 @@ def _colour(value: float | None, lo: float, hi: float) -> str:
         return RAMP[len(RAMP) // 2]
     frac = min(1.0, max(0.0, (value - lo) / (hi - lo)))
     return RAMP[min(len(RAMP) - 1, int(frac * len(RAMP)))]
-
-
-def _short_time(text: str) -> str:
-    """``2026-01-01T04:00:00Z`` -> ``01-01 04Z``.
-
-    The column labels are init times and there are as many of them as there were
-    runs, so the year and the seconds are noise in every one of them.
-    """
-    if len(text) >= 16 and text[10] == "T":
-        return f"{text[5:10]} {text[11:13]}Z"
-    return text
 
 
 def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:

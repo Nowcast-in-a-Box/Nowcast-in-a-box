@@ -102,7 +102,19 @@ class Chart:
     x_label: str
     y_label: str
     series: tuple[Series, ...] = ()
+    #: Labels for the x positions when x is not a number. A chart is *drawn* on
+    #: numbers and *read* on dates, so a time axis is mapped to 0, 1, 2 ... and
+    #: the stamps are kept here to be written under the ticks.
+    x_labels: tuple[str, ...] = ()
     note: str = ""
+
+    def x_text(self, position: float) -> str:
+        """What the tick at ``position`` should say."""
+        if self.x_labels:
+            index = int(round(position))
+            if 0 <= index < len(self.x_labels):
+                return self.x_labels[index]
+        return ""
 
     def values(self) -> list[float]:
         return [y for s in self.series for _, y in s.defined]
@@ -112,6 +124,43 @@ class Chart:
 
     def is_empty(self) -> bool:
         return not self.values()
+
+
+def _short_time(text: str) -> str:
+    """``2026-01-01T04:00:00Z`` -> ``01-01 04Z``.
+
+    A tick label is read at a glance and there is one per run; the year and the
+    seconds are the same in every one of them.
+    """
+    if len(text) >= 16 and text[10] == "T":
+        return f"{text[5:10]} {text[11:13]}Z"
+    return text
+
+
+def failure_svg(message: str, *, width: int = 760) -> str:
+    """A chart that could not be drawn, as a picture that says so.
+
+    The page loads this with ``<img src>``, and an ``<img>`` cannot show a JSON
+    error body: a failed request is a broken-image icon and a blank space, which
+    reads as "there is no data here" rather than "this query did not work".
+    """
+    lines = [message[i:i + 96] for i in range(0, min(len(message), 288), 96)] or [""]
+    h = 66 + 18 * len(lines)
+    body = "".join(
+        f'<text x="16" y="{56 + 18 * index}" font-family="{FONT}" '
+        f'font-size="{fs(11)}" fill="#8a929c">{_esc(line)}</text>'
+        for index, line in enumerate(lines)
+    )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{h}" '
+        f'viewBox="0 0 {width} {h}" font-family="{FONT}">'
+        f'<rect width="{width}" height="{h}" fill="#ffffff"/>'
+        f'<rect x="0.5" y="0.5" width="{width - 1}" height="{h - 1}" fill="none" '
+        f'stroke="#e5c1c1"/>'
+        f'<text x="16" y="28" font-family="{FONT}" font-size="{fs(13)}" '
+        f'font-weight="600" fill="#b3261e">this chart could not be drawn</text>'
+        f'{body}</svg>'
+    )
 
 
 def from_query(
@@ -138,13 +187,25 @@ def from_query(
     records = result.get("records") or []
     keys = tuple(series)
 
-    x_values = sorted({float(r[x]) for r in records if r.get(x) is not None})
+    # A time axis is mapped onto positions, because everything downstream is
+    # arithmetic -- a line between two points, a tick every n steps. The stamps
+    # are kept beside them so the ticks can be written back as dates; without
+    # that the axis is numbered 0 to 5 and says nothing.
+    raw = sorted({r[x] for r in records if r.get(x) is not None}, key=lambda v: str(v))
+    try:
+        positions = {value: float(value) for value in raw}
+        labels: tuple[str, ...] = ()
+    except (TypeError, ValueError):
+        positions = {value: float(index) for index, value in enumerate(raw)}
+        labels = tuple(_short_time(str(value)) for value in raw)
+
+    x_values = sorted(positions.values())
     tables: dict[tuple, dict[float, float | None]] = {}
     for record in records:
         if record.get(x) is None:
             continue
         key = tuple(str(record.get(c)) for c in keys) if keys else ("",)
-        tables.setdefault(key, {})[float(record[x])] = record.get("value")
+        tables.setdefault(key, {})[positions[record[x]]] = record.get("value")
 
     wanted = [one if isinstance(one, tuple) else (str(one),) for one in order]
     walking = [k for k in wanted if k in tables]
@@ -165,6 +226,7 @@ def from_query(
         x_label=axis_label(x),
         y_label=y_label or metric,
         series=tuple(built),
+        x_labels=labels,
         note=_filters_note(meta.get("s") or {}),
     )
 
@@ -302,7 +364,7 @@ def line_chart(
         out.append(
             f'<text x="{x:.1f}" y="{plot.y1 + 19:.1f}" text-anchor="middle" '
             f'font-family="{FONT}" font-size="{fs(11)}" fill="#6b7280">'
-            f"{_esc(_tick_text(tick, x_step, x_hi - x_lo))}</text>"
+            f"{_esc(chart.x_text(tick) or _tick_text(tick, x_step, x_hi - x_lo))}</text>"
         )
 
     out.append(

@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from ..query.service import DEFAULT_LIMIT
-from .chart import PALETTE, Chart, Series, axis_label, from_query, line_chart
+from .chart import (PALETTE, Chart, Series, axis_label, failure_svg,
+                    from_query, line_chart)
 from .grid import columns_for, small_multiples
 from .mesh import Mesh, Panel, mesh_for, mesh_svg
 
@@ -25,6 +26,7 @@ __all__ = [
     "chart_for",
     "chart_panels",
     "columns_for",
+    "failure_svg",
     "from_query",
     "line_chart",
     "mesh_for",

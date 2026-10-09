@@ -890,3 +890,36 @@ def test_the_grid_draws_the_same_query_as_the_table(client):
     drawn = ET.fromstring(client.get("/api/chart", params=params).text)
     cells = drawn.findall("{http://www.w3.org/2000/svg}svg")
     assert len(cells) == len({r["level"] for r in scores["records"]})
+
+
+def test_the_chart_answers_a_time_axis(client):
+    """An init-time axis is a string on one side and an arithmetical position on
+    the other, and ``float("2026-01-01T00:00:00Z")`` is what used to happen."""
+    create(client)
+    started = client.post("/api/runs", json={"config": "vil-test",
+                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    wait(client, started["job"])
+
+    response = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
+                                                "level": 35, "x": "init_time",
+                                                "series": "member"})
+    assert response.status_code == 200, response.text
+    root = ET.fromstring(response.text)
+    drawn = " ".join("".join(t.itertext()) for t in root.iter(
+        "{http://www.w3.org/2000/svg}text"))
+    assert "init time (UTC)" in drawn, drawn
+
+
+def test_a_bad_chart_request_keeps_its_own_status_and_its_own_reason(client):
+    """A mistake in the request is not the same as a chart that cannot be drawn.
+
+    The first keeps its status and its detail, so the caller can fix it; the
+    second -- nobody knows what went wrong -- comes back as a picture that says
+    so, because a request behind an ``<img>`` that fails is a broken-image icon
+    and nothing else. The picture itself is tested in ``test_chart.py``.
+    """
+    create(client)
+    response = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
+                                                "x": "nonsense"})
+    assert response.status_code == 400
+    assert "nonsense" in response.json()["detail"]

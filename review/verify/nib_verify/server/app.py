@@ -416,10 +416,33 @@ def create_app(
         this with ``<img src>``, so it has to answer with an image and not with
         JSON, and it has to be able to fail as an image too.
         """
+        from ..report import failure_svg
+
+        params = request.query_params
+        try:
+            svg = draw_chart(params)
+        except (QueryError, ConfigError, ConfigNotFound, ManifestError,
+                RunConfigError, HostConfigError, Locked, KeyError):
+            # A bad request is the caller's mistake or a config that is not there,
+            # and it keeps saying so with its own status and its own detail. What
+            # gets a picture is the case where nobody knows what went wrong -- a
+            # request behind an `<img>` that fails unexpectedly is a broken-image
+            # icon and a blank space, which reads as "there is no data here"
+            # rather than "this did not work", and there is nothing to read.
+            raise
+        except Exception as problem:
+            svg = failure_svg(f"{type(problem).__name__}: {problem}",
+                              width=_int_param(params, "width", 760))
+        return Response(
+            content=svg,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    def draw_chart(params) -> str:
         from ..report import (chart_for, chart_panels, line_chart, mesh_for,
                               mesh_svg, small_multiples)
 
-        params = request.query_params
         kind = (params.get("kind") or "line").lower()
         if kind not in ("line", "bar", "mesh"):
             raise QueryError(f"unknown chart kind {kind!r}; line, bar or mesh")
@@ -428,10 +451,12 @@ def create_app(
             raise QueryError("method is required")
         config_id = params.get("config")
         cfg = library.get(config_id) if config_id else None
+        drawing = "bar" if kind == "bar" else "line"
+        width = _int_param(params, "width", 760)
 
         with store() as s:
             if kind == "mesh":
-                svg = mesh_svg(mesh_for(
+                return mesh_svg(mesh_for(
                     s, cfg,
                     method=method,
                     s=_filters_from_query(params),
@@ -439,37 +464,26 @@ def create_app(
                     lead_dim=params.get("series") or "lead_minutes",
                     panel_dims=("member", *params.getlist("panel")),
                 ))
-            else:
-                panels = params.getlist("panel")
-                if panels:
-                    labels, charts = chart_panels(
-                        s, cfg,
-                        method=method,
-                        s=_filters_from_query(params),
-                        x=params.get("x") or "lead_minutes",
-                        series=tuple(params.getlist("series")) or ("member",),
-                        panel_dims=tuple(panels),
-                    )
-                    svg = small_multiples(
-                        charts, labels,
-                        kind="bar" if kind == "bar" else "line",
-                        width=_int_param(params, "width", 820))
-                else:
-                    chart = chart_for(
-                        s, cfg,
-                        method=method,
-                        s=_filters_from_query(params),
-                        x=params.get("x") or "lead_minutes",
-                        series=tuple(params.getlist("series")) or ("member",),
-                    )
-                    svg = line_chart(chart, width=_int_param(params, "width", 760),
-                                     height=_int_param(params, "height", 440),
-                                     kind="bar" if kind == "bar" else "line")
-        return Response(
-            content=svg,
-            media_type="image/svg+xml",
-            headers={"Cache-Control": "no-store"},
-        )
+            if params.getlist("panel"):
+                labels, charts = chart_panels(
+                    s, cfg,
+                    method=method,
+                    s=_filters_from_query(params),
+                    x=params.get("x") or "lead_minutes",
+                    series=tuple(params.getlist("series")) or ("member",),
+                    panel_dims=tuple(params.getlist("panel")),
+                )
+                return small_multiples(charts, labels, kind=drawing, width=width)
+            chart = chart_for(
+                s, cfg,
+                method=method,
+                s=_filters_from_query(params),
+                x=params.get("x") or "lead_minutes",
+                series=tuple(params.getlist("series")) or ("member",),
+            )
+            return line_chart(chart, width=width,
+                              height=_int_param(params, "height", 440),
+                              kind=drawing)
 
     # ============================================================== static
     if STATIC_DIR.is_dir():
