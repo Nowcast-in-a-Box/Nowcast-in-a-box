@@ -463,7 +463,7 @@ def create_app(
                     time_dim=params.get("x") or "init_time",
                     lead_dim=params.get("series") or "lead_minutes",
                     panel_dims=("member", *params.getlist("panel")),
-                ))
+                ), width=width)
             if params.getlist("panel"):
                 labels, charts = chart_panels(
                     s, cfg,

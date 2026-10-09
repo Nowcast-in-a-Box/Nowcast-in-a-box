@@ -37,8 +37,15 @@ BETTER_LOW = frozenset({"mae", "rmse", "far"})
 #: mistake a verification chart must not make.
 GAP_FILL = "#e8e8e8"
 
-CELL = 22
-CELL_MIN = 9
+CELL = 18
+CELL_MIN = 6
+
+#: A rotated stamp needs about this much room across the canvas before its
+#: neighbour's is on top of it, and that is what decides how many are drawn. It is
+#: the *horizontal* footprint of the rotated text, not its length: ``01-01 00Z``
+#: is sixty pixels of text that takes about fifty-three of them once it is turned
+#: forty degrees.
+LABEL_PX = 66
 
 
 @dataclass(frozen=True)
@@ -181,17 +188,27 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
         return _empty_svg(mesh, width=width)
 
     ncol, nrow = len(mesh.x_values), len(mesh.y_values)
-    cell = max(CELL_MIN, min(cell, 34))
     left = 66
     top = 46
     label_row = 26
     colorbar = 14
     gap = 26
     legend = 118
+    aside = legend + colorbar + gap
+
+    # The cells give way, not the canvas. Laid out at a fixed size, a mesh of
+    # seventy-two hours is wider than the picture and the right-hand hours are cut
+    # off by it -- the same hours, and the same silent loss, as an axis taken from
+    # the results.
+    if width:
+        room = max(CELL_MIN, (width - left - aside) // max(ncol, 1))
+        cell = max(CELL_MIN, min(cell, room))
+    else:
+        cell = max(CELL_MIN, min(cell, 34))
 
     panel_w = ncol * cell
     panel_h = nrow * cell
-    total_w = width or (left + panel_w + legend + colorbar + gap)
+    total_w = width or (left + panel_w + aside)
     header = 30 if mesh.direction else 0
     total_h = top + header + len(mesh.panels) * (panel_h + label_row + gap) + 44
 
@@ -216,12 +233,12 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
                 fill = _colour(value, lo, hi)
                 out.append(f'<rect x="{px}" y="{py}" width="{cell}" height="{cell}" '
                            f'fill="{fill}" stroke="#ffffff" stroke-width="0.5"/>')
-                if cell >= 16 and value is not None:
-                    ink = "#ffffff" if (hi > lo and
-                                        (value - lo) / (hi - lo) > 0.62) else "#22303c"
-                    out.append(f'<text x="{px + cell / 2}" y="{py + cell / 2 + 3.5}" '
-                               f'font-size="{fs(9)}" fill="{ink}" text-anchor="middle">'
-                               f'{value:.2f}</text>')
+                # No number in the cell. It is the colour that carries the value
+                # here, and the colour bar is what reads it; a two-decimal figure
+                # in a nine-pixel square is legible only when the square is big
+                # enough to defeat the reason for the mesh. The table beside it has
+                # the numbers, to as many places as anyone wants.
+
         # the box, so a panel that ends early still looks like a grid
         out.append(f'<rect x="{left}" y="{y}" width="{panel_w}" height="{panel_h}" '
                    f'fill="none" stroke="#9aa5b1" stroke-width="0.6"/>')
@@ -232,7 +249,9 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
             out.append(f'<text x="{left - 8}" y="{py}" font-size="{fs(10)}" fill="#414b57" '
                        f'text-anchor="end">{_esc(_short(lead))}</text>')
         # x ticks: init times
-        stride = max(1, -(-ncol // 12))
+        # Skipped as needed rather than every n-th: what matters is that the
+        # stamps do not sit on top of each other, and that depends on the cells.
+        stride = max(1, -(-LABEL_PX // cell))
         for col in range(0, ncol, stride):
             px = left + col * cell + cell / 2
             out.append(f'<text x="{px}" y="{y + panel_h + 13}" font-size="{fs(9.5)}" '
@@ -242,17 +261,23 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
         y += panel_h + label_row + gap
 
     # ---- axes names
+    #
+    # Both go where the panel actually ends, not at a fixed offset from it. The
+    # offsets were chosen when a cell was twenty-two pixels wide, and a mesh that
+    # shrinks its cells to fit a width -- which is what seventy-two hours needs --
+    # left these two sitting past the right edge of the canvas, clipped by it.
+    right_of_panel = left + panel_w + gap
     out.append(f'<text x="{left + panel_w / 2}" y="{total_h - 6}" font-size="{fs(11)}" '
                f'fill="#414b57" text-anchor="middle">{_esc(mesh.x_label)}</text>')
     # The arrow is a character, not `&uarr;`. An SVG served as image/svg+xml is
     # parsed as XML, and XML defines five entities: amp, lt, gt, quot, apos. A
     # named HTML entity is a parse error, and a parse error aborts the document
     # from that point -- so one arrow cost the colour bar that came after it.
-    out.append(f'<text x="{left + panel_w + 150}" y="{top + header + 8}" font-size="{fs(11)}" '
+    out.append(f'<text x="{right_of_panel}" y="{top + header + 24}" font-size="{fs(11)}" '
                f'fill="#414b57">{_esc(mesh.y_label)} ↑</text>')
 
     # ---- colour bar
-    bx = left + panel_w + gap + 74
+    bx = right_of_panel
     by = top + header
     bar_h = min(190, max(90, panel_h // 2))
     steps = 60

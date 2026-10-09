@@ -72,7 +72,11 @@ PALETTE = (
 #: Past this many distinct x values, tick at round numbers instead of at every
 #: point. Below it, one tick per point: tick marks that do not sit on the data
 #: are noise when the data is `lead_minutes = 10, 20, 30, 60`.
-MAX_ORDINAL_TICKS = 12
+#:
+#: Twenty-four, because an hour of the day is twenty-four values and every one of
+#: them fits across a chart. A scale that labels 0, 5, 10, 15, 20 and then 23 to
+#: show where it stops is not more readable than the list it was avoiding.
+MAX_ORDINAL_TICKS = 24
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,7 @@ def from_query(
     x: str,
     series: Sequence[str] = (),
     order: Sequence[str] = (),
+    domain: Sequence[float] = (),
     title: str | None = None,
     y_label: str | None = None,
 ) -> Chart:
@@ -178,6 +183,10 @@ def from_query(
     one line from another. Everything else in the query has already been filtered
     by ``s``, which is the same filter the table uses -- a chart is a view of a
     query, not a second way to ask.
+
+    ``domain`` names the values the x axis is *allowed* to take, where it has a
+    fixed set of them. An axis drawn from the results alone shows the hours that
+    ran and says nothing about the ones that did not.
 
     ``order`` names the series in the order they are drawn, and it is how a line
     keeps its colour. Sorted alphabetically, hiding one model renumbers the rest
@@ -199,7 +208,8 @@ def from_query(
         positions = {value: float(index) for index, value in enumerate(raw)}
         labels = tuple(_short_time(str(value)) for value in raw)
 
-    x_values = sorted(positions.values())
+    x_values = sorted(set(positions.values()) |
+                      ({float(v) for v in domain} if not labels else set()))
     tables: dict[tuple, dict[float, float | None]] = {}
     for record in records:
         if record.get(x) is None:

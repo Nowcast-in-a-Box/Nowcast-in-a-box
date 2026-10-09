@@ -30,7 +30,8 @@ QUIET = ["--progress", "quiet"]
 
 @pytest.fixture
 def built(tmp_path):
-    return demo_module.build(tmp_path / "nib-demo", say=lambda _line: None)
+    return demo_module.build(tmp_path / "nib-demo", say=lambda _line: None,
+                             init_times=6)
 
 
 # ======================================================================
@@ -120,7 +121,7 @@ def test_the_manifests_are_found_wherever_they_were_put(built):
 
 def test_the_run_configs_are_read_as_run_configs(built):
     book = discover_runs([built.runs_root])
-    assert len(book) == len(demo_module.pairs()) * demo_module.INIT_TIMES
+    assert len(book) == len(demo_module.pairs()) * 6, "the six this build asked for"
     assert not book.skipped
 
 
@@ -154,13 +155,13 @@ def test_the_data_root_is_empty_because_nothing_here_is_a_data_file(built):
 # building it twice
 # ======================================================================
 def test_building_over_a_non_empty_directory_is_refused(tmp_path):
-    demo_module.build(tmp_path / "nib-demo", say=lambda _l: None)
+    demo_module.build(tmp_path / "nib-demo", say=lambda _l: None, init_times=6)
     with pytest.raises(FileExistsError, match="--force"):
-        demo_module.build(tmp_path / "nib-demo", say=lambda _l: None)
+        demo_module.build(tmp_path / "nib-demo", say=lambda _l: None, init_times=6)
 
 
 def test_force_rebuilds(tmp_path):
-    first = demo_module.build(tmp_path / "nib-demo", say=lambda _l: None)
+    first = demo_module.build(tmp_path / "nib-demo", say=lambda _l: None, init_times=6)
     (first.config_file).unlink()
     again = demo_module.build(tmp_path / "nib-demo", force=True, say=lambda _l: None)
     assert again.config_file.is_file()
@@ -203,7 +204,7 @@ def test_the_survey_reports_what_it_found(built, capsys):
 def test_the_headline_is_not_a_perfect_score(tmp_path, capsys):
     """With the bare generator every CSI is 1.0 and a broken display looks
     right. The scenario is what makes the demonstration worth giving."""
-    demo = demo_module.build(tmp_path / "nib-demo", say=lambda _l: None)
+    demo = demo_module.build(tmp_path / "nib-demo", say=lambda _l: None, init_times=6)
     from nib_verify.access import build_access
     from nib_verify.access.mockfeed import serve_in_thread
 

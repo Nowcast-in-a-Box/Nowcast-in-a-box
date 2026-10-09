@@ -383,3 +383,19 @@ def test_an_empty_result_produces_an_empty_chart_not_an_error():
     assert got.is_empty()
     assert not got.series
     assert "no samples" in " ".join(labels(line_chart(got)))
+
+
+def test_the_hour_axis_is_all_twenty_four_of_them():
+    """An axis drawn from the results alone shows the hours that ran and says
+    nothing about the ones that did not -- and the hour that did not run is what
+    somebody asking "which init hour scores best" is looking for."""
+    from nib_verify.report import x_domain
+
+    got = from_query({"records": [{"member": "m", "hour": 0, "value": 0.5},
+                                  {"member": "m", "hour": 5, "value": 0.6}],
+                      "meta": {}}, x="hour", series=("member",),
+                     domain=x_domain("hour"))
+    assert [x for x, _ in got.series[0].points][:3] == [0.0, 1.0, 2.0]
+    assert len(got.series[0].points) == 24, "0 to 23, gaps and all"
+    assert got.series[0].points[1][1] is None, "the hour nobody ran is a gap"
+    assert x_domain("lead_minutes") == (), "only where the set is fixed"

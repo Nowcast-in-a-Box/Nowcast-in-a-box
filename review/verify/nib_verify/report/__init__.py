@@ -28,6 +28,7 @@ __all__ = [
     "columns_for",
     "failure_svg",
     "from_query",
+    "x_domain",
     "line_chart",
     "mesh_for",
     "mesh_svg",
@@ -58,7 +59,8 @@ def chart_for(
     # legend reads the way they asked for it.
     expand = tuple(dict.fromkeys([*series, x]))
     result = query_scores(store, cfg, method=method, s=s, g=expand, limit=limit)
-    return from_query(result, x=x, series=tuple(series), order=_order(cfg, order))
+    return from_query(result, x=x, series=tuple(series), order=_order(cfg, order),
+                      domain=x_domain(x))
 
 
 def chart_panels(
@@ -89,7 +91,7 @@ def chart_panels(
 
     if not panels:
         return [""], [from_query(result, x=x, series=tuple(series),
-                                 order=_order(cfg, order))]
+                                 order=_order(cfg, order), domain=x_domain(x))]
 
     seen: dict[tuple, None] = {}
     for record in records:
@@ -103,8 +105,21 @@ def chart_panels(
                                   for d, v in zip(panels, key) if v))
         built.append(from_query({"records": subset, "meta": result.get("meta") or {}},
                                 x=x, series=tuple(series),
-                                order=_order(cfg, order)))
+                                order=_order(cfg, order), domain=x_domain(x)))
     return labels, built
+
+
+def x_domain(name: str) -> tuple[float, ...]:
+    """The values a dimension may take, where it has a fixed set of them.
+
+    "Which init hour scores best" is a question whose answer includes the hours
+    that did not run, and an axis drawn from the results alone leaves them out
+    without leaving a mark -- the same argument as the mesh's axes, which come from
+    the plan rather than from what came back.
+    """
+    if name == "hour":
+        return tuple(float(hour) for hour in range(24))
+    return ()
 
 
 def _order(cfg, given: Sequence[str]) -> tuple[tuple[str, ...], ...]:

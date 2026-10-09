@@ -9,6 +9,7 @@ verification chart must never say.
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -215,3 +216,29 @@ def test_the_axes_come_from_what_was_asked_for_not_from_what_came_back(tmp_path)
         assert leads == [10, 20]
         # the third one is in the axes and has nothing under it
         assert store.count_rows("yes_or_no", filters={"group_id": "g"}) == 2
+
+
+def test_no_number_is_written_in_a_cell():
+    """The colour carries the value and the colour bar reads it.
+
+    A two-decimal figure in a nine-pixel square is legible only when the square is
+    big enough to defeat the reason for the mesh in the first place.
+    """
+    svg = mesh_svg(mesh(), cell=22)
+    drawn = [t for t in labels(svg) if re.fullmatch(r"\d\.\d\d", t)]
+    assert drawn == [], drawn
+
+
+def test_the_cells_shrink_so_the_canvas_holds_them_all():
+    """Seventy-two hours laid out at a fixed cell size is wider than the picture,
+    and the right-hand hours are cut off by it -- the same hours, and the same
+    silent loss, as an axis taken from the results."""
+    wide = mesh_svg(mesh(x_values=tuple(
+        f"2026-01-0{1 + h // 24}T{h % 24:02d}:00:00Z" for h in range(72))), width=800)
+    cells = re.findall(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" '
+                       r'fill="#', wide)
+    assert cells, "cells"
+    size = float(cells[0][2])
+    right = max(float(x) + float(w) for x, _, w, _ in cells)
+    assert size < 22, f"the cells did not give way: {size}"
+    assert right <= 800, f"the last column runs to {right}"

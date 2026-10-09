@@ -250,8 +250,11 @@ CADENCE_MINUTES = 10
 #: rain estimate two.
 CONTEXT_FRAMES = 3
 
-#: How many init times the fabricated platform has produced.
-INIT_TIMES = 6
+#: How many init times the fabricated platform has produced by default. Three
+#: days hourly, which is what a mesh of "the last three days" looks like when it
+#: is drawn -- and three hundred times the rows of a one-day one, which is fine
+#: for a workspace and not fine for a test suite.
+INIT_TIMES = 72
 
 
 @dataclass
@@ -473,6 +476,7 @@ platform's own service. Nothing in this tree is read as a data file.
 # build
 # ======================================================================
 def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
+          init_times: int | None = None,
           force: bool = False, say: Callable[[str], None] = print) -> Demo:
     """Lay out the whole workspace. Does not start anything."""
     from .access import scenario as scenarios
@@ -533,7 +537,7 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
     demo.runs_root = root / "workspace" / "jobs"
     start = datetime(2026, 1, 1, tzinfo=UTC)
     count = 0
-    for hour in range(INIT_TIMES):
+    for hour in range(init_times or INIT_TIMES):
         moment = (start + timedelta(hours=hour)).strftime("%Y-%m-%dT%H:%M:%SZ")
         for forecast, source in pairs():
             _write(
@@ -542,7 +546,7 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
                 run_config_text(forecast, source, moment),
             )
             count += 1
-    say(f"         run configs         {count} runs ({INIT_TIMES} init times x "
+    say(f"         run configs         {count} runs ({init_times or INIT_TIMES} init times x "
         f"{len(pairs())} model/source pairs)")
 
     demo.configs.mkdir(parents=True, exist_ok=True)
