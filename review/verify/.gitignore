@@ -1,4 +1,5 @@
 # Local run state: the store, the lock, and scratch output.
+_svc/
 _tmp/
 *.sqlite
 *.sqlite-wal
