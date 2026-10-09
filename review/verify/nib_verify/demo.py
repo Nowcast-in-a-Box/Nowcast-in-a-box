@@ -39,8 +39,8 @@ UTC = timezone.utc
 
 #: The demonstration config, and the id is stable so the demo can be re-run over
 #: an old workspace.
-CONFIG_ID = "vil-demo"
-DEMO_NAME = "Radar group"
+CONFIG_ID = "radar-demo"
+DEMO_NAME = "Radar reflectivity"
 
 
 @dataclass(frozen=True)
@@ -60,6 +60,7 @@ class Product:
     variable: str
     unit: str
     scale: float
+    offset: float
     vmin: float
     vmax: float
     noise: float
@@ -121,13 +122,25 @@ class Exercise:
 #: ``vil``-shaped fields here, which is the one place the fabrication is cheaper
 #: than the world.
 SOURCES: tuple[Product, ...] = (
-    Product("radar-composite", "vil", "kg m-2", scale=1.0, vmin=0.0, vmax=255.0,
-            noise=4.0, missing_kind="range", missing_points=60,
-            frames=6, resolution=0.25,
+    # 雷达回波。dBZ 是反射率自己的量，20 到 60 是它自己的等级；旧版本的 kg m-2
+    # 配 16/74/133 是错的，一个 VIL 产品没有 dBZ 的阈值。
+    Product("radar-composite", "dbz", "dBZ", scale=0.27, offset=0.0,
+            vmin=0.0, vmax=70.0, noise=1.5,
+            missing_kind="range", missing_points=60,
+            frames=18, resolution=0.25,
             extent=(110.0, 30.0, 120.0, 42.0), shape=(48, 64)),
-    Product("satellite-rain", "rain_rate", "mm h-1", scale=0.16, vmin=0.0, vmax=45.0,
-            noise=6.0, missing_kind="random", missing_points=150,
-            frames=12, resolution=0.5,
+    # 降水。0.1 到 250 是雨强的常用等级。
+    Product("satellite-rain", "rain_rate", "mm h-1", scale=0.16, offset=0.0,
+            vmin=0.0, vmax=45.0, noise=6.0,
+            missing_kind="random", missing_points=150,
+            frames=18, resolution=0.5,
+            extent=(104.0, 24.0, 126.0, 48.0), shape=(56, 72)),
+    # 卫星亮温。物理上深对流顶是**冷**的，而生成器造的是强度团块，所以这个产品用
+    # 负的 scale 加一个暖的 offset：强度 0 → 290 K（晴空），强度满值 → 170 K（云顶）。
+    Product("satellite-bt", "bt", "K", scale=-0.5, offset=290.0,
+            vmin=170.0, vmax=300.0, noise=3.0,
+            missing_kind="random", missing_points=90,
+            frames=18, resolution=0.5,
             extent=(104.0, 24.0, 126.0, 48.0), shape=(56, 72)),
 )
 
@@ -147,26 +160,40 @@ FORECASTS: tuple[Forecast, ...] = (
     Forecast("mlcast-alt", "radar-composite"),
     Forecast("satcast-det", "satellite-rain"),
     Forecast("satcast-alt", "satellite-rain"),
+    Forecast("btcast-det", "satellite-bt"),
+    Forecast("btcast-alt", "satellite-bt"),
 )
 
 #: One config per product, and each one answers its own product's question.
+#: 半窗口是格点数。5 到 30 覆盖了小尺度的位移误差到大尺度的整体偏差。
+WINDOWS = (5, 10, 15, 20, 25, 30)
+
+#: 每个产品一条配置。等级按要素自己的量给：雷达回波是 dBZ，降水是 mm h-1，
+#: 亮温是 K。三条的时效都排到 180 分钟，雷达 10 分钟一个点，另两条 30 分钟一个点
+#: ——四个点的折线看不出什么形状。
 EXERCISES: tuple[Exercise, ...] = (
     Exercise(CONFIG_ID, DEMO_NAME, "radar-composite",
-             leads=(10, 20, 30, 60),
-             levels=(16.0, 74.0, 133.0, 181.0, 219.0),
-             window=(1, 2)),
-    Exercise("rain-demo", "Satellite group", "satellite-rain",
-             leads=(30, 60, 90, 120),
-             levels=(0.5, 2.0, 5.0, 12.0),
-             window=(2, 4)),
+             leads=(10, 20, 30, 40, 50, 60, 70, 80, 90,
+                    100, 110, 120, 130, 140, 150, 160, 170, 180),
+             levels=(20.0, 30.0, 40.0, 50.0, 60.0),
+             window=WINDOWS),
+    Exercise("rain-demo", "Rain rate", "satellite-rain",
+             leads=(30, 60, 90, 120, 150, 180),
+             levels=(0.1, 1.0, 10.0, 25.0, 50.0, 100.0, 250.0),
+             window=WINDOWS),
+    Exercise("bt-demo", "Brightness temperature", "satellite-bt",
+             leads=(30, 60, 90, 120, 150, 180),
+             levels=(200.0, 210.0, 220.0, 230.0, 240.0, 250.0, 260.0, 270.0),
+             window=WINDOWS),
 )
+
 
 #: The demonstration config's own numbers, named so a reader does not have to
 #: remember which of the two exercises they came from.
 CONFIG_SOURCE = EXERCISES[0].source
 DATA_ID = CONFIG_SOURCE
-VARIABLE = "vil"
-UNIT = "kg m-2"
+VARIABLE = SOURCES[0].variable
+UNIT = SOURCES[0].unit
 LEADS = EXERCISES[0].leads
 LEVELS = EXERCISES[0].levels
 
@@ -348,7 +375,8 @@ def catalogue(scenario: str) -> dict:
         "model_shape": MODEL_SHAPE,
         "sources": {
             s.id: {
-                "variable": s.variable, "unit": s.unit, "scale": s.scale,
+                "variable": s.variable, "unit": s.unit,
+                "scale": s.scale, "offset": s.offset,
                 "vmin": s.vmin, "vmax": s.vmax, "noise": s.noise,
                 "missing_kind": s.missing_kind,
                 "missing_points": s.missing_points,

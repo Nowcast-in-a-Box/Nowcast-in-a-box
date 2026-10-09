@@ -197,8 +197,33 @@ def test_the_chart_is_an_image_the_page_can_load():
     assert 'id="chart"' in html
     assert '<img id="chart"' in html, "the chart has to be an <img>"
     assert 'id="chart-card"' in html
-    assert 'id="chart-svg"' in html, "the download link has a fixed id"
-    assert "download=" in html, "it is a download, not a link to a new tab"
+    # No save-the-chart link: what somebody who wants their own plot can use is the
+    # table's rows, and that button sits with the table. A chart is still a URL --
+    # the <img> src -- so it can be saved from the browser as it always could.
+    assert 'id="chart-svg"' not in html
+    assert 'id="chart-note"' in html, "what the picture is of goes under it"
+
+
+def test_the_table_can_be_saved_as_csv():
+    """The rows, not the picture.
+
+    Whoever wants their own plot takes the table and draws it, in whatever tool
+    they already use. And the button sits with the table it saves rather than in
+    the chart card, because it is the table that is being saved.
+    """
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "function saveCsv" in app
+    body = app[app.index("function saveCsv"):]
+    body = body[: body.index("\n}\n")]
+    assert "result.records" in body, "the rows already on screen, not a second query"
+    # the header says what the numbers are, or the file cannot be labelled later
+    for said in ("# config", "# filters", "ruler"):
+        assert said in body, said
+    assert "URL.createObjectURL" in body
+    assert "URL.revokeObjectURL" in body, "an object URL holds its blob for good"
+    # and it is offered beside the table's own summary line
+    table = app[app.index("function renderScores"):]
+    assert 'id: "btn-csv"' in table[: table.index("h(\"table\"")]
 
 
 def test_the_chart_and_the_table_expand_by_the_same_dimensions():

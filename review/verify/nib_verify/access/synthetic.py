@@ -71,6 +71,12 @@ class Source:
     variable: str
     unit: str
     scale: float = 1.0
+    #: Added after the scale, so a quantity whose range does not start at zero can
+    #: be expressed at all. Brightness temperature is one: the field carries
+    #: intensity, and intensity runs the other way -- a deep convective top is
+    #: *colder* than the clear sky around it -- so it needs a negative scale and a
+    #: warm offset rather than one multiplier.
+    offset: float = 0.0
     vmin: float | None = None
     vmax: float | None = None
     noise: float = 0.0
@@ -83,7 +89,7 @@ class Source:
 #: what a per-source override may say. Anything else is a typo, and a typo that
 #: silently did nothing would serve the wrong field.
 SOURCE_FIELDS = frozenset(
-    {"variable", "unit", "scale", "vmin", "vmax", "noise", "missing_kind",
+    {"variable", "unit", "scale", "offset", "vmin", "vmax", "noise", "missing_kind",
      "missing_points", "extent", "shape"}
 )
 
@@ -222,6 +228,7 @@ class SyntheticAccess:
                 variable=str(given.get("variable", self.variable)),
                 unit=str(given.get("unit", self.unit)),
                 scale=float(given.get("scale", 1.0)),
+                offset=float(given.get("offset", 0.0)),
                 vmin=given.get("vmin", self.vmin),
                 vmax=given.get("vmax", self.vmax),
                 noise=float(given.get("noise", self.truth_noise)),
@@ -386,8 +393,10 @@ class SyntheticAccess:
         # is 2% wrong about a 255-scale field is 2% wrong about a 40-scale one,
         # and adding 5 to both would make the second prediction useless while the
         # first one looked fine. Measured in the truth's units and converted once.
-        if source is not None and source.scale != 1.0:
+        if source is not None and (source.scale != 1.0 or source.offset):
             data = data * source.scale
+            if source.offset:
+                data = data + source.offset
         vmin = self.vmin if source is None else source.vmin
         vmax = self.vmax if source is None else source.vmax
         if vmin is not None or vmax is not None:

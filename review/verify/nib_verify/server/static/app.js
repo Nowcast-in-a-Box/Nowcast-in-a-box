@@ -1071,20 +1071,20 @@ const PARAM_LABEL = { level: "level", half_window: "half window" };
 
 function renderParams(entry) {
   const host = $("#q-params");
-  mount(host);
-  if (!entry) return;
+  if (!entry) return mount(host);
   const shown = ["level", "half_window"].filter(k => state.picked[k] !== undefined);
   if (!shown.length) {
-    mount(host, h("span", { class: "tiny muted" }, `${entry.family}: no parameters`));
-    return;
+    return mount(host, h("span", { class: "tiny muted" }, `${entry.family}: no parameters`));
   }
-  for (const key of shown) {
+  // Built as one list and mounted once. ``mount`` clears what it is given, so a
+  // row mounted per turn of a loop leaves the last row and nothing else -- and a
+  // spatial metric has two rows, which is exactly the case that hides it.
+  mount(host, shown.map(key => {
     const all = entry[key === "level" ? "levels" : "half_windows"] || [];
     // The row is drawn from the config's whole list, not from what is selected:
     // a chip that can be clicked off has to still be there to click back on.
-    mount(host, h("div", { class: "param-row" },
-      h("span", { class: "who" },
-        `${PARAM_LABEL[key]} · ${state.picked[key].length} of ${all.length}`),
+    return h("div", { class: "param-row" },
+      h("span", { class: "who" }, PARAM_LABEL[key] + unitFor(key)),
       h("div", { class: "chips" }, all.slice().sort((a, b) => a - b).map(value => h("button", {
         class: "chip param", type: "button", text: String(value),
         "aria-pressed": String(state.picked[key].includes(value)),
@@ -1093,8 +1093,16 @@ function renderParams(entry) {
           if (at >= 0) state.picked[key].splice(at, 1); else state.picked[key].push(value);
           renderParams(entry);
         },
-      })))));
-  }
+      }))));
+  }));
+}
+
+//: A threshold is a number in the ruler's unit and means nothing without it: 35
+//: is light rain in mm h-1 and nothing at all in dBZ.
+function unitFor(key) {
+  if (key === "half_window") return " (cells)";
+  const unit = ((state.selected || {}).ruler || {}).unit;
+  return unit ? ` (${unit})` : "";
 }
 
 //: The value of the axis select that asks for two dimensions at once.
@@ -1214,9 +1222,8 @@ function showChart(params) {
   }
 
   state.chartUrl = `/api/chart?${chart.toString()}`;
-  // An <a download> rather than a button that builds a blob: the browser
-  // already knows how to save a URL, and one less place to get base64 wrong.
-  $("#chart-svg").href = state.chartUrl;
+  // No download link: the picture is for looking at, and what somebody who wants
+  // to draw their own can use is the table's CSV.
   $("#chart").src = state.chartUrl;
   $("#chart-card").hidden = false;
   $("#chart-empty").hidden = true;
@@ -1224,7 +1231,13 @@ function showChart(params) {
     ? "grid: init time across, lead up, one panel per member and parameter"
     : `${kind} along ${$("#q-axis").value}, one line per member`
       + (many.length ? `, one panel per ${many.join(" and ")}` : "");
-  $("#chart-note").textContent = chart.get("method") + " — drawn from the same query";
+  // What the picture is of, under the picture rather than across the plot: the
+  // canvas is meant to be worth saving on its own.
+  const filters = ((state.lastQuery || {}).meta || {}).s || {};
+  const said = Object.entries(filters)
+    .map(([name, value]) => `${name}=${JSON.stringify(value)}`).join(", ");
+  $("#chart-note").textContent = chart.get("method")
+    + (said ? ` over ${said}` : " over everything stored");
   renderKindChips();
 }
 
@@ -1306,11 +1319,51 @@ function renderScores(result) {
     h("div", { class: "row", style: "margin-top:12px" },
       pill(`${usable.length} record(s)`),
       pill(`${num(usable.reduce((a, r) => a + r.n_valid, 0))} valid samples`),
-      pill(`ruler ${result.meta.group ? result.meta.group.ruler.fingerprint : "—"}`)),
+      pill(`ruler ${result.meta.group ? result.meta.group.ruler.fingerprint : "—"}`),
+      h("span", { class: "spacer" }),
+      // Beside the table and not in the chart card: this is the table, saved.
+      // Whoever wants their own plot takes these rows and draws them.
+      h("button", { class: "act ghost", id: "btn-csv", text: "Save table (CSV)",
+        title: "Save the rows below as a CSV file",
+        onclick: () => saveCsv(result) })),
     dropped ? h("p", { class: "tiny muted" },
       `${dropped} group(s) had no samples and are not shown.`) : null,
     h("div", { class: "scroll", style: "margin-top:10px" },
       h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
+}
+
+//: The table, as a file.
+//:
+//: Built from the rows already on screen rather than fetched again, so the file
+//: cannot disagree with the table it was saved from. A comment header carries
+//: what the numbers are: a CSV of bare columns is a file nobody can label later.
+function saveCsv(result) {
+  const dims = result.dims || [];
+  const meta = result.meta || {};
+  const label = meta.label || "value";
+  const lines = [
+    `# ${label} (${meta.family || "?"})`,
+    `# config ${(meta.group || {}).id || "?"}, `
+      + `ruler ${((meta.group || {}).ruler || {}).fingerprint || "?"}`,
+    `# filters ${JSON.stringify(meta.s || {})}`,
+    ["method", ...dims, "value", "samples"].join(","),
+  ];
+  for (const row of result.records) {
+    const cells = [meta.method, ...dims.map(d => row[d]), row.value, row.n_valid];
+    lines.push(cells.map(cell => {
+      const text = cell === null || cell === undefined ? "" : String(cell);
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }).join(","));
+  }
+  const blob = new Blob([lines.join("\n") + "\n"], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = h("a", { href: url, download: `${(meta.group || {}).id || "query"}-${meta.method}.csv` });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Revoked rather than left: an object URL holds its blob for the life of the
+  // document, and a page that queries all afternoon would hold every one.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function renderMetricGroups() {

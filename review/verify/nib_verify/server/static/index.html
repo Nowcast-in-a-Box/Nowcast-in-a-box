@@ -213,13 +213,13 @@
             <span class="muted tiny" id="q-kind-note"></span>
           </div>
           <img id="chart" alt="chart of the current query" style="width:100%; height:auto; display:block">
-          <div class="row" style="margin-top:8px">
-            <a class="act ghost" id="chart-svg" download="chart.svg" href="#"
-               title="Save the chart above as an SVG file on this machine">Save chart (SVG)</a>
-            <span class="muted tiny" id="chart-note"></span>
-          </div>
         </div>
         <div id="chart-empty" class="empty">Pick a config and run a query.</div>
+        <!-- What the picture is of, and the numbers behind it, below the picture
+             and not inside it: the canvas is meant to be worth saving on its
+             own, and a line of small grey text across the plot is not part of
+             the chart. -->
+        <p class="tiny muted" id="chart-note" style="margin:8px 0 0"></p>
       </div>
 
       <div id="query-result"></div>

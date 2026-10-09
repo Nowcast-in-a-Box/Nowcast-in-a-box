@@ -207,8 +207,14 @@ def test_the_headline_is_not_a_perfect_score(tmp_path, capsys):
     from nib_verify.access import build_access
     from nib_verify.access.mockfeed import serve_in_thread
 
-    with serve_in_thread(build_access("mock", scenario=demo.scenario)) as url:
-        demo_module.verify(demo, access=build_access("mock", scenario=demo.scenario),
+    # Built from the demo's own catalogue, not from the scenario name alone: the
+    # scenario says what the weather does and a bare one carries its own default
+    # unit, which is not what this catalogue's products are in. The service and
+    # the tree have to be describing the same set of products, or every run comes
+    # back as a unit mismatch.
+    settings = demo_module.catalogue(demo.scenario)
+    with serve_in_thread(build_access("mock", **settings)) as url:
+        demo_module.verify(demo, access=build_access("mock", **settings),
                            data_url=url, say=lambda _l: None)
 
     rows = demo_module.headline(demo, say=lambda _l: None)
@@ -328,14 +334,22 @@ def test_every_product_has_two_models_and_a_config_of_its_own(built):
         assert cfg.metrics[0].levels == spec.levels
 
 
-def test_the_two_configs_answer_in_two_units(built, capsys):
-    """Separate groups, so 133 is a number about kg m-2 and 16 is a number about
-    mm h-1 and neither can be read as the other."""
-    cfg_a = load(built.configs / "vil-demo.json")
-    cfg_b = load(built.configs / "rain-demo.json")
-    assert cfg_a.ruler.unit != cfg_b.ruler.unit
-    assert cfg_a.ruler.fingerprint != cfg_b.ruler.fingerprint
-    assert max(cfg_b.metrics[0].levels) < max(cfg_a.metrics[0].levels)
+def test_the_configs_answer_in_different_units(built, capsys):
+    """Separate groups, so 40 is a number about dBZ and 10 is a number about
+    mm h-1 and neither can be read as the other.
+
+    There used to be a line here asserting that the satellite's numbers were
+    smaller than the radar's. That was true when the radar was on a 0-255 VIL
+    scale and is meaningless now that the two are in different units: 250 mm h-1
+    is not more than 60 dBZ, it is a different quantity.
+    """
+    cfgs = [load(built.configs / f"{spec.id}.json") for spec in demo_module.EXERCISES]
+    assert len({c.ruler.unit for c in cfgs}) == len(cfgs), "each product its own unit"
+    assert len({c.ruler.fingerprint for c in cfgs}) == len(cfgs)
+    for one in cfgs:
+        for other in cfgs:
+            if one is not other:
+                assert one.metrics[0].levels != other.metrics[0].levels
 
     lines: list[str] = []
     demo_module.show_configs(built, say=lines.append)
@@ -345,12 +359,13 @@ def test_the_two_configs_answer_in_two_units(built, capsys):
         assert demo_module.source_of(spec.source).unit in text
 
 
-def test_the_two_configs_share_almost_no_parameters(built):
-    """Two products, two answers to every question a config asks: how fine, how
-    far ahead, and at what numbers. Sharing one set would have made the second
+def test_the_configs_share_almost_no_parameters(built):
+    """Three products, three answers to every question a config asks: how fine,
+    how far ahead, and at what numbers. Sharing one set would have made the second
     product the first one wearing another unit."""
-    a = load(built.configs / "vil-demo.json")
+    a = load(built.configs / "radar-demo.json")
     b = load(built.configs / "rain-demo.json")
+    c = load(built.configs / "bt-demo.json")
 
     assert a.ruler.resolution != b.ruler.resolution
     assert a.ruler.extent != b.ruler.extent, "each instrument has its own footprint"
@@ -360,11 +375,16 @@ def test_the_two_configs_share_almost_no_parameters(built):
     for lo, hi in ((0, 2), (1, 3)):
         assert rb.extent[lo] <= ra.extent[lo] and ra.extent[hi] <= rb.extent[hi]
     assert [m.leads for m in a.members] != [m.leads for m in b.members]
+    # the half windows are the one thing the three *do* share: FSS's window is a
+    # scale of the question, not a property of the instrument
+    assert a.metrics[-1].half_windows == b.metrics[-1].half_windows
+    assert b.metrics[-1].half_windows == c.metrics[-1].half_windows
+    assert (5, 10, 15, 20, 25, 30) == tuple(a.metrics[-1].half_windows)
     assert a.metrics[0].levels != b.metrics[0].levels
-    assert a.metrics[-1].half_windows != b.metrics[-1].half_windows
     # and the sets of levels are not the same numbers on another scale: the
-    # satellite's top threshold is below the radar's bottom one
-    assert max(b.metrics[0].levels) < min(a.metrics[0].levels)
+    # satellite's top threshold is in mm h-1 and the radar's is in dBZ
+    assert max(b.metrics[0].levels) > 200, "rain levels are in mm h-1"
+    assert max(a.metrics[0].levels) <= 70, "radar levels are in dBZ"
 
 
 def test_each_ground_truth_declares_its_own_extent(built):
@@ -377,11 +397,15 @@ def test_each_ground_truth_declares_its_own_extent(built):
         assert defaults["resolution"] == source.resolution, source.id
         assert defaults["variable"] == source.variable, source.id
         assert defaults["unit"] == source.unit, source.id
-    # and they are not the same numbers: switching ground truth has to move
-    # something, or the test above would pass on one package duplicated
+    # and they are not all the same: switching ground truth has to move something,
+    # or the loop above would pass on one package duplicated. Two of the three
+    # share a footprint on purpose -- the rain estimate and the brightness
+    # temperature are both from the same satellite -- so the check is that they are
+    # not *all* one extent.
     extents = {tuple(catalog.get(s.id).as_dict()["ruler_defaults"]["extent"])
                for s in demo_module.SOURCES}
-    assert len(extents) == len(demo_module.SOURCES)
+    assert len(extents) > 1
+    assert len({s.resolution for s in demo_module.SOURCES}) > 1
 
 
 def test_every_model_grid_covers_both_products(built):
@@ -404,7 +428,7 @@ def test_a_run_reaches_exactly_as_far_as_its_product_claims(built):
         assert run.forecast_horizon == product.frames, run.path
         reach = run.forecast_horizon * demo_module.CADENCE_MINUTES
         exercise = demo_module.exercise(
-            "vil-demo" if run.data_id == "radar-composite" else "rain-demo")
+            "radar-demo" if run.data_id == "radar-composite" else "rain-demo")
         assert max(exercise.leads) <= reach, run.path
 
 

@@ -133,6 +133,32 @@ def test_a_bar_grid_keeps_zero_on_the_axis():
     assert 0.0 in ticks, "a bar chart from 0.84 makes three points look like a ratio"
 
 
-def test_the_grid_reports_how_many_panels_it_drew():
-    svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 3, ["a", "b", "c"])
-    assert "3 panel(s), one y axis" in " ".join(texts(svg))
+def test_the_canvas_does_not_carry_a_sentence_about_the_query():
+    """A chart is meant to be worth saving on its own.
+
+    The filters, the panel count and the sample size are about the query, not
+    about the data, and a line of small grey text across the plot is what makes a
+    saved chart unreadable. The page prints them under the picture instead.
+    """
+    svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 2, ["a", "b"])
+    drawn = " ".join(texts(svg))
+    assert "panel(s)" not in drawn, drawn
+    assert "dtime" not in drawn, drawn
+    assert "init_time" not in drawn, drawn
+
+
+def test_the_grid_still_says_what_each_cell_is_and_what_the_lines_are():
+    svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 2, ["level 20", "level 60"])
+    drawn = texts(svg)
+    assert "level 20" in drawn and "level 60" in drawn
+    assert "alpha" in drawn and "beta" in drawn
+    assert "lead minutes" in drawn and "score" in drawn
+
+
+def test_the_legend_does_not_take_a_column_off_every_cell():
+    """The cells need the width; the legend runs across the top instead."""
+    svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 2, ["a", "b"], width=800)
+    root = ET.fromstring(svg)
+    cells = root.findall(f"{SVG}svg")
+    rightmost = max(float(c.get("x")) + float(c.get("width")) for c in cells)
+    assert rightmost > 800 * 0.9, rightmost

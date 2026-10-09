@@ -230,11 +230,10 @@ def line_chart(
         f'<text x="{left}" y="26" font-family="{FONT}" font-size="15" '
         f'font-weight="600" fill="#111827">{_esc(chart.title)}</text>',
     ]
-    if chart.note:
-        out.append(
-            f'<text x="{left}" y="40" font-family="{FONT}" font-size="11" '
-            f'fill="#6b7280">{_esc(chart.note)}</text>'
-        )
+    # ``chart.note`` is deliberately not drawn. It is a sentence about the query,
+    # not about the data, and a line of grey text across the plot is the one thing
+    # that makes a chart not worth saving on its own. The page prints it under the
+    # picture instead.
 
     # --- gridlines and the y axis -------------------------------------
     for tick in _ticks(y_min, y_max, step):

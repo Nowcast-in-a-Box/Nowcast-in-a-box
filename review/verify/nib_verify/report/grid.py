@@ -19,7 +19,7 @@ from dataclasses import replace
 from typing import Sequence
 
 from .chart import (FONT, PALETTE, Chart, _axis, _esc, _legend_text,
-                    _legend_width, line_chart)
+                    line_chart)
 
 #: Cells across, by how many there are. Two panels side by side beat two stacked;
 #: past four, three across keeps the cells from going flat.
@@ -62,8 +62,10 @@ def small_multiples(
     # The legend gets its own column to the right of the grid. Placing it inside
     # the grid's width puts it on top of the last cell, which is the kind of
     # overlap that looks like a rendering glitch rather than a layout bug.
-    legend_w = _legend_width(first) if count else 0
-    left, right, top, bottom = 58, 20 + legend_w, 26, 50
+    # The legend runs across the top, so nothing is reserved down the side and the
+    # cells get the whole width.
+    legend_w = 0
+    left, right, top, bottom = 58, 20, 34, 42
     cell_w = max(200, int((width - left - right - gap_x * (cols - 1)) / cols))
     cell_h = cell_height
 
@@ -98,22 +100,24 @@ def small_multiples(
         body = body.replace("<svg ", f'<svg x="{x}" y="{y}" ', 1)
         out.append(body)
 
-    # --- the one legend, and the axis names the cells no longer carry ---
-    legend_x = total_w - right + 10
+    # --- the one legend, in the strip above the cells ---
+    # Across the top rather than down the right: a legend column costs every cell
+    # width, and the width is what the cells are short of.
+    legend_x = left
     for series_index, series in enumerate(first.series):
         colour = PALETTE[series_index % len(PALETTE)]
-        ly = 18 + series_index * 16
         out.append(
-            f'<rect x="{legend_x}" y="{ly - 8}" width="10" height="10" rx="2" '
+            f'<rect x="{legend_x}" y="9" width="10" height="10" rx="2" '
             f'fill="{colour}"/>'
         )
+        label = _legend_text(series, 150)
         out.append(
-            f'<text x="{legend_x + 15}" y="{ly + 1}" font-family="{FONT}" '
-            f'font-size="11" fill="#374151">'
-            f'{_esc(_legend_text(series, max(60, legend_w - 24)))}</text>'
+            f'<text x="{legend_x + 15}" y="18" font-family="{FONT}" '
+            f'font-size="11" fill="#374151">{_esc(label)}</text>'
         )
+        legend_x += 22 + len(label) * 6.6
     out.append(
-        f'<text x="{left + (total_w - left - right) / 2:.1f}" y="{total_h - 12}" '
+        f'<text x="{left + (total_w - left - right) / 2:.1f}" y="{total_h - 10}" '
         f'text-anchor="middle" font-family="{FONT}" font-size="12" fill="#374151">'
         f'{_esc(first.x_label or "x")}</text>'
     )
@@ -122,14 +126,6 @@ def small_multiples(
         f'font-family="{FONT}" font-size="12" fill="#374151" '
         f'transform="rotate(-90 16 {top + (total_h - top - bottom) / 2:.1f})">'
         f'{_esc(first.y_label or "y")}</text>'
-    )
-
-    notes = [f"{count} panel(s), one y axis"]
-    if first.note:
-        notes.append(first.note)
-    out.append(
-        f'<text x="{left}" y="{total_h - 32}" font-family="{FONT}" font-size="10" '
-        f'fill="#6b7280">{_esc(" · ".join(n for n in notes if n))}</text>'
     )
     out.append("</svg>")
     return "\n".join(out) + "\n"

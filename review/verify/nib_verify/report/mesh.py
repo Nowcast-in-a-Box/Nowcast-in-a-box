@@ -284,14 +284,12 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
         out.append(f'<text x="{bx}" y="{by + bar_h + 29}" font-size="10.5" '
                    f'fill="#414b57">{_esc(mesh.direction)}</text>')
 
-    # ---- what the grey means, and what was filtered
-    notes = [f"{len(mesh.panels)} model(s) x {ncol} time(s) x {nrow} lead(s)"]
+    # ---- the one thing on the canvas that is about the data and not about the
+    # query: grey means nothing was stored there. Leave it out and a gap reads as
+    # a score of zero.
     if not mesh.complete:
-        notes.append("grey cells had nothing stored: a gap, not a zero")
-    if mesh.note:
-        notes.append(mesh.note)
-    out.append(f'<text x="14" y="{total_h - 20}" font-size="10" fill="#6b7480">'
-               f'{_esc(" · ".join(notes))}</text>')
+        out.append(f'<text x="14" y="{total_h - 8}" font-size="10" fill="#6b7480">'
+                   f'grey cell: nothing stored \u2014 a gap, not a zero</text>')
     out.append("</svg>")
     return "\n".join(out)
 

@@ -534,7 +534,8 @@ def test_the_results_tab_answers_a_query(page, live_server):
         "#q-params .chip", "e => e.map(x => [x.textContent, x.getAttribute('aria-pressed')])")
     assert [c[0] for c in chips] == ["16", "74", "133", "181", "219"], chips
     assert [c[0] for c in chips if c[1] == "true"] == ["133"], chips
-    assert page.page.text_content("#q-params .who").startswith("level · 1 of 5")
+    assert page.page.text_content("#q-params .who") == "level (kg m-2)", \
+        "a threshold means nothing without the unit it is a threshold on"
 
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
@@ -563,7 +564,7 @@ def test_a_threshold_is_read_back_from_the_store_and_never_recomputed(page, live
     page.page.click("#q-params .chip:text-is('133')")
     page.page.click("#q-params .chip:text-is('181')")
     page.page.wait_for_timeout(200)
-    assert page.page.text_content("#q-params .who").startswith("level · 1 of 5")
+    assert page.page.text_content("#q-params .who") == "level (kg m-2)"
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
 
@@ -592,7 +593,10 @@ def test_the_chart_is_drawn_by_the_browser(page, live_server):
     assert page.page.locator("#chart-card").is_visible()
     assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0,         "the browser could not render what /api/chart returned"
     assert "line along lead_minutes" in page.text()
-    assert page.page.locator("#chart-svg").get_attribute("href").startswith("/api/chart?")
+    # the picture is for looking at; what is under it says what it is of
+    assert "ts over" in page.text()
+    assert page.page.locator("#chart-svg").count() == 0, \
+        "no save-the-chart link: the table is what can be saved"
     assert page.errors == []
 
 
@@ -708,6 +712,31 @@ def test_the_parameter_row_is_the_list_the_family_reads(page, live_server):
     page.page.wait_for_timeout(300)
     assert page.page.locator("#q-params .chip").count() == 0
     assert "no parameters" in page.text()
+    assert page.errors == []
+
+
+def test_a_metric_with_two_parameters_shows_both_rows(page, live_server):
+    """A spatial metric needs a level *and* a half window.
+
+    The page mounts its rows into one host, and the host is cleared each time --
+    so a row mounted per turn of a loop leaves the last row and nothing else. Two
+    parameters is the only case that shows it, and FSS is the only metric with
+    two.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+
+    page.page.select_option("#q-method", "fss")
+    page.page.wait_for_timeout(400)
+    rows = page.page.eval_on_selector_all("#q-params .who", "e => e.map(x => x.textContent)")
+    assert len(rows) == 2, rows
+    assert rows[0].startswith("level"), rows
+    assert rows[1].startswith("half window"), rows
+    # and both rows carry chips, not just the last one
+    chips = page.page.eval_on_selector_all("#q-params .param-row",
+                                          "e => e.map(r => r.querySelectorAll('.chip').length)")
+    assert all(n >= 2 for n in chips), chips
     assert page.errors == []
 
 
