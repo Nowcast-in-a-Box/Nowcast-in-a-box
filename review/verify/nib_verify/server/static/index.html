@@ -156,36 +156,48 @@
         <select id="q-method"></select>
       </div>
       <div class="field">
-        <label for="q-g">Expand by</label>
-        <div id="q-g" class="chips"></div>
-        <span class="note">Click to set the order: the last becomes the x-axis.</span>
+        <label>Parameters</label>
+        <div id="q-params" class="row"></div>
       </div>
     </div>
     <div class="grid tight" style="margin-top:10px">
-      <div class="field"><label for="q-lead">Lead minutes</label><input id="q-lead" placeholder="all" autocomplete="off"></div>
-      <div class="field"><label for="q-level">Levels</label><input id="q-level" placeholder="all" autocomplete="off"></div>
-      <div class="field"><label for="q-window">Half windows</label><input id="q-window" placeholder="all" autocomplete="off"></div>
-      <div class="field"><label for="q-time-from">Valid from</label><input id="q-time-from" placeholder="2026-01-01T00:00:00Z" autocomplete="off"></div>
-      <div class="field"><label for="q-time-to">Valid to</label><input id="q-time-to" placeholder="2026-01-02T00:00:00Z" autocomplete="off"></div>
+      <div class="field"><label for="q-init-from">Init from</label><input id="q-init-from" placeholder="all" autocomplete="off"></div>
+      <div class="field"><label for="q-init-to">Init to</label><input id="q-init-to" placeholder="all" autocomplete="off"></div>
+      <div class="field"><label for="q-lead-from">Lead from</label><input id="q-lead-from" placeholder="all" autocomplete="off"></div>
+      <div class="field"><label for="q-lead-to">Lead to</label><input id="q-lead-to" placeholder="all" autocomplete="off"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field">
+        <label>Form</label>
+        <div class="chips" id="q-kind"></div>
+      </div>
+      <div class="field">
+        <label for="q-axis">Along</label>
+        <select id="q-axis">
+          <option value="lead_minutes">lead minutes</option>
+          <option value="init_time">init time</option>
+          <option value="hour">hour of init</option>
+        </select>
+      </div>
     </div>
     <div class="row" style="margin-top:12px">
       <button class="act" id="btn-query">Run query</button>
       <span class="muted tiny" id="query-hint"></span>
     </div>
-    <div id="query-result"></div>
     <div id="chart-card" hidden>
       <div class="row" style="margin-top:14px; justify-content:space-between">
         <h3 style="margin:0">Chart</h3>
         <span class="muted tiny" id="chart-hint"></span>
       </div>
-      <p class="hint">The same query, drawn. The last expansion is the x axis and the
-        ones before it separate the lines, which is the convention the query already uses.</p>
+      <p class="hint">The same query, drawn. A line or bar runs along one dimension with
+        one mark per model; a mesh grid is init time across and lead up, one panel per model.</p>
       <img id="chart" alt="chart of the current query" style="width:100%; height:auto; display:block">
       <div class="row" style="margin-top:8px">
         <a class="act ghost" id="chart-svg" download="chart.svg" href="#">Download SVG</a>
         <span class="muted tiny" id="chart-note"></span>
       </div>
     </div>
+    <div id="query-result"></div>
   </div>
 
   <div class="card">

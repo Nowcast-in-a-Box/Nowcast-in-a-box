@@ -121,6 +121,15 @@ input:focus, select:focus, textarea:focus {
 /* A derived value is shown, not asked for. It has to look that way, or the one
    box the form refuses to accept typing into reads as a bug. */
 input[readonly] { background: var(--bg); color: var(--muted); cursor: default; }
+/* A control that has stopped applying has to say so. A mesh spends both axes on
+   time and lead, so the "along" choice is off -- and a select that still looks
+   live and quietly does nothing is worse than one that is visibly out. */
+select:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+  border-style: dashed;
+}
 
 button.act {
   cursor: pointer;

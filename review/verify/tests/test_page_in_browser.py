@@ -482,9 +482,10 @@ def test_the_results_tab_answers_a_query(page, live_server):
     assert methods[:3] == ["ts", "bias", "ets"]
     assert "pod" not in methods, "a metric the config does not carry is not offered"
 
-    page.page.click("#q-g .chip:has-text('lead_minutes')")
-    page.page.wait_for_timeout(200)
-    assert "1. lead_minutes" in page.text(), "the expansion order is shown"
+    # a yes_or_no metric carries thresholds, so the box is there -- and it
+    # offers the five this config stored, with "any" first and nothing else
+    levels = page.page.eval_on_selector_all("#q-level option", "e => e.map(x => x.value)")
+    assert levels == ["", "16", "74", "133", "181", "219"], levels
 
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
@@ -496,27 +497,25 @@ def test_the_results_tab_answers_a_query(page, live_server):
     assert page.errors == []
 
 
-def test_a_new_threshold_over_stored_numbers_needs_no_rerun(page, live_server):
+def test_a_threshold_is_read_back_from_the_store_and_never_recomputed(page, live_server):
     """The done_when condition, through the interface.
 
-    The run stored five levels. Asking for a sixth the config never named must
-    come straight out of the stored table — so the query succeeds even though
-    nothing has been computed for it.
+    The run stored five thresholds. Picking the fourth asks the store a
+    question it can already answer, so it comes back without anything being
+    inferred again -- and the box only offers thresholds this config has, so
+    there is no way to ask for one nobody ever computed.
     """
     seed_run(live_server)
     page.load(live_server).tab("results")
     page.page.wait_for_timeout(700)
 
-    page.page.click("#q-g .chip:has-text('level')")
-    page.page.fill("#q-level", "133")
+    page.page.select_option("#q-level", "133")
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
 
-    body = page.text()
-    assert "THREAT SCORE" in body
-    assert "LEVEL" in body, "the threshold is a column"
-    assert "133" in body, "a level the config never named came out of the store"
-    assert "1 record(s)" in body
+    assert "THREAT SCORE" in page.text()
+    assert "level=133" in page.page.locator("#chart").get_attribute("src")
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
     assert page.errors == []
 
 
@@ -533,41 +532,127 @@ def test_the_chart_is_drawn_by_the_browser(page, live_server):
     page.page.wait_for_timeout(700)
     assert not page.page.locator("#chart-card").is_visible(), "no query, no chart"
 
-    page.page.click("#q-g .chip:has-text('lead_minutes')")
-    page.page.wait_for_timeout(200)
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1200)
 
     assert page.page.locator("#chart-card").is_visible()
     assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0,         "the browser could not render what /api/chart returned"
-    assert "x: lead_minutes" in page.text()
+    assert "lead_minutes along x" in page.text()
     assert page.page.locator("#chart-svg").get_attribute("href").startswith("/api/chart?")
     assert page.errors == []
 
 
-def test_the_chart_follows_the_expansion_the_user_picked(page, live_server):
-    """Two expansions means the last is x and the one before it separates the
-    lines, so switching the expansions has to redraw rather than re-label."""
+def test_the_chart_follows_the_axis_the_user_picked(page, live_server):
+    """One mark per model, along whichever of the three axes was chosen.
+
+    Switching the axis has to redraw rather than relabel, so the URL is read
+    back and so is the picture the browser actually decoded.
+    """
     seed_run(live_server)
     page.load(live_server).tab("results")
     page.page.wait_for_timeout(700)
 
-    page.page.click("#q-g .chip:has-text('lead_minutes')")
-    page.page.wait_for_timeout(200)
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1000)
     first = page.page.locator("#chart").get_attribute("src")
     assert "x=lead_minutes" in first
-    assert "series=" not in first, "one expansion, one line"
+    assert "series=member" in first, "the models are the marks, not the axis"
 
-    page.page.click("#q-g .chip:has-text('level')")
-    page.page.wait_for_timeout(200)
+    page.page.select_option("#q-axis", "hour")
+    page.page.wait_for_timeout(1400)
+    second = page.page.locator("#chart").get_attribute("src")
+    assert "x=hour" in second, "the chosen axis did not reach the chart"
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
+    assert page.errors == []
+
+
+def test_the_form_switches_to_a_mesh_and_the_axis_choice_goes_away(page, live_server):
+    """A mesh spends both axes on time and lead.
+
+    So the "along" select stops applying to it, and it is disabled rather than
+    ignored: a control that is on screen and does nothing is worse than one that
+    is off.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+
+    assert page.page.eval_on_selector("#q-axis", "e => e.disabled") is False
+    page.page.click("#q-kind button:has-text('mesh')")
+    assert page.page.eval_on_selector("#q-axis", "e => e.disabled") is True
+
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1400)
+    src = page.page.locator("#chart").get_attribute("src")
+    assert "kind=mesh" in src
+    assert "x=init_time" in src and "series=lead_minutes" in src
+    assert "mesh: init time across" in page.text()
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
+    assert page.errors == []
+
+
+def test_the_bar_form_asks_for_bars(page, live_server):
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1000)
-    second = page.page.locator("#chart").get_attribute("src")
-    assert "x=level" in second, "the last expansion moved to the x axis"
-    assert "series=lead_minutes" in second, "the earlier one became the lines"
+
+    page.page.click("#q-kind button:has-text('bar')")
+    page.page.wait_for_timeout(1200)
+    assert "kind=bar" in page.page.locator("#chart").get_attribute("src")
     assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
+    assert page.errors == []
+
+
+def test_the_form_redraws_at_once_and_the_filters_wait_for_the_button(page, live_server):
+    """Two kinds of control, and they must not behave alike.
+
+    The form is a way of looking at an answer and redraws on the click, the same
+    rule the axis follows. The filters change what is *asked*, so they wait --
+    and typing a lead range must not fire off a query somebody did not ask for.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1000)
+    first = page.page.locator("#chart").get_attribute("src")
+
+    # a filter: no redraw until the button
+    page.page.fill("#q-lead-from", "20")
+    page.page.wait_for_timeout(600)
+    assert page.page.locator("#chart").get_attribute("src") == first,         "typing in a filter started a query"
+
+    # the form: a redraw with no button
+    page.page.click("#q-kind button:has-text('line')")
+    page.page.wait_for_timeout(400)
+    page.page.click("#q-kind button:has-text('bar')")
+    page.page.wait_for_timeout(1200)
+    assert "kind=bar" in page.page.locator("#chart").get_attribute("src")
+    assert page.errors == []
+
+
+def test_the_parameter_boxes_are_the_ones_the_family_reads(page, live_server):
+    """A level box belongs to a thresholded metric and to nothing else.
+
+    The page does not decide this: it reads the family and the values off the
+    config's own metric group, which is the same list the server checks against.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+
+    # the first metric is a yes_or_no one: a level, and no half window
+    assert page.page.locator("#q-level").count() == 1
+    assert page.page.locator("#q-window").count() == 0
+
+    # a continuous metric has neither
+    page.page.select_option("#q-method", "mae")
+    page.page.wait_for_timeout(200)
+    assert page.page.locator("#q-level").count() == 0
+    assert page.page.locator("#q-window").count() == 0
+    assert "no parameters" in page.text()
     assert page.errors == []
 
 
@@ -579,7 +664,7 @@ def test_the_results_tab_says_so_when_nothing_matches(page, live_server):
     """
     page.load(live_server).tab("results")
     page.page.wait_for_timeout(700)
-    page.page.fill("#q-time-from", "2030-01-01T00:00:00Z")
+    page.page.fill("#q-init-from", "2030-01-01T00:00:00Z")
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
 

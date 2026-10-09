@@ -280,7 +280,8 @@ class Store:
         ).fetchall()
         return [r["valid_time"] for r in rows]
 
-    def task_axes(self, group_id: str) -> tuple[list[str], list[int]]:
+    def task_axes(self, group_id: str, *, window: Mapping[str, Any] | None = None,
+                  ) -> tuple[list[str], list[int]]:
         """Every init time and lead the plan contains, answered or not.
 
         The axes of a grid have to come from what was *asked for*, not from what
@@ -289,11 +290,21 @@ class Store:
         closes the gap up and reads as complete. That is the failure this method
         exists to prevent: the missing run is exactly what the reader is looking
         for.
+
+        ``window`` is the same filter the results went through, so a plan from
+        another month cannot stretch this chart back to include it. Passing the
+        filter through rather than widening and hoping is what keeps the axes
+        and the cells describing one query.
         """
-        rows = self.conn.execute(
-            "SELECT DISTINCT init_time, lead_minutes FROM task WHERE group_id = ?",
-            (group_id,),
-        ).fetchall()
+        clauses, params = ["group_id = ?"], [group_id]
+        for column in ("init_time", "lead_minutes"):
+            bounds = (window or {}).get(column)
+            if isinstance(bounds, Between):
+                clauses.append(f"{column} BETWEEN ? AND ?")
+                params.extend([_coerce(bounds.lo), _coerce(bounds.hi)])
+        sql = ("SELECT DISTINCT init_time, lead_minutes FROM task WHERE "
+               + " AND ".join(clauses))
+        rows = self.conn.execute(sql, params).fetchall()
         return (sorted({r["init_time"] for r in rows}),
                 sorted({int(r["lead_minutes"]) for r in rows}))
 

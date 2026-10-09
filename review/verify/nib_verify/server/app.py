@@ -409,8 +409,8 @@ def create_app(
 
         params = request.query_params
         kind = (params.get("kind") or "line").lower()
-        if kind not in ("line", "mesh"):
-            raise QueryError(f"unknown chart kind {kind!r}; line or mesh")
+        if kind not in ("line", "bar", "mesh"):
+            raise QueryError(f"unknown chart kind {kind!r}; line, bar or mesh")
         method = params.get("method")
         if not method:
             raise QueryError("method is required")
@@ -418,16 +418,27 @@ def create_app(
         cfg = library.get(config_id) if config_id else None
 
         with store() as s:
-            chart = chart_for(
-                s, cfg,
-                method=method,
-                s=_filters_from_query(params),
-                x=params.get("x") or "lead_minutes",
-                series=tuple(params.getlist("series")) or ("member",),
-            )
+            if kind == "mesh":
+                svg = mesh_svg(mesh_for(
+                    s, cfg,
+                    method=method,
+                    s=_filters_from_query(params),
+                    time_dim=params.get("x") or "init_time",
+                    lead_dim=params.get("series") or "lead_minutes",
+                ))
+            else:
+                chart = chart_for(
+                    s, cfg,
+                    method=method,
+                    s=_filters_from_query(params),
+                    x=params.get("x") or "lead_minutes",
+                    series=tuple(params.getlist("series")) or ("member",),
+                )
+                svg = line_chart(chart, width=_int_param(params, "width", 760),
+                                 height=_int_param(params, "height", 440),
+                                 kind="bar" if kind == "bar" else "line")
         return Response(
-            content=line_chart(chart, width=_int_param(params, "width", 760),
-                               height=_int_param(params, "height", 440)),
+            content=svg,
             media_type="image/svg+xml",
             headers={"Cache-Control": "no-store"},
         )
@@ -644,7 +655,14 @@ def _parse_time(value) -> datetime:
 def _filters_from_query(params) -> dict:
     """Query-string filters, in MetEva's vocabulary."""
     out: dict[str, Any] = {}
-    if params.get("lead"):
+    lead_from, lead_to = params.get("lead_from"), params.get("lead_to")
+    if lead_from or lead_to:
+        # A two-element list is a range to ``_translate``, which is what "from X
+        # to Y" means and what a single ``lead=`` value does not: that one is a
+        # list. Keeping them apart matters -- ``lead=10,60`` is the two leads 10
+        # and 60, and ``lead_from=10&lead_to=60`` is every lead between them.
+        out["dtime"] = [_number(lead_from, 0), _number(lead_to, 10 ** 9)]
+    elif params.get("lead"):
         out["dtime"] = _numbers(params["lead"])
     if params.get("level"):
         out["level"] = _numbers(params["level"])
@@ -661,6 +679,14 @@ def _filters_from_query(params) -> dict:
         out["init_time"] = [init_from or "0001-01-01T00:00:00Z",
                             init_to or "9999-12-31T23:59:59Z"]
     return out
+
+
+def _number(text, fallback):
+    try:
+        value = float(text)
+    except (TypeError, ValueError):
+        return fallback
+    return int(value) if value.is_integer() else value
 
 
 def _numbers(text: str):

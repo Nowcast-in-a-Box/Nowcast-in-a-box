@@ -89,6 +89,7 @@ const state = {
   poll: null,
   job: null,
   chartUrl: null,
+  kind: "line",
 };
 
 // ---------------------------------------------------------------- tabs
@@ -100,7 +101,7 @@ function showTab(name) {
   for (const section of $$("main > section")) {
     section.hidden = section.id !== `tab-${name}`;
   }
-  if (name === "results") refreshResultsSelectors();
+  if (name === "results") { renderKindChips(); refreshResultsSelectors(); }
 }
 
 $$("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -984,38 +985,49 @@ async function onConfigPicked() {
     try { cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`); } catch (_) { return; }
   }
   state.selected = cfg;
-  const methods = (cfg.metrics_available || []).map(m => m.method);
+  const available = cfg.metrics_available || [];
   const select = $("#q-method");
-  mount(select, methods.map(m => h("option", { value: m, text: m })));
-  if (methods.length) await onMethodPicked();
+  const previous = select.value;
+  mount(select, available.map(m => h("option", { value: m.method, text: m.method })));
+  if (previous && available.some(m => m.method === previous)) select.value = previous;
+  if (available.length) await onMethodPicked();
   renderCoverage(cfg);
 }
 
 async function onMethodPicked() {
   const method = $("#q-method").value;
-  if (!method) return;
-  let dimensions = [];
-  try { dimensions = (await api(`/api/metrics/${encodeURIComponent(method)}/dimensions`)).dimensions; } catch (_) {}
-  state.expand = state.expand.filter(d => dimensions.includes(d));
-  renderExpandChips(dimensions);
+  if (!method) return renderParams(null);
+  // The parameters are read off the config's own metric group, so a box appears
+  // only for a family that has something to put in it -- and only with the
+  // values that group was declared with. There is no level box on a continuous
+  // metric, and no way to ask for a level this config never stored.
+  const entry = ((state.selected || {}).metrics_available || []).find(m => m.method === method);
+  renderParams(entry || null);
 }
 
-function renderExpandChips(dimensions) {
-  mount($("#q-g"),
-    dimensions.map(d => {
-      const at = state.expand.indexOf(d);
-      return h("button", {
-        class: "chip", type: "button", "aria-pressed": String(at >= 0),
-        text: at >= 0 ? `${at + 1}. ${d}` : d,
-        onclick: () => {
-          const i = state.expand.indexOf(d);
-          if (i >= 0) state.expand.splice(i, 1); else state.expand.push(d);
-          onMethodPicked();
-        },
-      });
-    }),
-    h("span", { class: "tiny muted" }, state.expand.length
-      ? `order: ${state.expand.join(" → ")}` : "nothing selected: one total"));
+function renderParams(entry) {
+  const host = $("#q-params");
+  mount(host);
+  if (!entry) return;
+  if (entry.levels && entry.levels.length) {
+    mount(host, h("span", { class: "tiny muted" }, "level"),
+      picker("q-level", entry.levels));
+  }
+  if (entry.half_windows && entry.half_windows.length) {
+    mount(host, h("span", { class: "tiny muted" }, "half window"),
+      picker("q-window", entry.half_windows));
+  }
+  if (!host.childNodes.length) {
+    mount(host, h("span", { class: "tiny muted" }, `${entry.family}: no parameters`));
+  }
+}
+
+function picker(id, values) {
+  // "any" is the first option and the empty string, which the query reads as
+  // "do not filter on this" -- the same thing leaving the box blank used to mean.
+  return h("select", { id },
+    h("option", { value: "", text: "any" }),
+    values.map(v => h("option", { value: String(v), text: String(v) })));
 }
 
 function renderCoverage(cfg) {
@@ -1029,18 +1041,59 @@ function renderCoverage(cfg) {
       + (stored.missing_obs_times ? ` · ${stored.missing_obs_times} missing observation time(s)` : "")));
 }
 
-async function runQuery() {
-  const host = $("#query-result");
-  mount(host, empty("Querying…"));
+//: The three forms, and what each one does with the two axes.
+//:
+//: A mesh spends both axes on time and lead, so the "along" choice does not
+//: apply to it and the select is disabled rather than ignored -- a control that
+//: is on screen and has no effect is worse than one that is off.
+const FORMS = [
+  { id: "line", label: "line", x: true },
+  { id: "bar", label: "bar", x: true },
+  { id: "mesh", label: "mesh", x: false },
+];
+
+function renderKindChips() {
+  mount($("#q-kind"), FORMS.map(f => h("button", {
+    class: "chip", type: "button", "aria-pressed": String(state.kind === f.id),
+    text: f.label,
+    onclick: () => {
+      state.kind = f.id;
+      renderKindChips();
+      // The form is a way of looking at the answer, not a different question, so
+      // it redraws at once -- the same rule the axis follows. The filters are the
+      // ones that wait for the button, because those change what is asked.
+      if (state.lastQuery) runQuery();
+    },
+  })));
+  $("#q-axis").disabled = state.kind === "mesh";
+}
+
+function queryParams() {
   const params = new URLSearchParams();
   params.set("config", $("#q-config").value);
   params.set("method", $("#q-method").value);
-  state.expand.forEach(d => params.append("g", d));
-  for (const [key, id] of [["lead", "q-lead"], ["level", "q-level"], ["half_window", "q-window"],
-                           ["time_from", "q-time-from"], ["time_to", "q-time-to"]]) {
-    const value = $(`#${id}`).value.trim();
+  for (const [key, id] of [
+    ["init_from", "q-init-from"], ["init_to", "q-init-to"],
+    ["lead_from", "q-lead-from"], ["lead_to", "q-lead-to"],
+    ["level", "q-level"], ["half_window", "q-window"],
+  ]) {
+    const box = $(`#${id}`);
+    const value = box ? box.value.trim() : "";
     if (value) params.set(key, value);
   }
+  return params;
+}
+
+async function runQuery() {
+  const host = $("#query-result");
+  mount(host, empty("Querying…"));
+  const params = queryParams();
+  // What the table expands by has to be what the chart draws along, or the two
+  // would describe one query in two shapes. A mesh consumes both axes.
+  const dims = state.kind === "mesh"
+    ? ["member", "lead_minutes", "init_time"]
+    : ["member", $("#q-axis").value];
+  dims.forEach(d => params.append("g", d));
   try {
     const result = await api(`/api/scores?${params.toString()}`);
     state.lastQuery = result;
@@ -1053,27 +1106,28 @@ async function runQuery() {
 }
 
 function showChart(params) {
-  // The same convention the query already documents: the last expansion runs
-  // along x, the ones before it separate the lines. Nothing here decides
-  // anything — it reads back what the user picked and asks the service to draw
-  // it.
-  const dims = state.expand || [];
-  const x = dims.length ? dims[dims.length - 1] : "lead_minutes";
-  const series = dims.slice(0, -1);
-
   const chart = new URLSearchParams(params);
   chart.delete("g");
-  chart.set("x", x);
-  for (const name of series) chart.append("series", name);
+  chart.set("kind", state.kind);
+  if (state.kind === "mesh") {
+    // Fixed, and not offered: a mesh with lead across and time up would be the
+    // same picture read sideways, and two ways to ask for it is one too many.
+    chart.set("x", "init_time");
+    chart.set("series", "lead_minutes");
+  } else {
+    chart.set("x", $("#q-axis").value);
+    chart.set("series", "member");
+  }
 
   state.chartUrl = `/api/chart?${chart.toString()}`;
   // An <a download> rather than a button that builds a blob: the browser
   // already knows how to save a URL, and one less place to get base64 wrong.
   $("#chart-svg").href = state.chartUrl;
-  const img = $("#chart");
-  img.src = state.chartUrl;
+  $("#chart").src = state.chartUrl;
   $("#chart-card").hidden = false;
-  $("#chart-hint").textContent = `x: ${x}` + (series.length ? ` · lines: ${series.join(" + ")}` : " · one line");
+  $("#chart-hint").textContent = state.kind === "mesh"
+    ? "mesh: init time across, lead up, one panel per model"
+    : `${state.kind}: ${$("#q-axis").value} along x, one mark per model`;
   $("#chart-note").textContent = chart.get("method") + " — fetched from the same query";
 }
 
@@ -1126,6 +1180,7 @@ $("#c-truth").addEventListener("change", applyGroundTruth);
 $("#btn-query").addEventListener("click", runQuery);
 $("#q-config").addEventListener("change", onConfigPicked);
 $("#q-method").addEventListener("change", onMethodPicked);
+$("#q-axis").addEventListener("change", () => { if (state.lastQuery) runQuery(); });
 
 function renderMetricGroups() {
   const groups = state.metricGroups;

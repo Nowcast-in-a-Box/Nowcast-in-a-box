@@ -153,8 +153,19 @@ def line_chart(
     height: int = 440,
     y_min: float | None = None,
     y_max: float | None = None,
+    kind: str = "line",
 ) -> str:
-    """One x axis, one y axis, one line per series. Returns an SVG document."""
+    """One x axis, one y axis, one line -- or one group of bars -- per series.
+
+    Returns an SVG document.
+
+    ``kind`` is ``line`` or ``bar``. The two differ in more than a mark: a bar
+    carries its length as meaning, so the axis it is drawn against has to start
+    somewhere the length means something. A bar chart from 0.80 to 0.93 makes a
+    three point difference look like a five-fold one.
+    """
+    if kind not in ("line", "bar"):
+        raise ValueError(f"unknown chart kind {kind!r}; line or bar")
     top, bottom = 48, 62
     left = 76
     legend = _legend_width(chart)
@@ -165,6 +176,11 @@ def line_chart(
     plot = _Box(left, top, width - left - right, height - bottom)
 
     ys = chart.values()
+    if kind == "bar" and ys:
+        # The bar's length is the quantity. Fitting the axis to the data would
+        # make the length mean nothing, so 0 comes along whether or not the data
+        # goes near it.
+        ys = [*ys, 0.0]
     if y_min is None or y_max is None:
         fitted_lo, fitted_hi, step = _axis(ys)
         y_min = fitted_lo if y_min is None else y_min
@@ -264,20 +280,23 @@ def line_chart(
             "no samples for this selection</text>"
         )
 
-    # --- the lines ----------------------------------------------------
-    for index, series in enumerate(chart.series):
-        colour = PALETTE[index % len(PALETTE)]
-        out.append(
-            f'<g stroke="{colour}" fill="{colour}" stroke-width="1.8" '
-            f'stroke-linejoin="round" stroke-linecap="round">'
-        )
-        for run in _runs(series):
-            points = " ".join(f"{sx(x):.1f},{sy(y):.1f}" for x, y in run)
-            if len(run) > 1:
-                out.append(f'<polyline points="{points}" fill="none"/>')
-            for x, y in run:
-                out.append(f'<circle cx="{sx(x):.1f}" cy="{sy(y):.1f}" r="3"/>')
-        out.append("</g>")
+    # --- the marks ----------------------------------------------------
+    if kind == "bar":
+        out.extend(_bars(chart, plot, sx, sy, x_lo, x_hi))
+    else:
+        for index, series in enumerate(chart.series):
+            colour = PALETTE[index % len(PALETTE)]
+            out.append(
+                f'<g stroke="{colour}" fill="{colour}" stroke-width="1.8" '
+                f'stroke-linejoin="round" stroke-linecap="round">'
+            )
+            for run in _runs(series):
+                points = " ".join(f"{sx(x):.1f},{sy(y):.1f}" for x, y in run)
+                if len(run) > 1:
+                    out.append(f'<polyline points="{points}" fill="none"/>')
+                for x, y in run:
+                    out.append(f'<circle cx="{sx(x):.1f}" cy="{sy(y):.1f}" r="3"/>')
+            out.append("</g>")
 
     # --- the legend ---------------------------------------------------
     legend_x = plot.x1 + 22
@@ -299,6 +318,48 @@ def line_chart(
 
 
 FONT = "Helvetica, Arial, sans-serif"
+
+#: The share of an x slot one group of bars may fill. The rest is the space that
+#: keeps two groups from reading as one wide bar.
+BAR_GROUP_FILL = 0.72
+
+
+def _bars(chart: Chart, plot: _Box, sx, sy, x_lo: float, x_hi: float) -> list[str]:
+    """One bar per (series, x), grouped inside the x slot.
+
+    A bar with nothing behind it is left out rather than drawn at zero height:
+    at zero the reader cannot tell it from a real score of 0, and those mean
+    opposite things.
+    """
+    out: list[str] = []
+    n = max(1, len(chart.series))
+    # The slot is one x step wide, not one pixel: the bars have to sit under the
+    # tick they belong to.
+    span = max(1e-9, x_hi - x_lo)
+    slot = plot.w / span
+    gap = slot / max(1, len(chart.x_values()) + 1)
+    bar_w = max(2.0, (slot - gap) * BAR_GROUP_FILL / n)
+    baseline = sy(0.0)
+
+    for index, series in enumerate(chart.series):
+        colour = PALETTE[index % len(PALETTE)]
+        for x, y in series.defined:
+            centre = sx(x) - (n - 1) / 2 * bar_w + index * bar_w
+            top = sy(y)
+            # A value at 0 has no bar to draw, and drawing an invisible one would
+            # put a shape in the DOM that says nothing.
+            if abs(top - baseline) < 0.5:
+                continue
+            out.append(
+                f'<rect x="{centre:.1f}" y="{min(top, baseline):.1f}" '
+                f'width="{bar_w:.1f}" height="{abs(top - baseline):.1f}" '
+                f'fill="{colour}" fill-opacity="0.9"/>'
+            )
+    out.append(
+        f'<line x1="{plot.x0:.1f}" y1="{baseline:.1f}" x2="{plot.x1:.1f}" '
+        f'y2="{baseline:.1f}" stroke="#374151" stroke-width="1"/>'
+    )
+    return out
 
 
 @dataclass(frozen=True)

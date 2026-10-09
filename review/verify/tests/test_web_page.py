@@ -201,15 +201,42 @@ def test_the_chart_is_an_image_the_page_can_load():
     assert "download=" in html, "it is a download, not a link to a new tab"
 
 
-def test_the_chart_follows_the_expansion_order_that_was_chosen():
-    """The page does not invent an axis. It reads back the last expansion, which
-    is the convention the query already documents."""
+def test_the_chart_and_the_table_expand_by_the_same_dimensions():
+    """One query, two shapes.
+
+    The table groups by what the chart draws along. If the two could disagree the
+    page would be describing two different queries, and the picture would not be
+    of the numbers underneath it.
+    """
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    body = app[app.index("function showChart"):]
+    body = app[app.index("async function runQuery"):]
     body = body[: body.index("\n}\n")]
-    assert 'dims[dims.length - 1]' in body, "the last expansion is the x axis"
-    assert "dims.slice(0, -1)" in body, "the ones before it separate the lines"
-    assert "chart.delete(\"g\")" in body, "g is the table's grouping, not the chart's"
+    assert 'state.kind === "mesh"' in body, "the mesh spends both axes"
+    assert '["member", "lead_minutes", "init_time"]' in body
+    assert '$("#q-axis").value' in body, "a line is drawn along the control"
+    assert 'dims.forEach(d => params.append("g", d))' in body, \
+        "and the table expands by exactly those"
+
+    chart = app[app.index("function showChart"):]
+    chart = chart[: chart.index("\n}\n")]
+    assert 'chart.delete("g")' in chart, "g is the table's grouping, not the chart's"
+    assert 'chart.set("series", "member")' in chart, "the models are the marks"
+    assert 'chart.set("kind", state.kind)' in chart, "the form reaches the chart"
+
+
+def test_the_axis_is_a_control_and_not_the_order_the_chips_were_clicked():
+    """The axis used to be whatever the expansion chips happened to spell.
+
+    That is an implicit rule: it works only for somebody who already knows it,
+    and nothing on the page says it. The three axes are named in a select now.
+    """
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'id="q-axis"' in html
+    assert html.count('value="lead_minutes"') >= 1
+    assert 'value="init_time"' in html
+    assert 'value="hour"' in html, "the hour a run started is one of the axes"
+    assert 'id="q-g"' not in html, "the chip order is gone"
+    assert "the last becomes the x-axis" not in html
 
 
 def test_the_config_form_does_not_ask_for_notes():

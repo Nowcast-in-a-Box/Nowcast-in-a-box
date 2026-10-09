@@ -103,7 +103,7 @@ def mesh_for(
     times exist. A time that is missing for one model is then visibly missing
     from that model's panel instead of silently shifting every column after it.
     """
-    from ..query.service import query_scores
+    from ..query.service import _translate, query_scores
 
     expand = tuple(dict.fromkeys([member_dim, lead_dim, time_dim]))
     result = query_scores(store, cfg, method=method, s=s, g=expand, limit=limit)
@@ -118,10 +118,12 @@ def mesh_for(
     # there is not a gap, it is an absence the chart quietly papers over.
     group_id = (s or {}).get("group_id") or (cfg.group_id if cfg is not None else None)
     if group_id:
-        planned_times, planned_leads = store.task_axes(group_id)
+        # The plan is read through the same filter the results were, so a chart
+        # of next month does not grow columns from last month.
+        window = _translate(s or {})
+        planned_times, planned_leads = store.task_axes(group_id, window=window)
         members = members or sorted({m.name for m in (cfg.members if cfg else ())})
-        x_values = sorted(set(x_values) | {t for t in planned_times
-                                           if _in_range(t, x_values)})
+        x_values = sorted(set(x_values) | set(planned_times))
         y_values = sorted(set(y_values) | {float(v) for v in planned_leads})
 
     panels = []
@@ -150,19 +152,6 @@ def mesh_for(
         method=(meta.get("method") or method),
         complete=complete,
     )
-
-
-def _in_range(value: str, present: list[str]) -> bool:
-    """Whether a planned time falls inside the window the results span.
-
-    A narrower question than "is it between the filters": the filters are open by
-    default, and a plan from last year would otherwise stretch this year's chart
-    back to include it. The results say what the reader is looking at; the plan
-    says what is missing from it.
-    """
-    if not present:
-        return True
-    return present[0] <= value <= present[-1]
 
 
 # ----------------------------------------------------------------------
