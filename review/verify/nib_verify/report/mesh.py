@@ -22,7 +22,12 @@ from .chart import PALETTE, _esc, _filters_note, _short, _short_time, fs
 #: A sequential ramp for a score. Paled to dark, so a printed copy reads the same
 #: way round as a screen. It is not perceptually uniform; it is short, it prints,
 #: and it keeps green-yellow-red at the top end where the eye already looks.
-RAMP = ("#f2f7fb", "#c9dcec", "#8fbcdb", "#5aa1c4", "#3d8f7a",
+#: The pale end is a *tinted* pale and not a near-white. More than half the cells
+#: of a real mesh are near the bottom -- long leads, high thresholds, no skill --
+#: so a bottom that is almost white makes "the score is zero there" read the same
+#: as "nothing was stored there", and the note about grey cells then has to
+#: explain away a colour it does not own.
+RAMP = ("#cfe0f2", "#a8c8e4", "#8fbcdb", "#5aa1c4", "#3d8f7a",
         "#79b64d", "#d8c33a", "#e08a1e", "#c9482b", "#8f1d16")
 
 #: Which end of the ramp is the good end.  ``bias`` and ``me`` are in neither
@@ -35,7 +40,7 @@ BETTER_LOW = frozenset({"mae", "rmse", "far"})
 #: A cell with nothing behind it.  Not white: white is what a value at the bottom
 #: of the ramp looks like, and a gap that reads as "scored zero" is the one
 #: mistake a verification chart must not make.
-GAP_FILL = "#e8e8e8"
+GAP_FILL = "#d7dade"
 
 CELL = 18
 CELL_MIN = 6
@@ -173,12 +178,33 @@ def mesh_for(
 
 # ----------------------------------------------------------------------
 def _colour(value: float | None, lo: float, hi: float) -> str:
+    """The colour for a value, interpolated between the stops of the ramp.
+
+    Interpolated rather than bucketed into the ten stops. Bucketed, more than
+    half the cells of a real mesh landed on the same palest colour -- the long
+    leads and the high thresholds where the score is near zero -- and a mesh whose
+    majority is one flat colour has the same problem as one that is all 0.99: it
+    is a picture with nothing in it to read.
+    """
     if value is None:
         return GAP_FILL
     if hi <= lo:
         return RAMP[len(RAMP) // 2]
-    frac = min(1.0, max(0.0, (value - lo) / (hi - lo)))
-    return RAMP[min(len(RAMP) - 1, int(frac * len(RAMP)))]
+    frac = min(1.0, max(0.0, (value - lo) / (hi - lo))) * (len(RAMP) - 1)
+    low = int(frac)
+    if low >= len(RAMP) - 1:
+        return RAMP[-1]
+    return _mix(RAMP[low], RAMP[low + 1], frac - low)
+
+
+def _mix(one: str, other: str, frac: float) -> str:
+    """``frac`` of the way from one hex colour to another."""
+    parts = []
+    for at in (1, 3, 5):
+        a = int(one[at:at + 2], 16)
+        b = int(other[at:at + 2], 16)
+        parts.append(f"{int(round(a + (b - a) * frac)):02x}")
+    return "#" + "".join(parts)
 
 
 def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
