@@ -90,6 +90,7 @@ const state = {
   job: null,
   chartUrl: null,
   kind: "line",
+  hidden: [],            // members the legend has been clicked off
 };
 
 // ---------------------------------------------------------------- tabs
@@ -1058,6 +1059,7 @@ async function onMethodPicked() {
   // chart with ten lines on it says nothing about any of them. The middle value is
   // not more meaningful than the ends; something has to open, and this is the
   // choice that does not claim a meaning it does not have.
+  state.hidden = [];
   state.picked = {};
   for (const key of ["level", "half_window"]) {
     const values = (entry && entry[key === "level" ? "levels" : "half_windows"]) || [];
@@ -1151,6 +1153,9 @@ function queryParams() {
   for (const [key, values] of Object.entries(pickedParams())) {
     params.set(key, values.join(","));
   }
+  // Only when something is hidden: sending every member explicitly would be the
+  // same query written longer, and the URL is worth keeping readable.
+  if (state.hidden.length) shownMembers().forEach(name => params.append("member", name));
   return params;
 }
 
@@ -1234,7 +1239,47 @@ function showChart(params) {
     .map(([name, value]) => `${name}=${JSON.stringify(value)}`).join(", ");
   $("#chart-note").textContent = chart.get("method")
     + (said ? ` over ${said}` : " over everything stored");
+  renderLegend();
   renderKindChips();
+}
+
+//: The models the chart should draw, in roster order.
+function shownMembers() {
+  const all = ((state.selected || {}).member_names) || [];
+  return all.filter(name => !state.hidden.includes(name));
+}
+
+function renderLegend() {
+  const host = $("#chart-legend");
+  const all = ((state.selected || {}).member_names) || [];
+  const colours = (state.selected || {}).series_colours || {};
+  // A member whose line is drawn with a hole in it. The canvas shows the hole --
+  // a line stops and starts again -- but not whether that is a gap in the data or
+  // an artefact of the drawing, so the key is where it gets said.
+  const gapped = new Set(((state.lastQuery || {}).records || [])
+    .filter(r => r.value === null).map(r => r.member));
+  if (all.length < 2) return mount(host);      // one model needs no key
+  mount(host, all.map(name => {
+    const shown = !state.hidden.includes(name);
+    return h("button", {
+      class: "chip legend", type: "button",
+      title: (shown ? `hide ${name}` : `show ${name}`)
+        + (gapped.has(name) ? " (its line has gaps)" : ""),
+      "aria-pressed": String(shown),
+      onclick: () => {
+        if (shown && shownMembers().length === 1) {
+          // Hiding the last one would send no member filter at all, which is
+          // every model -- the opposite of what clearing the last key asks for.
+          mount($("#query-result"), notice("bad", "Pick at least one model."));
+          return;
+        }
+        const at = state.hidden.indexOf(name);
+        if (at >= 0) state.hidden.splice(at, 1); else state.hidden.push(name);
+        if (state.lastQuery) runQuery(); else renderLegend();
+      },
+    }, h("span", { class: "dot", style: `background:${colours[name] || "#888"}` }),
+       name + (gapped.has(name) ? " (gap)" : ""));
+  }));
 }
 
 function renderKindChips() {

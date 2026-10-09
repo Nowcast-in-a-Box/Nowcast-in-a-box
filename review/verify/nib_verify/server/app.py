@@ -239,6 +239,10 @@ def create_app(
                 "init_span": [init_times[0], init_times[-1]] if init_times else None,
             }
         payload["metrics_available"] = available_metrics(cfg)
+        # The page draws the legend and the canvas draws the lines. One palette,
+        # handed over rather than re-derived: a key whose swatch is a different
+        # colour from the line it names is worse than no key.
+        payload["series_colours"] = series_colours(cfg)
         return payload
 
     @app.post("/api/configs", status_code=201)
@@ -490,6 +494,18 @@ def create_app(
 # ======================================================================
 # shared helpers
 # ======================================================================
+def series_colours(cfg: VerificationConfig) -> dict[str, str]:
+    """Which colour each member is drawn in, by roster order.
+
+    Roster order and not the order the records came back in: hiding a model must
+    not renumber the ones left and change every colour on the chart.
+    """
+    from ..report import PALETTE
+
+    return {member.name: PALETTE[index % len(PALETTE)]
+            for index, member in enumerate(cfg.members)}
+
+
 def available_metrics(cfg: VerificationConfig) -> list[dict]:
     """Which stored quantities this config can currently answer for."""
     out = []

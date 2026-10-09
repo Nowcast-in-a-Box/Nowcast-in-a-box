@@ -76,11 +76,15 @@ def test_every_cell_is_drawn_against_the_same_y_range():
     assert min(float(t) for t in ticks) <= 0.2, ticks
 
 
-def test_the_legend_is_drawn_once_and_not_in_every_cell():
+def test_the_canvas_carries_no_legend_at_all():
+    """Not once, and not in every cell either.
+
+    The key is on the page, beside the line/bar choice, where clicking it hides a
+    model -- and the page draws it from the same palette the lines are drawn with.
+    """
     svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 3, ["a", "b", "c"])
     drawn = texts(svg)
-    assert drawn.count("alpha") == 1, drawn
-    assert drawn.count("beta") == 1, drawn
+    assert "alpha" not in drawn and "beta" not in drawn, drawn
 
 
 def test_each_cell_is_named_by_what_separates_it():
@@ -147,11 +151,10 @@ def test_the_canvas_does_not_carry_a_sentence_about_the_query():
     assert "init_time" not in drawn, drawn
 
 
-def test_the_grid_still_says_what_each_cell_is_and_what_the_lines_are():
-    svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 2, ["level 20", "level 60"])
+def test_the_grid_still_says_what_each_cell_is():
+    svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 2, ["20 dBZ", "60 dBZ"])
     drawn = texts(svg)
-    assert "level 20" in drawn and "level 60" in drawn
-    assert "alpha" in drawn and "beta" in drawn
+    assert "20 dBZ" in drawn and "60 dBZ" in drawn
     assert "lead minutes" in drawn and "score" in drawn
 
 

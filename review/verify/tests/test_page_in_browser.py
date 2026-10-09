@@ -1054,3 +1054,21 @@ def test_removing_a_config_asks_twice(page, live_server):
     rows = page.page.eval_on_selector_all("#configs-list tbody tr", "e => e.length")
     assert rows == 1, "No cancelled, and cancelling means it is still there"
     assert page.errors == []
+
+
+def test_a_one_model_config_needs_no_legend(page, live_server):
+    """A key for one line is a key with nothing to distinguish.
+
+    The fixture platform carries one model, so this is the case that can be
+    driven here; the two-model legend was checked against the demonstration
+    workspace, and its logic is pinned in ``test_web_page.py``.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1600)
+
+    assert page.page.locator("#chart-legend").count() == 1,         "the slot is there for when there are two models"
+    assert page.page.locator("#chart-legend .chip").count() == 0
+    assert page.errors == []

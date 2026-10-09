@@ -372,3 +372,37 @@ def test_the_page_does_not_keep_its_own_copy_of_the_plan_reasons():
                      "forecast horizon",
                      "packages do not match"):
         assert sentence not in app, sentence
+
+
+def test_the_legend_is_the_roster_and_clicking_it_hides_a_model():
+    """The key is built from the config's roster, not from the records that came
+    back -- a model that has been clicked off is not in the records, and would
+    have no way back onto the chart."""
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    legend = app[app.index("function renderLegend"):]
+    legend = legend[: legend.index(chr(10) + "}" + chr(10))]
+    assert "member_names" in legend, "the roster"
+    assert "series_colours" in legend, "the palette the lines are drawn with"
+    assert "state.hidden" in legend
+    assert "Pick at least one model" in legend, "the last one cannot be hidden"
+
+    params = app[app.index("function queryParams"):]
+    params = params[: params.index(chr(10) + "}" + chr(10))]
+    assert 'params.append("member", name)' in params,         "hiding a model has to reach the query, not only the picture"
+
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'id="chart-legend"' in html
+    assert html.index('id="chart-legend"') < html.index('id="q-kind"'),         "the legend comes first in the row"
+
+
+def test_the_gap_marker_is_on_the_page_because_the_canvas_has_no_legend():
+    """A line with a hole in it says it has a hole by not being drawn through it.
+
+    What it cannot say is whether the hole is missing data or a drawing artefact,
+    and that sentence now lives under the key rather than across the plot.
+    """
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    legend = app[app.index("function renderLegend"):]
+    legend = legend[: legend.index(chr(10) + "}" + chr(10))]
+    assert 'r.value === null' in legend, "a member with a missing lead"
+    assert '(gap)' in legend

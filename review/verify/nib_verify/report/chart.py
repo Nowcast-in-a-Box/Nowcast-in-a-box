@@ -119,6 +119,7 @@ def from_query(
     *,
     x: str,
     series: Sequence[str] = (),
+    order: Sequence[str] = (),
     title: str | None = None,
     y_label: str | None = None,
 ) -> Chart:
@@ -126,8 +127,13 @@ def from_query(
 
     ``x`` names the column along the x axis, ``series`` the columns that separate
     one line from another. Everything else in the query has already been filtered
-    by ``s``, which is the same filter the table uses — a chart is a view of a
+    by ``s``, which is the same filter the table uses -- a chart is a view of a
     query, not a second way to ask.
+
+    ``order`` names the series in the order they are drawn, and it is how a line
+    keeps its colour. Sorted alphabetically, hiding one model renumbers the rest
+    and every remaining line changes colour under the legend that was just
+    clicked.
     """
     records = result.get("records") or []
     keys = tuple(series)
@@ -140,8 +146,12 @@ def from_query(
         key = tuple(str(record.get(c)) for c in keys) if keys else ("",)
         tables.setdefault(key, {})[float(record[x])] = record.get("value")
 
+    wanted = [one if isinstance(one, tuple) else (str(one),) for one in order]
+    walking = [k for k in wanted if k in tables]
+    walking += [k for k in sorted(tables) if k not in walking]
+
     built = []
-    for key in sorted(tables):
+    for key in walking:
         table = tables[key]
         built.append(Series(
             label=" / ".join(part for part in key if part),
@@ -182,7 +192,6 @@ def line_chart(
     y_min: float | None = None,
     y_max: float | None = None,
     kind: str = "line",
-    legend: bool = True,
 ) -> str:
     """One x axis, one y axis, one line -- or one group of bars -- per series.
 
@@ -193,9 +202,9 @@ def line_chart(
     somewhere the length means something. A bar chart from 0.80 to 0.93 makes a
     three point difference look like a five-fold one.
 
-    ``legend=False`` is for a cell of a grid, where the legend belongs to the
-    grid and not to each cell: the same two models repeated under every panel are
-    noise pretending to be information.
+    The legend is not drawn here. It lives on the page, beside the line/bar
+    choice, where it can be clicked: a key that cannot be used to hide a line is
+    a key with one job less than the reader expects of it.
     """
     if kind not in ("line", "bar"):
         raise ValueError(f"unknown chart kind {kind!r}; line or bar")
@@ -204,8 +213,7 @@ def line_chart(
     # not pay for the room they would have needed.
     bottom = 62 if chart.x_label else 40
     left = 76 if chart.y_label else 58
-    legend = _legend_width(chart) if legend else 0
-    right = 22 + legend
+    right = 22
     # The plot is what is left between the two margins. Getting this wrong is not
     # a cosmetic matter: the plot grows by the left margin, everything to its
     # right shifts with it, and the legend walks off the canvas.
@@ -333,20 +341,9 @@ def line_chart(
                     out.append(f'<circle cx="{sx(x):.1f}" cy="{sy(y):.1f}" r="3"/>')
             out.append("</g>")
 
-    # --- the legend ---------------------------------------------------
-    legend_x = plot.x1 + 22
-    for index, series in enumerate(chart.series if legend else ()):
-        colour = PALETTE[index % len(PALETTE)]
-        y = plot.y0 + 8 + index * 20
-        out.append(
-            f'<rect x="{legend_x:.1f}" y="{y - 7:.1f}" width="11" height="11" rx="2" '
-            f'fill="{colour}"/>'
-        )
-        label = _legend_text(series, legend - 26)
-        out.append(
-            f'<text x="{legend_x + 18:.1f}" y="{y + 2:.1f}" font-family="{FONT}" '
-            f'font-size="{fs(11)}" fill="#374151">{_esc(label)}</text>'
-        )
+    # No legend on the canvas: it belongs beside the line/bar choice, where it can
+    # be clicked to hide a model. Two legends would be two places to disagree
+    # about a colour.
 
     out.append("</svg>")
     return "\n".join(out) + "\n"
@@ -489,11 +486,24 @@ def _x_step(values: Sequence[float]) -> float:
 
 
 def _x_ticks(lo: float, hi: float, values: Sequence[float]) -> list[float]:
+    """Ticks along x, with both ends of the *data* among them.
+
+    Snapping to round numbers alone left an axis running 10 to 180 labelled 50,
+    100 and 150 -- nothing at either end, which reads as an axis whose labels
+    have been cut off rather than one that stops where the data does. ``lo`` and
+    ``hi`` are the padded axis ends and only choose the step; the ticks sit on the
+    data, inside the padding, where a centred label has room.
+    """
     distinct = sorted(set(values))
-    if 0 < len(distinct) <= MAX_ORDINAL_TICKS:
+    if not distinct:
+        return []
+    if len(distinct) <= MAX_ORDINAL_TICKS:
         return distinct
     step = _nice_step((hi - lo) / 6)
-    return _ticks(lo, hi, step)
+    first, last = distinct[0], distinct[-1]
+    if last <= first:
+        return [first]
+    return [first, *[t for t in _ticks(first, last, step) if first < t < last], last]
 
 
 def _nice_step(raw: float) -> float:
@@ -518,56 +528,6 @@ def _tick_text(tick: float, step: float, fallback_span: float) -> str:
     if abs(fallback_span) >= 100:
         return f"{tick:.0f}"
     return f"{tick:.3g}"
-
-
-def _legend_width(chart: Chart) -> float:
-    """Room for the swatch and the longest label, capped so it cannot eat the plot.
-
-    The ``(gap)`` suffix is included in the measurement rather than left to be
-    clipped away: it is part of the legend, and reserving room for it here is the
-    difference between a label that says the line has a hole and one that ends in
-    an ellipsis at the moment the hole matters.
-    """
-    longest = max((len(s.label) + (6 if s.has_gap else 0) + 4 for s in chart.series),
-                  default=0)
-    return min(longest * CHAR_W + 34, 230.0)
-
-
-#: A pessimistic average character width for Helvetica, at the size the labels
-#: are drawn in. Derived from that size rather than written down, so raising
-#: :data:`FONT_DELTA` cannot leave the legend measuring itself against a font it
-#: is no longer using -- and running off the canvas.
-CHAR_W = 6.6 * fs(11) / 11
-
-
-def _clip(text: str, room_px: float) -> str:
-    """Shorten a label to the room there actually is.
-
-    The cap on the legend width makes the room finite whatever the name is, so
-    without this a 40-character member id silently overflows. An ellipsis is a
-    worse legend than a full name and a much better one than a name that is not
-    there at all.
-    """
-    limit = max(int(room_px / CHAR_W), 1)
-    if len(text) <= limit:
-        return text
-    return text[: max(limit - 1, 1)] + "\u2026"
-
-
-def _legend_text(series: Series, room_px: float) -> str:
-    """The label, clipped to fit the room, with the gap marker kept.
-
-    ``(gap)`` says something about the line that the name does not, and it is
-    exactly the case where the difference matters that the name is long. So when
-    there is not room for both, the name is what gives.
-    """
-    room = max(int(room_px / CHAR_W), 1)
-    suffix = " (gap)" if series.has_gap else ""
-    if len(series.label) + len(suffix) <= room:
-        return series.label + suffix
-    if len(suffix) + 2 <= room:
-        return series.label[: room - len(suffix) - 1] + "\u2026" + suffix
-    return _clip(series.label + suffix, room_px)
 
 
 def _esc(text: Any) -> str:

@@ -262,6 +262,19 @@ pre.log {
   color: var(--accent);
   font-weight: 600;
 }
+/* The legend, on the page and beside the form: the swatch has to be the colour
+   of the line it names, so the server hands the colours over and this only draws
+   them. Clicked off means struck through, not just paler -- a hidden line and a
+   dim one look the same otherwise. */
+.chip.legend .dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.chip.legend[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
+
 /* A parameter is tiled rather than folded into a select: the list is short, and
    which thresholds were asked for is the thing being read back. */
 .chip.param { border-radius: 6px; font-variant-numeric: tabular-nums; }

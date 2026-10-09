@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from nib_verify.report import Series, chart_for, from_query, line_chart
-from nib_verify.report.chart import CHAR_W, _axis, _nice_step, _ticks
+from nib_verify.report.chart import _axis, _nice_step, _ticks
 
 SVG = "{http://www.w3.org/2000/svg}"
 
@@ -134,14 +134,17 @@ def test_everything_drawn_is_inside_the_canvas():
         )
 
 
-def test_a_label_too_long_for_the_legend_is_clipped_not_dropped():
-    svg = line_chart(chart(
-        Series("m" * 80, ((10.0, 1.0), (20.0, 2.0))),
-    ))
-    shown = [t for t in labels(svg) if t.startswith("m")]
-    assert shown, "the series disappeared from the legend"
-    assert len(shown[0]) < 80
-    assert shown[0].endswith("\u2026")
+def test_the_canvas_carries_no_legend():
+    """The key lives on the page, beside the line/bar choice, where it can be
+    clicked to hide a model.
+
+    Two legends would be two places to disagree about a colour, and a key nobody
+    can click is a key with one job fewer than the reader expects of it.
+    """
+    svg = line_chart(chart(simple([0.5, 0.6, 0.7, 0.8])))
+    drawn = " ".join(labels(svg))
+    assert "mlcast-det" not in drawn, drawn
+    assert "(gap)" not in drawn, drawn
 
 
 # ======================================================================
@@ -171,25 +174,16 @@ def test_a_point_with_no_neighbours_is_a_dot_not_a_line():
     assert len(ET.fromstring(svg).findall(f".//{SVG}circle")) == 1
 
 
-def test_the_legend_says_a_line_has_a_gap():
+def test_a_gap_is_drawn_as_a_break_in_the_line():
+    """The canvas says a line has a hole by not drawing through it.
+
+    What it cannot say is whether the hole is missing data or a drawing artefact,
+    so the key says that, and the key is on the page.
+    """
     svg = line_chart(chart(simple([0.5, None, 0.7, 0.8])))
-    assert any(t.endswith("(gap)") for t in labels(svg))
-
-
-def test_the_legend_does_not_claim_a_gap_that_is_not_there():
-    svg = line_chart(chart(simple([0.5, 0.6, 0.7, 0.8])))
-    assert not any(t.endswith("(gap)") for t in labels(svg))
-
-
-def test_the_gap_marker_survives_a_long_name():
-    """The suffix is part of the legend, so the room for it is reserved rather
-    than spent on the name."""
-    svg = line_chart(chart(Series("a-fairly-long-member-name",
-                                 ((10.0, 0.5), (20.0, None), (30.0, 0.7)))))
-    shown = [t for t in labels(svg) if t.endswith("(gap)")]
-    assert shown, labels(svg)
-    # and the name is the part that gives way, which is the whole point
-    assert shown[0].startswith("a-fairly-long"), shown
+    runs = ET.fromstring(svg).iter(f"{SVG}polyline")
+    assert len([r for r in runs]) == 1, "the line is drawn in one piece per run"
+    assert len(ET.fromstring(svg).findall(f".//{SVG}circle")) == 3,         "three points, and the gap is not one of them"
 
 
 # ======================================================================

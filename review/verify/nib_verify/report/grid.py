@@ -18,8 +18,7 @@ import math
 from dataclasses import replace
 from typing import Sequence
 
-from .chart import (FONT, PALETTE, Chart, _axis, _esc, _legend_text, fs,
-                    line_chart)
+from .chart import FONT, Chart, _axis, _esc, fs, line_chart
 
 #: Cells across, by how many there are. Two panels side by side beat two stacked;
 #: past four, three across keeps the cells from going flat.
@@ -41,7 +40,7 @@ def small_multiples(
     y_min: float | None = None,
     y_max: float | None = None,
 ) -> str:
-    """The charts as cells of one grid, sharing a y axis and one legend."""
+    """The charts as cells of one grid, sharing a y axis."""
     what = [c for c in charts if not c.is_empty()]
     if not what:
         labels = list(labels) or ["—"]
@@ -59,15 +58,11 @@ def small_multiples(
     count = len(charts)
     cols = columns_for(count)
     rows = math.ceil(count / cols)
-    # The legend gets its own column to the right of the grid. Placing it inside
-    # the grid's width puts it on top of the last cell, which is the kind of
-    # overlap that looks like a rendering glitch rather than a layout bug.
-    # The legend runs across the top, so nothing is reserved down the side and the
-    # cells get the whole width. And ``left`` here is room for the *axis name*
-    # only: every cell reserves its own margin for its own tick labels, so
+    # Nothing is reserved down the side, so the cells get the whole width. And
+    # ``left`` here is room for the *axis name* only: every cell reserves its own margin for its own tick labels, so
     # adding the grid's 58 to the cell's 58 made a hundred pixels of nothing
     # between the y-axis name and the y axis.
-    left, right, top, bottom = 22, 16, 48, 46
+    left, right, top, bottom = 22, 16, 26, 46
     cell_w = max(200, int((width - left - right - gap_x * (cols - 1)) / cols))
     cell_h = cell_height
 
@@ -97,27 +92,14 @@ def small_multiples(
         # small grey text laid across the plot it is describing.
         cell = line_chart(replace(chart, title="", x_label="", y_label="", note=""),
                           width=cell_w, height=cell_h, kind=kind,
-                          y_min=lo, y_max=hi, legend=False)
+                          y_min=lo, y_max=hi)
         body = cell.split("\n", 1)[1] if cell.startswith("<?xml") else cell
         body = body.replace("<svg ", f'<svg x="{x}" y="{y}" ', 1)
         out.append(body)
 
-    # --- the one legend, in the strip above the cells ---
-    # Across the top rather than down the right: a legend column costs every cell
-    # width, and the width is what the cells are short of.
-    legend_x = left
-    for series_index, series in enumerate(first.series):
-        colour = PALETTE[series_index % len(PALETTE)]
-        out.append(
-            f'<rect x="{legend_x}" y="9" width="10" height="10" rx="2" '
-            f'fill="{colour}"/>'
-        )
-        label = _legend_text(series, 150)
-        out.append(
-            f'<text x="{legend_x + 15}" y="18" font-family="{FONT}" '
-            f'font-size="{fs(11)}" fill="#374151">{_esc(label)}</text>'
-        )
-        legend_x += 22 + len(label) * 6.6
+    # No legend here: the page draws one, under the chart and beside the
+    # line/bar choice, and it can be clicked to hide a model. Two legends would be
+    # two places to disagree about a colour.
     out.append(
         f'<text x="{left + (total_w - left - right) / 2:.1f}" y="{total_h - 10}" '
         f'text-anchor="middle" font-family="{FONT}" font-size="{fs(12)}" fill="#374151">'

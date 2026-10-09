@@ -41,6 +41,7 @@ def chart_for(
     s: Mapping[str, Any] | None = None,
     x: str = "lead_minutes",
     series: Sequence[str] = ("member",),
+    order: Sequence[str] = (),
     limit: int = DEFAULT_LIMIT,
 ) -> Chart:
     """Query, pivot, and return a chart ready to render.
@@ -55,7 +56,7 @@ def chart_for(
     # legend reads the way they asked for it.
     expand = tuple(dict.fromkeys([*series, x]))
     result = query_scores(store, cfg, method=method, s=s, g=expand, limit=limit)
-    return from_query(result, x=x, series=tuple(series))
+    return from_query(result, x=x, series=tuple(series), order=_order(cfg, order))
 
 
 def chart_panels(
@@ -67,6 +68,7 @@ def chart_panels(
     x: str = "lead_minutes",
     series: Sequence[str] = ("member",),
     panel_dims: Sequence[str] = (),
+    order: Sequence[str] = (),
     limit: int = DEFAULT_LIMIT,
 ) -> tuple[list[str], list[Chart]]:
     """One chart per value of the panel dimensions, all sharing a y axis.
@@ -84,7 +86,8 @@ def chart_panels(
     records = result.get("records") or []
 
     if not panels:
-        return [""], [from_query(result, x=x, series=tuple(series))]
+        return [""], [from_query(result, x=x, series=tuple(series),
+                                 order=_order(cfg, order))]
 
     seen: dict[tuple, None] = {}
     for record in records:
@@ -97,8 +100,23 @@ def chart_panels(
         labels.append(" / ".join(panel_title(d, v, cfg)
                                   for d, v in zip(panels, key) if v))
         built.append(from_query({"records": subset, "meta": result.get("meta") or {}},
-                                x=x, series=tuple(series)))
+                                x=x, series=tuple(series),
+                                order=_order(cfg, order)))
     return labels, built
+
+
+def _order(cfg, given: Sequence[str]) -> tuple[tuple[str, ...], ...]:
+    """The series order a chart is drawn in, so a line keeps its colour.
+
+    The roster's own order, and only then whatever the caller said: a config
+    lists its models once and that list does not change when one of them is
+    hidden off the chart, which is what stops the legend re-colouring itself
+    under the click that hid something.
+    """
+    names = tuple(m.name for m in getattr(cfg, "members", ()) or ())
+    if given:
+        return tuple((str(one),) for one in given)
+    return tuple((name,) for name in names)
 
 
 #: What separates one panel of a grid from the next, with the unit the number is
