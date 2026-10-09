@@ -543,7 +543,7 @@ class SyntheticAccess:
         grid_lon, grid_lat = np.meshgrid(coords.lon, coords.lat)
         dx = (grid_lon - (lon0 + 0.5 * lon_span)) / lon_span
         dy = (grid_lat - (lat0 + 0.55 * lat_span)) / lat_span
-        # 0.58 of a span leaves roughly a fifth missing on a 10x12 degree domain:
+        # 0.58 of a span leaves about an eighth missing on a 10x12 degree domain:
         # a gap worth resampling around, not a field that is mostly hole.
         outside = np.sqrt(dx * dx + dy * dy) > 0.58
         shadow = (dy < -0.28) & (np.abs(dx) < 0.07)

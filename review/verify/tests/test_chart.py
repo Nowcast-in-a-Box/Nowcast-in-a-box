@@ -186,8 +186,10 @@ def test_the_gap_marker_survives_a_long_name():
     than spent on the name."""
     svg = line_chart(chart(Series("a-fairly-long-member-name",
                                  ((10.0, 0.5), (20.0, None), (30.0, 0.7)))))
-    shown = [t for t in labels(svg) if "member" in t]
-    assert shown and shown[0].endswith("(gap)"), shown
+    shown = [t for t in labels(svg) if t.endswith("(gap)")]
+    assert shown, labels(svg)
+    # and the name is the part that gives way, which is the whole point
+    assert shown[0].startswith("a-fairly-long"), shown
 
 
 # ======================================================================
@@ -358,9 +360,9 @@ def test_a_row_with_no_x_is_dropped_rather_than_placed_at_zero():
 def test_the_title_and_axis_labels_come_from_the_metric():
     got = from_query(result([{"lead_minutes": 10, "value": 1.0}]),
                      x="lead_minutes", series=())
-    assert got.title == "Threat score (CSI) by lead minutes"
+    assert got.title == "Threat score (CSI) by lead time (min)"
     assert got.y_label == "Threat score (CSI)"
-    assert got.x_label == "lead minutes"
+    assert got.x_label == "lead time (min)"
 
 
 def test_the_filters_are_named_on_the_chart():

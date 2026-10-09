@@ -134,6 +134,18 @@ def moments(
     }
 
 
+#: How much of a neighbourhood has to be valid before its fractions are used.
+#:
+#: One is what the score would ask for if it could: a window with a single
+#: scattered gap in it is a window whose mean is over an unknown subset. But a
+#: radar composite is 60-70% valid once the model's own footprint is intersected
+#: with it, and at one the answer is nothing at half a window and nothing at all
+#: beyond -- FSS undefined on exactly the data somebody wants to verify. Three
+#: fifths is a floor that admits a window most of which is real, and it is a
+#: declared number rather than a tuned one.
+MIN_COVERAGE = 0.6
+
+
 def spatial(
     truth: np.ndarray,
     prediction: np.ndarray,
@@ -144,8 +156,17 @@ def spatial(
     """Neighbourhood fractions for FSS: ``pob pfo fbs n_valid``.
 
     ``FSS = 1 - sum(fbs) / sum(pob + pfo)``, so the numerator and the two
-    denominators are what has to survive storage.  A neighbourhood is used only
-    when every cell inside it is valid on both sides.
+    denominators are what has to survive storage.
+
+    A neighbourhood is used when at least :data:`MIN_COVERAGE` of it is valid on
+    both sides; the fractions themselves are means over the valid part.
+
+    All of it was the rule before, and it made FSS undefined in practice. One
+    scattered missing point anywhere in a 21x21 window killed the window, so a
+    field that is 68% valid -- a radar composite with speckle -- answered at
+    half a window and nowhere at all beyond that. Requiring every cell is
+    stricter than the score needs, and it fails hardest on exactly the data
+    somebody wants to verify.
     """
     if half_window < 0:
         raise ValueError("half_window must be >= 0")
@@ -153,10 +174,10 @@ def spatial(
     t_bin = (np.asarray(truth, dtype=float) >= level).astype(float)
     p_bin = (np.asarray(prediction, dtype=float) >= level).astype(float)
 
-    p_o, full_o = window_mean(t_bin, half_window, valid)
-    p_f, full_f = window_mean(p_bin, half_window, valid)
+    p_o, ok_o = window_mean(t_bin, half_window, valid, min_coverage=MIN_COVERAGE)
+    p_f, ok_f = window_mean(p_bin, half_window, valid, min_coverage=MIN_COVERAGE)
 
-    ok = full_o & full_f
+    ok = ok_o & ok_f
     if not np.any(ok):
         return {"pob": 0.0, "pfo": 0.0, "fbs": 0.0, "n_valid": 0.0}
 
@@ -171,12 +192,18 @@ def spatial(
 
 
 def window_mean(
-    values: np.ndarray, half_window: int, valid: np.ndarray | None = None
+    values: np.ndarray,
+    half_window: int,
+    valid: np.ndarray | None = None,
+    *,
+    min_coverage: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Mean of ``values`` over each ``(2h+1) x (2h+1)`` window.
 
-    Returns ``(mean, fully_valid)`` where ``fully_valid`` is true only for
-    windows entirely inside ``valid``.
+    Returns ``(mean, thick_enough)``.  ``mean`` is taken over the valid cells of
+    the window, so a partly valid window gives the mean of the part that is
+    there; ``thick_enough`` says whether at least ``min_coverage`` of the window
+    was valid, which is what decides whether that mean is worth using.
     """
     k = 2 * half_window + 1
     v = np.asarray(values, dtype=float)
@@ -188,8 +215,8 @@ def window_mean(
     num = box_sum(v * w, half_window)
     den = box_sum(w, half_window)
     mean = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
-    fully = den >= (k * k) - 1e-9
-    return mean, fully
+    thick = den >= (k * k) * min_coverage - 1e-9
+    return mean, thick
 
 
 def box_sum(a: np.ndarray, half_window: int) -> np.ndarray:

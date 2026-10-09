@@ -413,7 +413,15 @@ def test_every_model_grid_covers_both_products(built):
     explaining, so the one model grid has to hold the union."""
     catalog = discover_packages(built.packages)
     model = catalog.get("mlcast-det")
-    assert tuple(model.input_fields[0].shape) == tuple(demo_module.MODEL_SHAPE)
+    # The *product's* shape, not MODEL_SHAPE, and that is a contradiction worth
+    # naming rather than a detail: the provider generates the model's field on a
+    # grid of its own (MODEL_EXTENT/MODEL_SHAPE, coarser, covering both products)
+    # and this manifest has to declare the product's shape anyway, because the
+    # Matcher treats a shape mismatch as a hard error while the module resamples
+    # onto a ruler as a matter of course. rfc/matching.md open point 2 asks
+    # whether that error should stay; this is what it costs while it does.
+    assert tuple(model.input_fields[0].shape) == tuple(
+        demo_module.source_of("radar-composite").shape)
     for source in demo_module.SOURCES:
         lo, la, hi, ha = source.extent
         assert demo_module.MODEL_EXTENT[0] <= lo and hi <= demo_module.MODEL_EXTENT[2]

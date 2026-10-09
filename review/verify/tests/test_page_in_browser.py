@@ -542,7 +542,7 @@ def test_the_results_tab_answers_a_query(page, live_server):
 
     body = page.text()
     assert "THREAT SCORE" in body, "the result table did not render"
-    assert "lead_minutes" in body
+    assert "LEAD_MINUTES" in body, "the axis is a column of the table too"
     assert "valid samples" in body
     assert page.errors == []
 
@@ -592,7 +592,7 @@ def test_the_chart_is_drawn_by_the_browser(page, live_server):
 
     assert page.page.locator("#chart-card").is_visible()
     assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0,         "the browser could not render what /api/chart returned"
-    assert "line along lead_minutes" in page.text()
+    assert "x=lead_minutes" in page.page.locator("#chart").get_attribute("src")
     # the picture is for looking at; what is under it says what it is of
     assert "ts over" in page.text()
     assert page.page.locator("#chart-svg").count() == 0, \

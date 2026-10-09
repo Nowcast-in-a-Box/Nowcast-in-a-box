@@ -113,7 +113,9 @@ def test_identical_fields_give_perfect_fss():
     assert got["fbs"] == pytest.approx(0.0)
     assert got["pob"] == pytest.approx(got["pfo"])
     assert got["pob"] > 0
-    assert got["n_valid"] == 64.0  # 8x8 fully-interior windows
+    # An edge window holds 6 of its 9 cells, which is over the three-fifths floor,
+    # so it counts; only the four corners, at 4 of 9, do not.
+    assert got["n_valid"] == 96.0
 
 
 def test_disjoint_fields_give_worst_fss():
@@ -127,13 +129,31 @@ def test_disjoint_fields_give_worst_fss():
     assert 1.0 - got["fbs"] / (got["pob"] + got["pfo"]) == pytest.approx(0.0)
 
 
-def test_spatial_needs_fully_valid_windows():
+def test_spatial_uses_a_neighbourhood_that_is_mostly_valid():
+    """Not one that is *entirely* valid, which is what it used to ask for.
+
+    A single scattered gap anywhere in a 21x21 window used to kill the window,
+    and a radar composite is 60-70% valid once the model's own footprint is
+    intersected with it -- so FSS came back as a gap at half a window and nowhere
+    at all beyond. The floor is three fifths, declared in :data:`MIN_COVERAGE`.
+    """
     truth = np.zeros((6, 6))
     valid = np.ones((6, 6), dtype=bool)
     valid[5, 5] = False
     got = spatial(truth, truth, 1.0, 1, valid)
-    # 4x4 fully-interior windows, minus the one at (4,4) that touches the hole
-    assert got["n_valid"] == 15.0
+    # every window whose 3x3 touches at most one dead cell, which is all of them
+    # except the one that would be entirely the corner
+    assert got["n_valid"] == 30.0
+
+
+def test_a_window_that_is_mostly_hole_is_not_used():
+    """The floor has to bite somewhere, or it is not a floor."""
+    truth = np.zeros((10, 10))
+    valid = np.ones((10, 10), dtype=bool)
+    valid[:5, :] = False          # half the grid is gone; 9 of 25 cells left below
+    got = spatial(truth, truth, 1.0, 2, valid)
+    assert got["n_valid"] > 0, "the deep half still has whole neighbourhoods"
+    assert got["n_valid"] < 100, "and the boundary does not"
 
 
 # ----------------------------------------------------------------------

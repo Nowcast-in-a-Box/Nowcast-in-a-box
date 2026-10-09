@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from ..query.service import DEFAULT_LIMIT
-from .chart import PALETTE, Chart, Series, from_query, line_chart
+from .chart import PALETTE, Chart, Series, axis_label, from_query, line_chart
 from .grid import columns_for, small_multiples
 from .mesh import Mesh, Panel, mesh_for, mesh_svg
 
@@ -94,9 +94,20 @@ def chart_panels(
     for key in sorted(seen):
         subset = [r for r in records
                   if tuple(str(r.get(d)) for d in panels) == key]
-        # The parameter's name, not just its value: a panel titled "133" makes the
-        # reader work out which dimension it separates.
-        labels.append(" / ".join(f"{d} {v}" for d, v in zip(panels, key) if v))
+        labels.append(" / ".join(panel_title(d, v, cfg)
+                                  for d, v in zip(panels, key) if v))
         built.append(from_query({"records": subset, "meta": result.get("meta") or {}},
                                 x=x, series=tuple(series)))
     return labels, built
+
+
+#: What separates one panel of a grid from the next, with the unit the number is
+#: in. "40" is a threshold in no unit at all; "40 dBZ" is a threshold on
+#: reflectivity, and "10 cells" is a half window.
+def panel_title(dimension: str, value: str, cfg) -> str:
+    if dimension == "half_window":
+        return f"{value} cells"
+    if dimension == "level":
+        unit = getattr(getattr(cfg, "ruler", None), "unit", "") or ""
+        return f"{value} {unit}".strip()
+    return str(value)

@@ -35,6 +35,34 @@ import math
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
+#: Every annotation on a chart is two points larger than it was. One number,
+#: applied in one place: a legend at 11 px beside a tick at 13 px is a chart that
+#: was edited in nine places and kept eight of them.
+FONT_DELTA = 2
+
+
+def fs(size: float) -> float:
+    return size + FONT_DELTA
+
+
+#: What an expansion dimension is called once it is on an axis. The column name
+#: is the storage's vocabulary; this is the reader's, and "lead_minutes" is
+#: neither a word nor a unit.
+AXIS_LABEL = {
+    "lead_minutes": "lead time (min)",
+    "init_time": "init time (UTC)",
+    "valid_time": "valid time (UTC)",
+    "hour": "hour of init (UTC)",
+    "level": "level",
+    "half_window": "half window (cells)",
+    "member": "member",
+}
+
+
+def axis_label(dimension: str) -> str:
+    return AXIS_LABEL.get(dimension, dimension.replace("_", " "))
+
+
 #: Enough for the series anyone plots on one chart, and distinguishable in print.
 PALETTE = (
     "#1f6feb", "#d1495b", "#2e8b57", "#8b5cf6",
@@ -123,8 +151,8 @@ def from_query(
     meta = result.get("meta") or {}
     metric = meta.get("label") or meta.get("method") or "value"
     return Chart(
-        title=title or f"{metric} by {x.replace('_', ' ')}",
-        x_label=x.replace("_", " "),
+        title=title or f"{metric} by {axis_label(x)}",
+        x_label=axis_label(x),
         y_label=y_label or metric,
         series=tuple(built),
         note=_filters_note(meta.get("s") or {}),
@@ -227,7 +255,7 @@ def line_chart(
         f'viewBox="0 0 {width} {height}" role="img">',
         f"<title>{_esc(chart.title)}</title>",
         f'<rect width="{width}" height="{height}" fill="#ffffff"/>',
-        f'<text x="{left}" y="26" font-family="{FONT}" font-size="15" '
+        f'<text x="{left}" y="26" font-family="{FONT}" font-size="{fs(15)}" '
         f'font-weight="600" fill="#111827">{_esc(chart.title)}</text>',
     ]
     # ``chart.note`` is deliberately not drawn. It is a sentence about the query,
@@ -244,7 +272,7 @@ def line_chart(
         )
         out.append(
             f'<text x="{plot.x0 - 10:.1f}" y="{y + 4:.1f}" text-anchor="end" '
-            f'font-family="{FONT}" font-size="11" fill="#6b7280">'
+            f'font-family="{FONT}" font-size="{fs(11)}" fill="#6b7280">'
             f"{_esc(_tick_text(tick, step, y_max - y_min))}</text>"
         )
 
@@ -258,7 +286,7 @@ def line_chart(
         )
         out.append(
             f'<text x="{x:.1f}" y="{plot.y1 + 19:.1f}" text-anchor="middle" '
-            f'font-family="{FONT}" font-size="11" fill="#6b7280">'
+            f'font-family="{FONT}" font-size="{fs(11)}" fill="#6b7280">'
             f"{_esc(_tick_text(tick, x_step, x_hi - x_lo))}</text>"
         )
 
@@ -272,18 +300,18 @@ def line_chart(
     )
     out.append(
         f'<text x="{plot.x0 + plot.w / 2:.1f}" y="{height - 16}" text-anchor="middle" '
-        f'font-family="{FONT}" font-size="12" fill="#374151">{_esc(chart.x_label)}</text>'
+        f'font-family="{FONT}" font-size="{fs(12)}" fill="#374151">{_esc(chart.x_label)}</text>'
     )
     out.append(
         f'<text x="18" y="{plot.y0 + plot.h / 2:.1f}" text-anchor="middle" '
-        f'font-family="{FONT}" font-size="12" fill="#374151" '
+        f'font-family="{FONT}" font-size="{fs(12)}" fill="#374151" '
         f'transform="rotate(-90 18 {plot.y0 + plot.h / 2:.1f})">{_esc(chart.y_label)}</text>'
     )
 
     if chart.is_empty():
         out.append(
             f'<text x="{plot.x0 + plot.w / 2:.1f}" y="{plot.y0 + plot.h / 2:.1f}" '
-            f'text-anchor="middle" font-family="{FONT}" font-size="13" fill="#9ca3af">'
+            f'text-anchor="middle" font-family="{FONT}" font-size="{fs(13)}" fill="#9ca3af">'
             "no samples for this selection</text>"
         )
 
@@ -317,7 +345,7 @@ def line_chart(
         label = _legend_text(series, legend - 26)
         out.append(
             f'<text x="{legend_x + 18:.1f}" y="{y + 2:.1f}" font-family="{FONT}" '
-            f'font-size="11" fill="#374151">{_esc(label)}</text>'
+            f'font-size="{fs(11)}" fill="#374151">{_esc(label)}</text>'
         )
 
     out.append("</svg>")
@@ -433,15 +461,22 @@ def _axis(values: Iterable[float]) -> tuple[float, float, float]:
 def _ticks(lo: float, hi: float, step: float) -> list[float]:
     """Ticks from index rather than by accumulation.
 
-    Adding the step repeatedly drifts — five steps of 0.05 from 0.7 land at
-    0.9000000000000002 — and the drift decides whether the last gridline is drawn.
+    Adding the step repeatedly drifts -- five steps of 0.05 from 0.7 land at
+    0.9000000000000002 -- and the drift decides whether the last gridline is drawn.
+
+    Every tick is inside ``[lo, hi]``. Rounding outwards instead put a tick at
+    200 on an axis that ends at 180 and another at 0 on one that starts at 10:
+    both were drawn, both were clipped, and the second one printed itself over
+    the y axis it does not belong to.
     """
     if step <= 0 or not math.isfinite(step):
         step = _nice_step((hi - lo) / 5)
-    first = math.floor(lo / step + 1e-9)
-    last = math.ceil(hi / step - 1e-9)
+    first = math.ceil(lo / step - 1e-9)
+    last = math.floor(hi / step + 1e-9)
     if last < first:
-        last = first
+        # No multiple of the step is inside the range. Its own ends are the only
+        # honest ticks there are.
+        return [round(lo, 10), round(hi, 10)]
     return [round((first + k) * step, 10) for k in range(min(last - first + 1, 40))]
 
 
@@ -498,10 +533,11 @@ def _legend_width(chart: Chart) -> float:
     return min(longest * CHAR_W + 34, 230.0)
 
 
-#: A pessimistic average character width for 11 px Helvetica. Overestimating
-#: costs a little empty space; underestimating costs a label that runs off the
-#: canvas, so this is deliberately not the measured value.
-CHAR_W = 6.6
+#: A pessimistic average character width for Helvetica, at the size the labels
+#: are drawn in. Derived from that size rather than written down, so raising
+#: :data:`FONT_DELTA` cannot leave the legend measuring itself against a font it
+#: is no longer using -- and running off the canvas.
+CHAR_W = 6.6 * fs(11) / 11
 
 
 def _clip(text: str, room_px: float) -> str:

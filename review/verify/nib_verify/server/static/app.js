@@ -1227,10 +1227,6 @@ function showChart(params) {
   $("#chart").src = state.chartUrl;
   $("#chart-card").hidden = false;
   $("#chart-empty").hidden = true;
-  $("#chart-hint").textContent = kind === "mesh"
-    ? "grid: init time across, lead up, one panel per member and parameter"
-    : `${kind} along ${$("#q-axis").value}, one line per member`
-      + (many.length ? `, one panel per ${many.join(" and ")}` : "");
   // What the picture is of, under the picture rather than across the plot: the
   // canvas is meant to be worth saving on its own.
   const filters = ((state.lastQuery || {}).meta || {}).s || {};

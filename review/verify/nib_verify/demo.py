@@ -126,22 +126,22 @@ SOURCES: tuple[Product, ...] = (
     # 配 16/74/133 是错的，一个 VIL 产品没有 dBZ 的阈值。
     Product("radar-composite", "dbz", "dBZ", scale=0.27, offset=0.0,
             vmin=0.0, vmax=70.0, noise=1.5,
-            missing_kind="range", missing_points=60,
-            frames=18, resolution=0.25,
-            extent=(110.0, 30.0, 120.0, 42.0), shape=(48, 64)),
+            missing_kind="range", missing_points=200,
+            frames=18, resolution=0.1,
+            extent=(110.0, 30.0, 120.0, 42.0), shape=(120, 100)),
     # 降水。0.1 到 250 是雨强的常用等级。
     Product("satellite-rain", "rain_rate", "mm h-1", scale=0.16, offset=0.0,
             vmin=0.0, vmax=45.0, noise=6.0,
             missing_kind="random", missing_points=150,
-            frames=18, resolution=0.5,
-            extent=(104.0, 24.0, 126.0, 48.0), shape=(56, 72)),
+            frames=18, resolution=0.2,
+            extent=(104.0, 24.0, 126.0, 48.0), shape=(120, 110)),
     # 卫星亮温。物理上深对流顶是**冷**的，而生成器造的是强度团块，所以这个产品用
     # 负的 scale 加一个暖的 offset：强度 0 → 290 K（晴空），强度满值 → 170 K（云顶）。
     Product("satellite-bt", "bt", "K", scale=-0.5, offset=290.0,
             vmin=170.0, vmax=300.0, noise=3.0,
             missing_kind="random", missing_points=90,
-            frames=18, resolution=0.5,
-            extent=(104.0, 24.0, 126.0, 48.0), shape=(56, 72)),
+            frames=18, resolution=0.2,
+            extent=(104.0, 24.0, 126.0, 48.0), shape=(120, 110)),
 )
 
 #: The domain every model's grid covers. Not either product's: a forecast model
@@ -325,6 +325,13 @@ def model_manifest(forecast: Forecast, source: Product) -> dict:
             "name": source.variable,
             "unit": source.unit,
             "dtype": "float32",
+            # The product's shape, not ``MODEL_SHAPE``, because the Matcher refuses
+            # a pair whose shapes differ and this module resamples onto a ruler.
+            # The two cannot both be right. The provider generates the model's
+            # field on ``MODEL_EXTENT``/``MODEL_SHAPE`` -- a coarser grid of its
+            # own -- and this manifest then declares the product's; a manifest
+            # that does not describe what the provider makes is a lie the Matcher
+            # currently requires.
             "shape": list(source.shape),
             "cadence_minutes": CADENCE_MINUTES,
             "frame_count": source.frames,

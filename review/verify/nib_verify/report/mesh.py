@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from .chart import PALETTE, _esc, _short, _filters_note
+from .chart import PALETTE, _esc, _filters_note, _short, fs
 
 #: A sequential ramp for a score. Paled to dark, so a printed copy reads the same
 #: way round as a screen. It is not perceptually uniform; it is short, it prints,
@@ -211,13 +211,13 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="{total_h}" '
         f'viewBox="0 0 {total_w} {total_h}" font-family="Helvetica,Arial,sans-serif">',
         f'<rect width="{total_w}" height="{total_h}" fill="white"/>',
-        f'<text x="14" y="24" font-size="14" font-weight="600">{_esc(mesh.title)}</text>',
+        f'<text x="14" y="24" font-size="{fs(14)}" font-weight="600">{_esc(mesh.title)}</text>',
     ]
 
     # ---- one panel per model
     y = top + header
     for panel in mesh.panels:
-        out.append(f'<text x="14" y="{y - 6}" font-size="13" font-weight="600">'
+        out.append(f'<text x="14" y="{y - 6}" font-size="{fs(13)}" font-weight="600">'
                    f'{_esc(panel.label)}</text>')
         for col in range(ncol):
             for row in range(nrow):
@@ -231,7 +231,7 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
                     ink = "#ffffff" if (hi > lo and
                                         (value - lo) / (hi - lo) > 0.62) else "#22303c"
                     out.append(f'<text x="{px + cell / 2}" y="{py + cell / 2 + 3.5}" '
-                               f'font-size="9" fill="{ink}" text-anchor="middle">'
+                               f'font-size="{fs(9)}" fill="{ink}" text-anchor="middle">'
                                f'{value:.2f}</text>')
         # the box, so a panel that ends early still looks like a grid
         out.append(f'<rect x="{left}" y="{y}" width="{panel_w}" height="{panel_h}" '
@@ -240,26 +240,26 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
         # y ticks: leads, bottom to top
         for row, lead in enumerate(mesh.y_values):
             py = y + (nrow - 1 - row) * cell + cell / 2 + 3.5
-            out.append(f'<text x="{left - 8}" y="{py}" font-size="10" fill="#414b57" '
+            out.append(f'<text x="{left - 8}" y="{py}" font-size="{fs(10)}" fill="#414b57" '
                        f'text-anchor="end">{_esc(_short(lead))}</text>')
         # x ticks: init times
         stride = max(1, -(-ncol // 12))
         for col in range(0, ncol, stride):
             px = left + col * cell + cell / 2
-            out.append(f'<text x="{px}" y="{y + panel_h + 13}" font-size="9.5" '
+            out.append(f'<text x="{px}" y="{y + panel_h + 13}" font-size="{fs(9.5)}" '
                        f'fill="#414b57" text-anchor="end" '
                        f'transform="rotate(-40 {px} {y + panel_h + 13})">'
                        f'{_esc(_short_time(mesh.x_values[col]))}</text>')
         y += panel_h + label_row + gap
 
     # ---- axes names
-    out.append(f'<text x="{left + panel_w / 2}" y="{total_h - 6}" font-size="11" '
+    out.append(f'<text x="{left + panel_w / 2}" y="{total_h - 6}" font-size="{fs(11)}" '
                f'fill="#414b57" text-anchor="middle">{_esc(mesh.x_label)}</text>')
     # The arrow is a character, not `&uarr;`. An SVG served as image/svg+xml is
     # parsed as XML, and XML defines five entities: amp, lt, gt, quot, apos. A
     # named HTML entity is a parse error, and a parse error aborts the document
     # from that point -- so one arrow cost the colour bar that came after it.
-    out.append(f'<text x="{left + panel_w + 150}" y="{top + header + 8}" font-size="11" '
+    out.append(f'<text x="{left + panel_w + 150}" y="{top + header + 8}" font-size="{fs(11)}" '
                f'fill="#414b57">{_esc(mesh.y_label)} ↑</text>')
 
     # ---- colour bar
@@ -277,18 +277,18 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
     for i in range(5):
         frac = i / 4
         out.append(f'<text x="{bx + colorbar + 5}" y="{by + bar_h * (1 - frac) + 3.5}" '
-                   f'font-size="10" fill="#414b57">{lo + frac * (hi - lo):.3f}</text>')
-    out.append(f'<text x="{bx}" y="{by + bar_h + 16}" font-size="10.5" '
+                   f'font-size="{fs(10)}" fill="#414b57">{lo + frac * (hi - lo):.3f}</text>')
+    out.append(f'<text x="{bx}" y="{by + bar_h + 16}" font-size="{fs(10.5)}" '
                f'fill="#414b57">{_esc(mesh.method)}</text>')
     if mesh.direction:
-        out.append(f'<text x="{bx}" y="{by + bar_h + 29}" font-size="10.5" '
+        out.append(f'<text x="{bx}" y="{by + bar_h + 29}" font-size="{fs(10.5)}" '
                    f'fill="#414b57">{_esc(mesh.direction)}</text>')
 
     # ---- the one thing on the canvas that is about the data and not about the
     # query: grey means nothing was stored there. Leave it out and a gap reads as
     # a score of zero.
     if not mesh.complete:
-        out.append(f'<text x="14" y="{total_h - 8}" font-size="10" fill="#6b7480">'
+        out.append(f'<text x="14" y="{total_h - 8}" font-size="{fs(10)}" fill="#6b7480">'
                    f'grey cell: nothing stored \u2014 a gap, not a zero</text>')
     out.append("</svg>")
     return "\n".join(out)
@@ -305,7 +305,7 @@ def _empty_svg(mesh: Mesh, *, width: int | None = None) -> str:
         f'<rect width="{w}" height="120" fill="white"/>'
         f'<rect x="0.5" y="0.5" width="{w - 1}" height="119" fill="none" '
         f'stroke="#d0d5db"/>'
-        f'<text x="16" y="40" font-size="13" fill="#414b57">{_esc(mesh.title)}</text>'
-        f'<text x="16" y="66" font-size="12" fill="#8a929c">{_esc(reason)}</text>'
+        f'<text x="16" y="40" font-size="{fs(13)}" fill="#414b57">{_esc(mesh.title)}</text>'
+        f'<text x="16" y="66" font-size="{fs(12)}" fill="#8a929c">{_esc(reason)}</text>'
         f'</svg>'
     )

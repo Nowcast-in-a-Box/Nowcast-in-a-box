@@ -18,7 +18,7 @@ import math
 from dataclasses import replace
 from typing import Sequence
 
-from .chart import (FONT, PALETTE, Chart, _axis, _esc, _legend_text,
+from .chart import (FONT, PALETTE, Chart, _axis, _esc, _legend_text, fs,
                     line_chart)
 
 #: Cells across, by how many there are. Two panels side by side beat two stacked;
@@ -63,9 +63,11 @@ def small_multiples(
     # the grid's width puts it on top of the last cell, which is the kind of
     # overlap that looks like a rendering glitch rather than a layout bug.
     # The legend runs across the top, so nothing is reserved down the side and the
-    # cells get the whole width.
-    legend_w = 0
-    left, right, top, bottom = 58, 20, 34, 42
+    # cells get the whole width. And ``left`` here is room for the *axis name*
+    # only: every cell reserves its own margin for its own tick labels, so
+    # adding the grid's 58 to the cell's 58 made a hundred pixels of nothing
+    # between the y-axis name and the y axis.
+    left, right, top, bottom = 22, 16, 48, 46
     cell_w = max(200, int((width - left - right - gap_x * (cols - 1)) / cols))
     cell_h = cell_height
 
@@ -87,7 +89,7 @@ def small_multiples(
         name = labels[index] if index < len(labels) else ""
         if name:
             out.append(
-                f'<text x="{x}" y="{y - 8}" font-family="{FONT}" font-size="12" '
+                f'<text x="{x}" y="{y - 8}" font-family="{FONT}" font-size="{fs(12)}" '
                 f'font-weight="600" fill="#111827">{_esc(name)}</text>'
             )
         # A cell is a whole chart minus the three things the grid owns: its title,
@@ -113,18 +115,18 @@ def small_multiples(
         label = _legend_text(series, 150)
         out.append(
             f'<text x="{legend_x + 15}" y="18" font-family="{FONT}" '
-            f'font-size="11" fill="#374151">{_esc(label)}</text>'
+            f'font-size="{fs(11)}" fill="#374151">{_esc(label)}</text>'
         )
         legend_x += 22 + len(label) * 6.6
     out.append(
         f'<text x="{left + (total_w - left - right) / 2:.1f}" y="{total_h - 10}" '
-        f'text-anchor="middle" font-family="{FONT}" font-size="12" fill="#374151">'
+        f'text-anchor="middle" font-family="{FONT}" font-size="{fs(12)}" fill="#374151">'
         f'{_esc(first.x_label or "x")}</text>'
     )
     out.append(
-        f'<text x="16" y="{top + (total_h - top - bottom) / 2:.1f}" text-anchor="middle" '
-        f'font-family="{FONT}" font-size="12" fill="#374151" '
-        f'transform="rotate(-90 16 {top + (total_h - top - bottom) / 2:.1f})">'
+        f'<text x="13" y="{top + (total_h - top - bottom) / 2:.1f}" text-anchor="middle" '
+        f'font-family="{FONT}" font-size="{fs(12)}" fill="#374151" '
+        f'transform="rotate(-90 13 {top + (total_h - top - bottom) / 2:.1f})">'
         f'{_esc(first.y_label or "y")}</text>'
     )
     out.append("</svg>")
