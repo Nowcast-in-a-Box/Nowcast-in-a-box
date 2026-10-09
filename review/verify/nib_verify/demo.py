@@ -40,7 +40,7 @@ UTC = timezone.utc
 #: The demonstration config, and the id is stable so the demo can be re-run over
 #: an old workspace.
 CONFIG_ID = "vil-demo"
-DEMO_NAME = "VIL verification, demonstration"
+DEMO_NAME = "Radar group"
 
 
 @dataclass(frozen=True)
@@ -155,7 +155,7 @@ EXERCISES: tuple[Exercise, ...] = (
              leads=(10, 20, 30, 60),
              levels=(16.0, 74.0, 133.0, 181.0, 219.0),
              window=(1, 2)),
-    Exercise("rain-demo", "Rain rate verification, demonstration", "satellite-rain",
+    Exercise("rain-demo", "Satellite group", "satellite-rain",
              leads=(30, 60, 90, 120),
              levels=(0.5, 2.0, 5.0, 12.0),
              window=(2, 4)),

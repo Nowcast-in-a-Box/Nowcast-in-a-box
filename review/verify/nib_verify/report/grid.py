@@ -35,8 +35,8 @@ def small_multiples(
     *,
     kind: str = "line",
     width: int = 820,
-    cell_height: int = 300,
-    gap_x: int = 26,
+    cell_height: int = 250,
+    gap_x: int = 24,
     gap_y: int = 30,
     y_min: float | None = None,
     y_max: float | None = None,
@@ -63,12 +63,14 @@ def small_multiples(
     # the grid's width puts it on top of the last cell, which is the kind of
     # overlap that looks like a rendering glitch rather than a layout bug.
     legend_w = _legend_width(first) if count else 0
-    left, right, top, bottom = 62, 22 + legend_w, 44, 76
+    left, right, top, bottom = 58, 20 + legend_w, 26, 50
     cell_w = max(200, int((width - left - right - gap_x * (cols - 1)) / cols))
     cell_h = cell_height
 
     total_w = left + cols * cell_w + gap_x * (cols - 1) + right
-    total_h = top + rows * (cell_h + gap_y) + bottom
+    # No gap after the last row: a trailing one is a band of nothing between the
+    # bottom of the chart and its caption.
+    total_h = top + rows * cell_h + (rows - 1) * gap_y + bottom
 
     out: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="{total_h}" '
@@ -86,9 +88,10 @@ def small_multiples(
                 f'<text x="{x}" y="{y - 8}" font-family="{FONT}" font-size="12" '
                 f'font-weight="600" fill="#111827">{_esc(name)}</text>'
             )
-        # A cell is a whole chart minus the two things the grid owns: its own
-        # title, and a legend that would be the same in every cell.
-        cell = line_chart(replace(chart, title="", x_label="", y_label=""),
+        # A cell is a whole chart minus the three things the grid owns: its title,
+        # the legend, and the note -- which repeated in every cell is a line of
+        # small grey text laid across the plot it is describing.
+        cell = line_chart(replace(chart, title="", x_label="", y_label="", note=""),
                           width=cell_w, height=cell_h, kind=kind,
                           y_min=lo, y_max=hi, legend=False)
         body = cell.split("\n", 1)[1] if cell.startswith("<?xml") else cell
@@ -110,7 +113,7 @@ def small_multiples(
             f'{_esc(_legend_text(series, max(60, legend_w - 24)))}</text>'
         )
     out.append(
-        f'<text x="{left + (total_w - left - right) / 2:.1f}" y="{total_h - 10}" '
+        f'<text x="{left + (total_w - left - right) / 2:.1f}" y="{total_h - 12}" '
         f'text-anchor="middle" font-family="{FONT}" font-size="12" fill="#374151">'
         f'{_esc(first.x_label or "x")}</text>'
     )
@@ -125,7 +128,7 @@ def small_multiples(
     if first.note:
         notes.append(first.note)
     out.append(
-        f'<text x="{left}" y="{total_h - 30}" font-family="{FONT}" font-size="10" '
+        f'<text x="{left}" y="{total_h - 32}" font-family="{FONT}" font-size="10" '
         f'fill="#6b7280">{_esc(" · ".join(n for n in notes if n))}</text>'
     )
     out.append("</svg>")

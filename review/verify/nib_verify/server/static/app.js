@@ -973,7 +973,14 @@ async function loadConfigsIntoSelect() {
   if (!configs.length) {
     try { configs = (await api("/api/configs")).configs; state.configs = configs; } catch (_) { configs = []; }
   }
-  mount(select, configs.map(c => h("option", { value: c.group_id, text: `${c.group_id} — ${c.name}` })));
+  mount(select, configs.map(c => h("option", {
+    value: c.group_id,
+    // The id, not the name: a dropdown is a list to pick from, and a sentence
+    // about why the config exists is not something to pick by. The name is on
+    // the tooltip and in the detail panel.
+    text: c.group_id,
+    title: `${c.group_id} — ${c.name}`,
+  })));
   if (previous && configs.some(c => c.group_id === previous)) select.value = previous;
 }
 
@@ -1173,12 +1180,24 @@ async function runQuery() {
   }
 }
 
+//: How wide the chart has to come back, in CSS pixels.
+function canvasWidth() {
+  const pane = document.querySelector("#tab-results .answer");
+  const card = pane ? pane.clientWidth : 0;
+  return Math.max(520, Math.min(1400, Math.round(card - 40)));
+}
+
 function showChart(params) {
   const kind = kindOf();
   const many = manyParams();
   const chart = new URLSearchParams(params);
   chart.delete("g");
   chart.set("kind", kind);
+  // The canvas is drawn at the width it will be shown at. Left at its own default
+  // it comes out wider than the column and the browser scales it down, which
+  // shrinks every label with it -- the picture is then legible only to whoever
+  // opens the SVG on its own.
+  chart.set("width", String(canvasWidth()));
   if (kind === "mesh") {
     chart.set("x", "init_time");
     chart.set("series", "lead_minutes");

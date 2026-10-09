@@ -172,8 +172,10 @@ def line_chart(
     if kind not in ("line", "bar"):
         raise ValueError(f"unknown chart kind {kind!r}; line or bar")
     top = 48 if chart.title else 22
-    bottom = 62
-    left = 76
+    # A cell of a grid carries neither label -- the grid owns them -- so it must
+    # not pay for the room they would have needed.
+    bottom = 62 if chart.x_label else 40
+    left = 76 if chart.y_label else 58
     legend = _legend_width(chart) if legend else 0
     right = 22 + legend
     # The plot is what is left between the two margins. Getting this wrong is not
@@ -325,11 +327,6 @@ def line_chart(
 
 FONT = "Helvetica, Arial, sans-serif"
 
-#: The share of an x slot one group of bars may fill. The rest is the space that
-#: keeps two groups from reading as one wide bar.
-BAR_GROUP_FILL = 0.72
-
-
 def _bars(chart: Chart, plot: _Box, sx, sy, x_lo: float, x_hi: float) -> list[str]:
     """One bar per (series, x), grouped inside the x slot.
 
@@ -339,12 +336,16 @@ def _bars(chart: Chart, plot: _Box, sx, sy, x_lo: float, x_hi: float) -> list[st
     """
     out: list[str] = []
     n = max(1, len(chart.series))
-    # The slot is one x step wide, not one pixel: the bars have to sit under the
-    # tick they belong to.
+    # The slot is the gap between one x and the next, not the whole range: leads
+    # of 30, 60, 90 and 120 span 90 minutes and sit 30 apart, and dividing by 90
+    # gives bars three pixels wide with the room of a fifteenth of a slot.
+    xs = sorted({x for x in chart.x_values()})
+    gaps = [b - a for a, b in zip(xs, xs[1:]) if b > a]
+    step = min(gaps) if gaps else (x_hi - x_lo)
     span = max(1e-9, x_hi - x_lo)
-    slot = plot.w / span
-    gap = slot / max(1, len(chart.x_values()) + 1)
-    bar_w = max(2.0, (slot - gap) * BAR_GROUP_FILL / n)
+    slot = max(4.0, plot.w * step / span)
+    # Capped: two series over four leads should not become four slabs.
+    bar_w = max(2.5, min(34.0, slot * 0.74 / n))
     baseline = sy(0.0)
 
     for index, series in enumerate(chart.series):

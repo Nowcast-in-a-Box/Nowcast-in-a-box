@@ -471,6 +471,51 @@ def test_a_family_is_dropped_and_put_back_with_one_click(page, live_server):
     assert page.errors == []
 
 
+def test_three_thresholds_are_three_panels_not_three_lines(page, live_server):
+    """Overlaid they read as three ways of scoring one forecast.
+
+    Side by side they read as one score moving with the threshold.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1400)
+
+    page.page.locator("#q-params .chip").nth(0).click()   # two thresholds now
+    page.page.wait_for_timeout(200)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1800)
+
+    src = page.page.locator("#chart").get_attribute("src")
+    assert "panel=level" in src, "the second threshold is a panel, not a series"
+    assert "series=level" not in src
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
+    assert page.errors == []
+
+
+def test_the_chart_is_drawn_at_the_width_it_is_shown_at(page, live_server):
+    """Otherwise the browser scales it down and every label with it.
+
+    The picture is then legible only to whoever opens the SVG on its own, which
+    is not the person looking at the page.
+    """
+    seed_run(live_server)
+    page.load(live_server).tab("results")
+    page.page.wait_for_timeout(700)
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1800)
+
+    asked = int([p for p in page.page.locator("#chart").get_attribute("src").split("&")[1:]
+                 if p.startswith("width=")][0].split("=")[1])
+    drawn = page.page.locator("#chart").evaluate("e => e.naturalWidth")
+    shown = page.page.locator("#chart").evaluate(
+        "e => Math.round(e.getBoundingClientRect().width)")
+    assert abs(drawn - shown) <= 2, (drawn, shown)
+    assert abs(asked - shown) <= 2, (asked, shown)
+    assert page.errors == []
+
+
 def test_the_results_tab_answers_a_query(page, live_server):
     seed_run(live_server)
     page.load(live_server).tab("results")
@@ -587,13 +632,14 @@ def test_two_axes_are_drawn_as_a_grid_and_the_form_toggle_goes_away(page, live_s
     page.page.wait_for_timeout(700)
 
     assert page.page.locator("#q-kind .chip").count() == 2
+    page.page.click("#btn-query")
+    page.page.wait_for_timeout(1400)
+
     page.page.select_option("#q-axis", "init_time+lead_minutes")
-    page.page.wait_for_timeout(200)
+    page.page.wait_for_timeout(1600)
     assert page.page.locator("#q-kind .chip").count() == 0
     assert "drawn as a grid" in page.text()
 
-    page.page.click("#btn-query")
-    page.page.wait_for_timeout(1400)
     src = page.page.locator("#chart").get_attribute("src")
     assert "kind=mesh" in src
     assert "x=init_time" in src and "series=lead_minutes" in src

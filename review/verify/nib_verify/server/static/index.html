@@ -151,13 +151,15 @@
           threshold over an existing level set costs nothing — which is the whole point.
         </p>
 
-        <div class="field" style="margin-bottom:10px">
-          <label for="q-config">Config</label>
-          <select id="q-config"></select>
-        </div>
-        <div class="field" style="margin-bottom:10px">
-          <label for="q-method">Metric</label>
-          <select id="q-method"></select>
+        <div class="row" style="gap:10px; margin-bottom:10px">
+          <div class="field" style="flex:1 1 0; min-width:0">
+            <label for="q-config">Config</label>
+            <select id="q-config"></select>
+          </div>
+          <div class="field" style="flex:1 1 0; min-width:0">
+            <label for="q-method">Metric</label>
+            <select id="q-method"></select>
+          </div>
         </div>
 
         <label class="tiny muted">Parameters</label>
@@ -171,29 +173,30 @@
             <input type="datetime-local" id="q-init-to"></div>
         </div>
 
-        <label class="tiny muted" style="display:block; margin-top:10px">Lead time (minutes)</label>
-        <div class="grid">
-          <div class="field"><label class="tiny" for="q-lead-from">from</label>
-            <input type="number" id="q-lead-from" min="0" step="1" placeholder="all"></div>
-          <div class="field"><label class="tiny" for="q-lead-to">to</label>
-            <input type="number" id="q-lead-to" min="0" step="1" placeholder="all"></div>
+        <div class="row" style="gap:10px; margin-top:10px; align-items:flex-end">
+          <div class="field" style="flex:1 1 0; min-width:0">
+            <label class="tiny" for="q-lead-from">Lead from (min)</label>
+            <input type="number" id="q-lead-from" min="0" step="1" placeholder="all">
+          </div>
+          <div class="field" style="flex:1 1 0; min-width:0">
+            <label class="tiny" for="q-lead-to">to (min)</label>
+            <input type="number" id="q-lead-to" min="0" step="1" placeholder="all">
+          </div>
         </div>
 
-        <div class="field" style="margin-top:12px">
-          <label for="q-axis">Along</label>
-          <select id="q-axis">
-            <option value="lead_minutes">lead minutes</option>
-            <option value="init_time">init time</option>
-            <option value="hour">hour of init</option>
-            <option value="init_time+lead_minutes">init time &times; lead minutes</option>
-          </select>
-          <span class="note">The last one asks for two axes, so it is drawn as a grid.</span>
+        <div class="row" style="gap:10px; margin-top:12px; align-items:flex-end">
+          <div class="field" style="flex:1 1 0; min-width:0">
+            <label for="q-axis">Along</label>
+            <select id="q-axis">
+              <option value="lead_minutes">lead minutes</option>
+              <option value="init_time">init time</option>
+              <option value="hour">hour of init</option>
+              <option value="init_time+lead_minutes">init &times; lead</option>
+            </select>
+          </div>
+          <button class="act" id="btn-query" style="flex:0 0 auto">Run query</button>
         </div>
-
-        <div class="row" style="margin-top:14px">
-          <button class="act" id="btn-query">Run query</button>
-          <span class="muted tiny" id="query-hint"></span>
-        </div>
+        <span class="muted tiny" id="query-hint"></span>
       </div>
     </div>
 
@@ -211,7 +214,8 @@
           </div>
           <img id="chart" alt="chart of the current query" style="width:100%; height:auto; display:block">
           <div class="row" style="margin-top:8px">
-            <a class="act ghost" id="chart-svg" download="chart.svg" href="#">Download SVG</a>
+            <a class="act ghost" id="chart-svg" download="chart.svg" href="#"
+               title="Save the chart above as an SVG file on this machine">Save chart (SVG)</a>
             <span class="muted tiny" id="chart-note"></span>
           </div>
         </div>
