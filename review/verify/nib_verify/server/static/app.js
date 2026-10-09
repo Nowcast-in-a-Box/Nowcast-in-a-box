@@ -985,6 +985,15 @@ async function onConfigPicked() {
     try { cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`); } catch (_) { return; }
   }
   state.selected = cfg;
+  // Defaults come off the config, not off the clock. "The last week" read from
+  // the wall clock is right for a live system and an empty page for a replayed
+  // one, and the page has no way to tell the two apart -- so the window opens on
+  // the most recent week this config was actually verified over.
+  state.initSpan = (cfg.stored || {}).init_span || null;
+  state.leads = cfg.leads || [];
+  fillInitDefaults();
+  fillLeadDefaults();
+
   const available = cfg.metrics_available || [];
   const select = $("#q-method");
   const previous = select.value;
@@ -994,41 +1003,246 @@ async function onConfigPicked() {
   renderCoverage(cfg);
 }
 
+//: The default window: seven days.
+const WEEK = 7 * 24 * 3600 * 1000;
+
+function fillInitDefaults() {
+  const span = state.initSpan;
+  if (!span) return;
+  const end = new Date(span[1]);
+  const start = new Date(Math.max(new Date(span[0]).getTime(), end.getTime() - WEEK));
+  $("#q-init-from").value = localStamp(start);
+  $("#q-init-to").value = localStamp(end);
+}
+
+function fillLeadDefaults() {
+  const leads = state.leads.slice().sort((a, b) => a - b);
+  if (!leads.length) return;
+  $("#q-lead-from").value = leads[0];
+  $("#q-lead-to").value = leads[leads.length - 1];
+}
+
+function localStamp(date) {
+  // `datetime-local` shows local time and has no zone. The store keeps UTC, so
+  // the value is shifted to local for the box and shifted back on the way out.
+  // Skipping either half reads a time hours off what was asked for, with no
+  // error to say so.
+  const pad = n => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function utcStamp(local) {
+  if (!local) return "";
+  const date = new Date(local);        // read as local, which is how it was written
+  return isNaN(date.getTime()) ? "" : date.toISOString().replace(/\.\d+Z$/, "Z");
+}
+
 async function onMethodPicked() {
   const method = $("#q-method").value;
-  if (!method) return renderParams(null);
-  // The parameters are read off the config's own metric group, so a box appears
-  // only for a family that has something to put in it -- and only with the
-  // values that group was declared with. There is no level box on a continuous
-  // metric, and no way to ask for a level this config never stored.
   const entry = ((state.selected || {}).metrics_available || []).find(m => m.method === method);
+  // One value per parameter, not all of them. The control is tiled so adding the
+  // rest is one click, but N thresholds against M models is N x M lines, and a
+  // chart with ten lines on it says nothing about any of them. The middle value is
+  // not more meaningful than the ends; something has to open, and this is the
+  // choice that does not claim a meaning it does not have.
+  state.picked = {};
+  for (const key of ["level", "half_window"]) {
+    const values = (entry && entry[key === "level" ? "levels" : "half_windows"]) || [];
+    if (values.length) state.picked[key] = [values[Math.floor((values.length - 1) / 2)]];
+  }
   renderParams(entry || null);
 }
+
+//: What to call each parameter on the form.
+const PARAM_LABEL = { level: "level", half_window: "half window" };
 
 function renderParams(entry) {
   const host = $("#q-params");
   mount(host);
   if (!entry) return;
-  if (entry.levels && entry.levels.length) {
-    mount(host, h("span", { class: "tiny muted" }, "level"),
-      picker("q-level", entry.levels));
-  }
-  if (entry.half_windows && entry.half_windows.length) {
-    mount(host, h("span", { class: "tiny muted" }, "half window"),
-      picker("q-window", entry.half_windows));
-  }
-  if (!host.childNodes.length) {
+  const shown = ["level", "half_window"].filter(k => state.picked[k] !== undefined);
+  if (!shown.length) {
     mount(host, h("span", { class: "tiny muted" }, `${entry.family}: no parameters`));
+    return;
+  }
+  for (const key of shown) {
+    const all = entry[key === "level" ? "levels" : "half_windows"] || [];
+    // The row is drawn from the config's whole list, not from what is selected:
+    // a chip that can be clicked off has to still be there to click back on.
+    mount(host, h("div", { class: "param-row" },
+      h("span", { class: "who" },
+        `${PARAM_LABEL[key]} · ${state.picked[key].length} of ${all.length}`),
+      h("div", { class: "chips" }, all.slice().sort((a, b) => a - b).map(value => h("button", {
+        class: "chip param", type: "button", text: String(value),
+        "aria-pressed": String(state.picked[key].includes(value)),
+        onclick: () => {
+          const at = state.picked[key].indexOf(value);
+          if (at >= 0) state.picked[key].splice(at, 1); else state.picked[key].push(value);
+          renderParams(entry);
+        },
+      })))));
   }
 }
 
-function picker(id, values) {
-  // "any" is the first option and the empty string, which the query reads as
-  // "do not filter on this" -- the same thing leaving the box blank used to mean.
-  return h("select", { id },
-    h("option", { value: "", text: "any" }),
-    values.map(v => h("option", { value: String(v), text: String(v) })));
+//: The value of the axis select that asks for two dimensions at once.
+const TWO_AXES = "init_time+lead_minutes";
+
+function askedAxes() {
+  return $("#q-axis").value.split("+");
 }
+
+//: A mesh is not a form to pick. It is what asking for two axes looks like --
+//: offering a line chart of a two-dimensional answer would only be offering to
+//: throw one of the axes away.
+function kindOf() {
+  return askedAxes().length > 1 ? "mesh" : state.kind;
+}
+
+function pickedParams() {
+  const out = {};
+  for (const [key, values] of Object.entries(state.picked || {})) {
+    const sorted = values.slice().sort((a, b) => a - b);
+    if (sorted.length) out[key] = sorted;
+  }
+  return out;
+}
+
+//: A parameter with more than one value is a dimension: it separates the marks
+//: and gets expanded. With one value it is only a filter, and expanding by it
+//: would put the same number in every row.
+function manyParams() {
+  const picked = pickedParams();
+  return Object.keys(picked).filter(k => picked[k].length > 1);
+}
+
+function queryParams() {
+  const params = new URLSearchParams();
+  params.set("config", $("#q-config").value);
+  params.set("method", $("#q-method").value);
+  const initFrom = utcStamp($("#q-init-from").value);
+  const initTo = utcStamp($("#q-init-to").value);
+  if (initFrom) params.set("init_from", initFrom);
+  if (initTo) params.set("init_to", initTo);
+  const leadFrom = $("#q-lead-from").value.trim();
+  const leadTo = $("#q-lead-to").value.trim();
+  if (leadFrom) params.set("lead_from", leadFrom);
+  if (leadTo) params.set("lead_to", leadTo);
+  for (const [key, values] of Object.entries(pickedParams())) {
+    params.set(key, values.join(","));
+  }
+  return params;
+}
+
+async function runQuery() {
+  const host = $("#query-result");
+  // Every parameter has to keep at least one value. An empty list is not "no
+  // filter" -- it is a question with no answer, and sending nothing would quietly
+  // widen the query to every threshold the config ever stored, which is the
+  // opposite of what unselecting the last one asks for.
+  const none = Object.entries(state.picked || {})
+    .filter(([, values]) => !values.length).map(([key]) => PARAM_LABEL[key]);
+  if (none.length) {
+    mount(host, notice("bad", `Pick at least one ${none.join(" and ")}.`));
+    return;
+  }
+  mount(host, empty("Querying…"));
+  const params = queryParams();
+  // What the table expands by has to be what the chart draws, or the two would
+  // describe one query in two shapes.
+  const axes = askedAxes();
+  const many = manyParams();
+  const dims = axes.length > 1
+    ? ["member", ...many, ...axes]
+    : ["member", ...axes, ...many];
+  dims.forEach(d => params.append("g", d));
+  try {
+    const result = await api(`/api/scores?${params.toString()}`);
+    state.lastQuery = result;
+    mount(host, renderScores(result));
+    showChart(params);
+  } catch (error) {
+    mount(host, notice("bad", error.message));
+    $("#chart-card").hidden = true;
+    $("#chart-empty").hidden = false;
+  }
+}
+
+function showChart(params) {
+  const kind = kindOf();
+  const many = manyParams();
+  const chart = new URLSearchParams(params);
+  chart.delete("g");
+  chart.set("kind", kind);
+  if (kind === "mesh") {
+    chart.set("x", "init_time");
+    chart.set("series", "lead_minutes");
+    // A third dimension becomes further panels rather than further grids.
+    for (const extra of many) chart.append("panel", extra);
+  } else {
+    chart.set("x", $("#q-axis").value);
+    // One mark per model, and one per value of any parameter filtered to more
+    // than one -- asking for three thresholds must not draw a single line.
+    for (const name of ["member", ...many]) chart.append("series", name);
+  }
+
+  state.chartUrl = `/api/chart?${chart.toString()}`;
+  // An <a download> rather than a button that builds a blob: the browser
+  // already knows how to save a URL, and one less place to get base64 wrong.
+  $("#chart-svg").href = state.chartUrl;
+  $("#chart").src = state.chartUrl;
+  $("#chart-card").hidden = false;
+  $("#chart-empty").hidden = true;
+  $("#chart-hint").textContent = kind === "mesh"
+    ? "grid: init time across, lead up, one panel per member and parameter"
+    : `${kind} along ${$("#q-axis").value}, one line per ${["member", ...many].join(" and ")}`;
+  $("#chart-note").textContent = chart.get("method") + " — drawn from the same query";
+  renderKindChips();
+}
+
+function renderKindChips() {
+  if (kindOf() === "mesh") {
+    mount($("#q-kind"));
+    $("#q-kind-note").textContent = "two axes: drawn as a grid";
+    return;
+  }
+  $("#q-kind-note").textContent = "";
+  mount($("#q-kind"), ["line", "bar"].map(name => h("button", {
+    class: "chip", type: "button", text: name,
+    "aria-pressed": String(state.kind === name),
+    onclick: () => {
+      state.kind = name;
+      renderKindChips();
+      // The form is a way of looking at the answer, not a different question, so
+      // it redraws at once -- the same rule the axis follows. The filters are
+      // the ones that wait for the button, because those change what is asked.
+      if (state.lastQuery) runQuery();
+    },
+  })));
+}
+
+// ==================================================================
+// wiring
+// ==================================================================
+$("#btn-reload-configs").addEventListener("click", loadConfigs);
+$("#btn-add-member").addEventListener("click", () => {
+  const id = $("#member-pick").value;
+  if (!id) return;
+  // Picking one is the whole action: the leads are already known from its runs.
+  state.memberRows.push({ name: id, leads: leadsFor(id) });
+  renderMembers();
+});
+$("#btn-save").addEventListener("click", saveConfig);
+// Choosing the ground truth is what fills the ruler in, so it is also what has to
+// clear it again when the choice changes to a package that declares less.
+$("#c-truth").addEventListener("input", applyGroundTruth);
+$("#c-truth").addEventListener("change", applyGroundTruth);
+$("#btn-query").addEventListener("click", runQuery);
+$("#q-config").addEventListener("change", onConfigPicked);
+$("#q-method").addEventListener("change", onMethodPicked);
+$("#q-axis").addEventListener("change", () => {
+  if (state.lastQuery) runQuery(); else renderKindChips();
+});
 
 function renderCoverage(cfg) {
   const stored = cfg.stored || {};
@@ -1039,96 +1253,6 @@ function renderCoverage(cfg) {
       : empty("Nothing verified under this config yet."),
     h("p", { class: "tiny muted" }, `families: ${(stored.families || []).join(", ") || "none"}`
       + (stored.missing_obs_times ? ` · ${stored.missing_obs_times} missing observation time(s)` : "")));
-}
-
-//: The three forms, and what each one does with the two axes.
-//:
-//: A mesh spends both axes on time and lead, so the "along" choice does not
-//: apply to it and the select is disabled rather than ignored -- a control that
-//: is on screen and has no effect is worse than one that is off.
-const FORMS = [
-  { id: "line", label: "line", x: true },
-  { id: "bar", label: "bar", x: true },
-  { id: "mesh", label: "mesh", x: false },
-];
-
-function renderKindChips() {
-  mount($("#q-kind"), FORMS.map(f => h("button", {
-    class: "chip", type: "button", "aria-pressed": String(state.kind === f.id),
-    text: f.label,
-    onclick: () => {
-      state.kind = f.id;
-      renderKindChips();
-      // The form is a way of looking at the answer, not a different question, so
-      // it redraws at once -- the same rule the axis follows. The filters are the
-      // ones that wait for the button, because those change what is asked.
-      if (state.lastQuery) runQuery();
-    },
-  })));
-  $("#q-axis").disabled = state.kind === "mesh";
-}
-
-function queryParams() {
-  const params = new URLSearchParams();
-  params.set("config", $("#q-config").value);
-  params.set("method", $("#q-method").value);
-  for (const [key, id] of [
-    ["init_from", "q-init-from"], ["init_to", "q-init-to"],
-    ["lead_from", "q-lead-from"], ["lead_to", "q-lead-to"],
-    ["level", "q-level"], ["half_window", "q-window"],
-  ]) {
-    const box = $(`#${id}`);
-    const value = box ? box.value.trim() : "";
-    if (value) params.set(key, value);
-  }
-  return params;
-}
-
-async function runQuery() {
-  const host = $("#query-result");
-  mount(host, empty("Querying…"));
-  const params = queryParams();
-  // What the table expands by has to be what the chart draws along, or the two
-  // would describe one query in two shapes. A mesh consumes both axes.
-  const dims = state.kind === "mesh"
-    ? ["member", "lead_minutes", "init_time"]
-    : ["member", $("#q-axis").value];
-  dims.forEach(d => params.append("g", d));
-  try {
-    const result = await api(`/api/scores?${params.toString()}`);
-    state.lastQuery = result;
-    mount(host, renderScores(result));
-    showChart(params);
-  } catch (error) {
-    mount(host, notice("bad", error.message));
-    $("#chart-card").hidden = true;
-  }
-}
-
-function showChart(params) {
-  const chart = new URLSearchParams(params);
-  chart.delete("g");
-  chart.set("kind", state.kind);
-  if (state.kind === "mesh") {
-    // Fixed, and not offered: a mesh with lead across and time up would be the
-    // same picture read sideways, and two ways to ask for it is one too many.
-    chart.set("x", "init_time");
-    chart.set("series", "lead_minutes");
-  } else {
-    chart.set("x", $("#q-axis").value);
-    chart.set("series", "member");
-  }
-
-  state.chartUrl = `/api/chart?${chart.toString()}`;
-  // An <a download> rather than a button that builds a blob: the browser
-  // already knows how to save a URL, and one less place to get base64 wrong.
-  $("#chart-svg").href = state.chartUrl;
-  $("#chart").src = state.chartUrl;
-  $("#chart-card").hidden = false;
-  $("#chart-hint").textContent = state.kind === "mesh"
-    ? "mesh: init time across, lead up, one panel per model"
-    : `${state.kind}: ${$("#q-axis").value} along x, one mark per model`;
-  $("#chart-note").textContent = chart.get("method") + " — fetched from the same query";
 }
 
 function renderScores(result) {
@@ -1160,27 +1284,6 @@ function renderScores(result) {
     h("div", { class: "scroll", style: "margin-top:10px" },
       h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
 }
-
-// ==================================================================
-// wiring
-// ==================================================================
-$("#btn-reload-configs").addEventListener("click", loadConfigs);
-$("#btn-add-member").addEventListener("click", () => {
-  const id = $("#member-pick").value;
-  if (!id) return;
-  // Picking one is the whole action: the leads are already known from its runs.
-  state.memberRows.push({ name: id, leads: leadsFor(id) });
-  renderMembers();
-});
-$("#btn-save").addEventListener("click", saveConfig);
-// Choosing the ground truth is what fills the ruler in, so it is also what has to
-// clear it again when the choice changes to a package that declares less.
-$("#c-truth").addEventListener("input", applyGroundTruth);
-$("#c-truth").addEventListener("change", applyGroundTruth);
-$("#btn-query").addEventListener("click", runQuery);
-$("#q-config").addEventListener("change", onConfigPicked);
-$("#q-method").addEventListener("change", onMethodPicked);
-$("#q-axis").addEventListener("change", () => { if (state.lastQuery) runQuery(); });
 
 function renderMetricGroups() {
   const groups = state.metricGroups;

@@ -140,70 +140,93 @@
 
 <!-- ==================================================== results -->
 <section id="tab-results" hidden>
-  <div class="card">
-    <h2>Query stored quantities</h2>
-    <p class="hint">
-      This reads counts and sums from the store. It never opens a field, so a new
-      threshold over an existing level set costs nothing — which is the whole point.
-    </p>
-    <div class="grid">
-      <div class="field">
-        <label for="q-config">Config</label>
-        <select id="q-config"></select>
-      </div>
-      <div class="field">
-        <label for="q-method">Metric</label>
-        <select id="q-method"></select>
-      </div>
-      <div class="field">
-        <label>Parameters</label>
-        <div id="q-params" class="row"></div>
-      </div>
-    </div>
-    <div class="grid tight" style="margin-top:10px">
-      <div class="field"><label for="q-init-from">Init from</label><input id="q-init-from" placeholder="all" autocomplete="off"></div>
-      <div class="field"><label for="q-init-to">Init to</label><input id="q-init-to" placeholder="all" autocomplete="off"></div>
-      <div class="field"><label for="q-lead-from">Lead from</label><input id="q-lead-from" placeholder="all" autocomplete="off"></div>
-      <div class="field"><label for="q-lead-to">Lead to</label><input id="q-lead-to" placeholder="all" autocomplete="off"></div>
-    </div>
-    <div class="row" style="margin-top:12px">
-      <div class="field">
-        <label>Form</label>
-        <div class="chips" id="q-kind"></div>
-      </div>
-      <div class="field">
-        <label for="q-axis">Along</label>
-        <select id="q-axis">
-          <option value="lead_minutes">lead minutes</option>
-          <option value="init_time">init time</option>
-          <option value="hour">hour of init</option>
-        </select>
-      </div>
-    </div>
-    <div class="row" style="margin-top:12px">
-      <button class="act" id="btn-query">Run query</button>
-      <span class="muted tiny" id="query-hint"></span>
-    </div>
-    <div id="chart-card" hidden>
-      <div class="row" style="margin-top:14px; justify-content:space-between">
-        <h3 style="margin:0">Chart</h3>
-        <span class="muted tiny" id="chart-hint"></span>
-      </div>
-      <p class="hint">The same query, drawn. A line or bar runs along one dimension with
-        one mark per model; a mesh grid is init time across and lead up, one panel per model.</p>
-      <img id="chart" alt="chart of the current query" style="width:100%; height:auto; display:block">
-      <div class="row" style="margin-top:8px">
-        <a class="act ghost" id="chart-svg" download="chart.svg" href="#">Download SVG</a>
-        <span class="muted tiny" id="chart-note"></span>
-      </div>
-    </div>
-    <div id="query-result"></div>
-  </div>
+  <div class="split">
 
-  <div class="card">
-    <h2>Coverage</h2>
-    <p class="hint">What has been verified, and what is missing.</p>
-    <div id="coverage"><div class="empty">Run a query, or pick a config above.</div></div>
+    <!-- left: what to ask -->
+    <div class="ask">
+      <div class="card">
+        <h2>Query</h2>
+        <p class="hint">
+          This reads counts and sums from the store. It never opens a field, so a new
+          threshold over an existing level set costs nothing — which is the whole point.
+        </p>
+
+        <div class="field" style="margin-bottom:10px">
+          <label for="q-config">Config</label>
+          <select id="q-config"></select>
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <label for="q-method">Metric</label>
+          <select id="q-method"></select>
+        </div>
+
+        <label class="tiny muted">Parameters</label>
+        <div id="q-params"></div>
+
+        <label class="tiny muted" style="display:block; margin-top:12px">Init time</label>
+        <div class="grid tight">
+          <div class="field"><label class="tiny" for="q-init-from">from</label>
+            <input type="datetime-local" id="q-init-from"></div>
+          <div class="field"><label class="tiny" for="q-init-to">to</label>
+            <input type="datetime-local" id="q-init-to"></div>
+        </div>
+
+        <label class="tiny muted" style="display:block; margin-top:10px">Lead time (minutes)</label>
+        <div class="grid tight">
+          <div class="field"><label class="tiny" for="q-lead-from">from</label>
+            <input type="number" id="q-lead-from" min="0" step="1" placeholder="all"></div>
+          <div class="field"><label class="tiny" for="q-lead-to">to</label>
+            <input type="number" id="q-lead-to" min="0" step="1" placeholder="all"></div>
+        </div>
+
+        <div class="field" style="margin-top:12px">
+          <label for="q-axis">Along</label>
+          <select id="q-axis">
+            <option value="lead_minutes">lead minutes</option>
+            <option value="init_time">init time</option>
+            <option value="hour">hour of init</option>
+            <option value="init_time+lead_minutes">init time &times; lead minutes</option>
+          </select>
+          <span class="note">The last one asks for two axes, so it is drawn as a grid.</span>
+        </div>
+
+        <div class="row" style="margin-top:14px">
+          <button class="act" id="btn-query">Run query</button>
+          <span class="muted tiny" id="query-hint"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- right: the answer -->
+    <div class="answer">
+      <div class="card">
+        <div class="row" style="justify-content:space-between; align-items:baseline">
+          <h2 style="margin:0">Chart</h2>
+          <span class="muted tiny" id="chart-hint"></span>
+        </div>
+        <div id="chart-card" hidden>
+          <div class="row" style="margin:8px 0 10px">
+            <div class="chips" id="q-kind"></div>
+            <span class="muted tiny" id="q-kind-note"></span>
+          </div>
+          <img id="chart" alt="chart of the current query" style="width:100%; height:auto; display:block">
+          <div class="row" style="margin-top:8px">
+            <a class="act ghost" id="chart-svg" download="chart.svg" href="#">Download SVG</a>
+            <span class="muted tiny" id="chart-note"></span>
+          </div>
+        </div>
+        <div id="chart-empty" class="empty">Pick a config and run a query.</div>
+      </div>
+
+      <div id="query-result"></div>
+
+      <div class="card">
+        <h2>Coverage</h2>
+        <p class="hint">What has been verified, and what is missing.</p>
+        <div id="coverage"><div class="empty">Run a query, or pick a config.</div></div>
+      </div>
+    </div>
+
   </div>
 </section>
 

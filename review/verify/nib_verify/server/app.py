@@ -225,11 +225,18 @@ def create_app(
         payload = cfg.to_dict()
         payload.update(library.summary(cfg))
         with store() as s:
+            init_times, _ = s.task_axes(group_id)
             payload["stored"] = {
                 "tasks": s.task_counts(group_id),
                 "families": s.families_present(group_id),
                 "missing_obs_times": len(s.obs_gaps(group_id)),
                 "runs": s.run_history(group_id, limit=10),
+                # The window the config was actually verified over, so a form can
+                # open on a range that has something in it. "The last week" taken
+                # off the wall clock is the right default for a live system and an
+                # empty page for a replayed one, and there is no way for the page
+                # to tell the two apart.
+                "init_span": [init_times[0], init_times[-1]] if init_times else None,
             }
         payload["metrics_available"] = available_metrics(cfg)
         return payload
@@ -425,6 +432,7 @@ def create_app(
                     s=_filters_from_query(params),
                     time_dim=params.get("x") or "init_time",
                     lead_dim=params.get("series") or "lead_minutes",
+                    panel_dims=("member", *params.getlist("panel")),
                 ))
             else:
                 chart = chart_for(

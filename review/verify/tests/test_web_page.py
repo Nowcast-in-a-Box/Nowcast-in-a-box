@@ -211,32 +211,49 @@ def test_the_chart_and_the_table_expand_by_the_same_dimensions():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     body = app[app.index("async function runQuery"):]
     body = body[: body.index("\n}\n")]
-    assert 'state.kind === "mesh"' in body, "the mesh spends both axes"
-    assert '["member", "lead_minutes", "init_time"]' in body
-    assert '$("#q-axis").value' in body, "a line is drawn along the control"
+    assert 'axes.length > 1' in body, "two axes is not a line chart"
+    assert "...many, ...axes" in body, "the extra dimensions are the marks"
     assert 'dims.forEach(d => params.append("g", d))' in body, \
-        "and the table expands by exactly those"
+        "the table expands by exactly those"
 
     chart = app[app.index("function showChart"):]
     chart = chart[: chart.index("\n}\n")]
     assert 'chart.delete("g")' in chart, "g is the table's grouping, not the chart's"
-    assert 'chart.set("series", "member")' in chart, "the models are the marks"
-    assert 'chart.set("kind", state.kind)' in chart, "the form reaches the chart"
+    assert 'chart.set("kind", kind)' in chart, "the form reaches the chart"
+    assert '["member", ...many]' in chart, \
+        "one mark per model and per parameter filtered to more than one"
 
 
 def test_the_axis_is_a_control_and_not_the_order_the_chips_were_clicked():
     """The axis used to be whatever the expansion chips happened to spell.
 
     That is an implicit rule: it works only for somebody who already knows it,
-    and nothing on the page says it. The three axes are named in a select now.
+    and nothing on the page says it. The axes are named in a select now, and the
+    pair that makes a grid is one of the entries rather than a separate form.
     """
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'id="q-axis"' in html
-    assert html.count('value="lead_minutes"') >= 1
+    assert 'value="lead_minutes"' in html
     assert 'value="init_time"' in html
     assert 'value="hour"' in html, "the hour a run started is one of the axes"
+    assert 'value="init_time+lead_minutes"' in html, "and the pair is the grid"
     assert 'id="q-g"' not in html, "the chip order is gone"
     assert "the last becomes the x-axis" not in html
+
+
+def test_the_results_tab_is_split_into_a_question_and_an_answer():
+    """The picture has to be on screen while the numbers under it are read.
+
+    One scrolling page puts the chart above a forty-row table and therefore off
+    the screen entirely.
+    """
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    css = (STATIC / "style.css").read_text(encoding="utf-8")
+    results = html[html.index('id="tab-results"'):]
+    results = results[: results.index("</section>")]
+    assert 'class="split"' in results
+    assert 'class="ask"' in results and 'class="answer"' in results
+    assert ".split > .answer" in css and "overflow: auto" in css
 
 
 def test_the_config_form_does_not_ask_for_notes():

@@ -93,7 +93,7 @@ def mesh_for(
     s: dict[str, Any] | None = None,
     time_dim: str = "init_time",
     lead_dim: str = "lead_minutes",
-    member_dim: str = "member",
+    panel_dims: Sequence[str] = ("member",),
     limit: int = 20_000,
 ) -> Mesh:
     """Ask the store for the whole grid at once.
@@ -102,16 +102,27 @@ def mesh_for(
     to agree about their axes, and two queries can disagree about which init
     times exist. A time that is missing for one model is then visibly missing
     from that model's panel instead of silently shifting every column after it.
+
+    ``panel_dims`` are the dimensions that separate one grid from the next -- the
+    model, and any parameter that was filtered to more than one value. Asking for
+    three thresholds and getting one panel would be answering a question nobody
+    asked.
     """
     from ..query.service import _translate, query_scores
 
-    expand = tuple(dict.fromkeys([member_dim, lead_dim, time_dim]))
+    panels_by = tuple(dict.fromkeys(panel_dims))
+    expand = tuple(dict.fromkeys([*panels_by, lead_dim, time_dim]))
     result = query_scores(store, cfg, method=method, s=s, g=expand, limit=limit)
     records = result.get("records") or []
 
     x_values = sorted({str(r[time_dim]) for r in records if r.get(time_dim) is not None})
     y_values = sorted({float(r[lead_dim]) for r in records if r.get(lead_dim) is not None})
-    members = sorted({str(r[member_dim]) for r in records if r.get(member_dim) is not None})
+
+    seen: dict[tuple, None] = {}
+    for r in records:
+        seen.setdefault(tuple(str(r.get(d)) for d in panels_by), None)
+    if not seen and cfg is not None:
+        seen = {(m.name,): None for m in cfg.members}
 
     # Widen the axes to what the plan contains.  A run that produced nothing has
     # no record, so the union above cannot see it -- and a column that is not
@@ -122,20 +133,19 @@ def mesh_for(
         # of next month does not grow columns from last month.
         window = _translate(s or {})
         planned_times, planned_leads = store.task_axes(group_id, window=window)
-        members = members or sorted({m.name for m in (cfg.members if cfg else ())})
         x_values = sorted(set(x_values) | set(planned_times))
         y_values = sorted(set(y_values) | {float(v) for v in planned_leads})
 
     panels = []
-    for member in members:
+    for key in sorted(seen):
         cells: dict[tuple[int, int], float | None] = {}
         for r in records:
-            if str(r.get(member_dim)) != member:
+            if tuple(str(r.get(d)) for d in panels_by) != key:
                 continue
             x = x_values.index(str(r[time_dim]))
             y = y_values.index(float(r[lead_dim]))
             cells[(x, y)] = r.get("value")
-        panels.append(Panel(label=member, cells=cells))
+        panels.append(Panel(label=" / ".join(part for part in key if part), cells=cells))
 
     meta = result.get("meta") or {}
     label = meta.get("label") or method

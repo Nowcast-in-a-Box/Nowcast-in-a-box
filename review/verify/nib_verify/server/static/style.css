@@ -63,6 +63,29 @@ nav button[aria-selected="true"] {
 main { padding: 22px; max-width: 1180px; margin: 0 auto; }
 [hidden] { display: none !important; }
 
+/* The results tab: the questions down the left, the answer filling the rest.
+   The right pane scrolls on its own so the picture stays on screen while the
+   table underneath it is read -- a page that scrolls as one piece puts the
+   chart above a forty-row table and therefore off the screen entirely. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(270px, 320px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.split > .ask { position: sticky; top: 14px; }
+.split > .answer {
+  min-width: 0;             /* a grid child will not shrink below its content */
+  max-height: calc(100vh - 130px);
+  overflow: auto;
+  padding-right: 4px;
+}
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; }
+  .split > .ask { position: static; }
+  .split > .answer { max-height: none; }
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -223,8 +246,6 @@ pre.log {
 .muted { color: var(--muted); }
 .stack { display: flex; flex-direction: column; gap: 10px; }
 .tiny { font-size: 12px; }
-.split { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-@media (max-width: 880px) { .split { grid-template-columns: 1fr; } }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {
@@ -241,6 +262,11 @@ pre.log {
   color: var(--accent);
   font-weight: 600;
 }
+/* A parameter is tiled rather than folded into a select: the list is short, and
+   which thresholds were asked for is the thing being read back. */
+.chip.param { border-radius: 6px; font-variant-numeric: tabular-nums; }
+.param-row { display: flex; gap: 8px; align-items: baseline; margin-top: 6px; }
+.param-row > .who { font-size: 11.5px; color: var(--muted); min-width: 74px; }
 
 .groupbox {
   border: 1px solid var(--line);
