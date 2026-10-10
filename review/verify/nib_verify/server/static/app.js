@@ -1015,7 +1015,7 @@ async function onConfigPicked() {
 const WEEK = 7 * 24 * 3600 * 1000;
 
 //: What the quick picks offer, in days. ``null`` is everything that was stored.
-const INIT_PICKS = [[1, "1 \u5929"], [3, "3 \u5929"], [7, "7 \u5929"], [null, "\u5168\u90e8"]];
+const INIT_PICKS = [[1, "1 d"], [3, "3 d"], [7, "7 d"], [30, "30 d"], [null, "All"]];
 
 function initDays() {
   const from = $("#q-init-from").value, to = $("#q-init-to").value;
@@ -1030,17 +1030,15 @@ function sayInit() {
   const from = $("#q-init-from").value, to = $("#q-init-to").value;
   const days = initDays();
   const span = days !== null && days > 0.05
-    ? `  \u00b7  ${days < 10 ? days.toFixed(1) : Math.round(days)} \u5929` : "";
+    ? `  \u00b7  ${days < 10 ? days.toFixed(1) : Math.round(days)} d` : "";
   $("#btn-init-range").textContent =
-    (from ? from.replace("T", " ") : "\u6700\u65e9") + "  \u2192  "
-    + (to ? to.replace("T", " ") : "\u73b0\u5728") + span;
+    (from ? from.replace("T", " ") : "earliest") + "  \u2192  "
+    + (to ? to.replace("T", " ") : "now") + span;
 }
 
 //: The five dropdowns of one end of the range. Cheaper to use than a calendar
 //: and, unlike one, possible to put a button under.
-const SEGMENTS = [
-  ["\u5e74", 4], ["\u6708", 2], ["\u65e5", 2], ["\u65f6", 2], ["\u5206", 2],
-];
+const SEGMENTS = ["year", "month", "day", "hour", "minute"];
 
 function parts(value) {
   const got = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || "");
@@ -1069,10 +1067,9 @@ function buildSeg(host, parts) {
     range(0, 23),
     range(0, 59),
   ];
-  mount(host, SEGMENTS.map(([label, width, pixels], at) => {
-    const pad = value => String(value).padStart(width, "0");
-    const pick = h("select", { class: "seg-part", title: label,
-                                "aria-label": label, style: `width:${pixels}px` });
+  mount(host, SEGMENTS.map((label, at) => {
+    const pad = value => String(value).padStart(label === "year" ? 4 : 2, "0");
+    const pick = h("select", { class: "seg-part", title: label, "aria-label": label });
     for (const value of choices[at]) {
       pick.appendChild(h("option", { value: String(value), text: pad(value) }));
     }

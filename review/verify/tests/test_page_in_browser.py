@@ -786,7 +786,7 @@ def test_the_defaults_come_off_the_config_and_not_off_the_clock(page, live_serve
     page.page.wait_for_timeout(300)
     assert page.page.locator("#init-panel select").count() == 10, "five per end"
     assert [b.strip() for b in page.page.eval_on_selector_all(
-        "#init-panel button", "e => e.map(x => x.textContent)")] == ["\u786e\u5b9a"], \
+        "#init-panel button", "e => e.map(x => x.textContent)")] == ["OK"], \
         "one button, and it is the one the picker was missing"
     page.page.click("#btn-init-ok")
     page.page.wait_for_timeout(300)
