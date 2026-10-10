@@ -408,3 +408,41 @@ def test_the_gap_marker_is_on_the_page_because_the_canvas_has_no_legend():
     legend = legend[: legend.index(chr(10) + "}" + chr(10))]
     assert 'r.value === null' in legend, "a member with a missing lead"
     assert '(gap)' in legend
+
+
+def test_the_time_fields_say_what_they_mean_and_have_a_key_to_confirm_it():
+    """The browser's own date picker has no done button.
+
+    The value was never the problem -- ``queryParams`` reads the fields when the
+    query runs, so nothing depended on the blur that closes the calendar. What was
+    missing was any sign that the choice had taken, and the only way to give one
+    was to click some other part of the page. So: a week is a click, the range is
+    said back as it is typed, and Enter is a key that means done.
+    """
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "function sayInit" in app and "function applyInit" in app
+    said = app[app.index("function sayInit"):]
+    said = said[: said.index(chr(10) + "}" + chr(10))]
+    assert "function sayInit(applied)" in said
+    assert "applied ?" in said, "it says done after the fact, not only before"
+
+    # Enter, from either field
+    boot = app[app.index('for (const id of ["#q-init-from"'):]
+    boot = boot[: boot.index("}\n")]
+    assert '"#q-init-from", "#q-init-to"' in boot or "#q-init-from" in boot
+    assert 'event.key === "Enter"' in app and "applyInit()" in app
+
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'id="btn-init-ok"' in html and 'id="q-init-said"' in html
+    assert 'id="q-init-quick"' in html, "the week is a click, not a calendar"
+    # and the quick picks are above the fields, where the choice starts
+    assert html.index('id="q-init-quick"') < html.index('id="q-init-from"')
+
+
+def test_the_quick_picks_are_the_windows_people_ask_for():
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    picks = app[app.index("const INIT_PICKS"):]
+    picks = picks[: picks.index("];")]
+    for days in ("[1,", "[3,", "[7,", "[null,"):
+        assert days in picks, days
+    assert "function setInitDays" in app

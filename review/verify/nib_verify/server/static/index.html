@@ -166,11 +166,17 @@
         <div id="q-params"></div>
 
         <label class="tiny muted" style="display:block; margin-top:12px">Init time</label>
-        <div class="grid">
-          <div class="field"><label class="tiny" for="q-init-from">from</label>
-            <input type="datetime-local" id="q-init-from"></div>
-          <div class="field"><label class="tiny" for="q-init-to">to</label>
-            <input type="datetime-local" id="q-init-to"></div>
+        <!-- A week is what almost every query wants, so the week is a click and not
+             a calendar. The two fields stay for the rest, and the line under them
+             is the confirmation the browser's own picker does not give: it updates
+             as you type, so nothing has to be clicked elsewhere to "take". -->
+        <div class="chips" id="q-init-quick"></div>
+        <input type="datetime-local" id="q-init-from" style="margin-top:6px">
+        <input type="datetime-local" id="q-init-to" style="margin-top:6px">
+        <div class="row" style="margin-top:6px; gap:8px; align-items:center">
+          <button class="chip" type="button" id="btn-init-ok"
+                  title="用这段时间重查">确定</button>
+          <span class="tiny muted" id="q-init-said"></span>
         </div>
 
         <div class="row" style="gap:10px; margin-top:10px; align-items:flex-end">

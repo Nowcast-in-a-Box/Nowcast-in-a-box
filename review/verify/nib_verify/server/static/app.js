@@ -1014,6 +1014,57 @@ async function onConfigPicked() {
 //: The default window: seven days.
 const WEEK = 7 * 24 * 3600 * 1000;
 
+//: What the quick picks offer, in days. ``null`` is everything that was stored.
+const INIT_PICKS = [[1, "1 \u5929"], [3, "3 \u5929"], [7, "7 \u5929"], [null, "\u5168\u90e8"]];
+
+function initDays() {
+  const from = $("#q-init-from").value, to = $("#q-init-to").value;
+  if (!from || !to) return null;
+  return (new Date(to) - new Date(from)) / 86400000;
+}
+
+/** What the two fields currently mean, in words. This is the confirmation the
+ * browser's own picker does not give: it says the range back as you type it, so
+ * there is nothing left to click elsewhere in order to make it take. */
+function sayInit(applied) {
+  const from = $("#q-init-from").value, to = $("#q-init-to").value;
+  const days = initDays();
+  const span = days !== null && days > 0.05
+    ? `\uff08${days < 10 ? days.toFixed(1) : Math.round(days)} \u5929\uff09` : "";
+  $("#q-init-said").textContent = (applied ? "\u2713 \u5df2\u5e94\u7528  " : "")
+    + (from ? from.replace("T", " ") : "\u6700\u65e9")
+    + " \u2192 " + (to ? to.replace("T", " ") : "\u73b0\u5728") + span;
+}
+
+function renderInitQuick() {
+  const days = initDays();
+  const near = (one, other) => one !== null && other !== null && Math.abs(one - other) < 0.2;
+  mount($("#q-init-quick"), INIT_PICKS.map(([count, label]) => h("button", {
+    class: "chip", type: "button", text: label,
+    "aria-pressed": String(count !== null && near(days, count)),
+    onclick: () => setInitDays(count),
+  })));
+}
+
+function setInitDays(count) {
+  const span = state.initSpan;
+  const end = new Date();
+  const start = count === null
+    ? (span ? new Date(span[0]) : new Date(0))
+    : new Date(end.getTime() - count * 86400000);
+  $("#q-init-from").value = localStamp(start);
+  $("#q-init-to").value = localStamp(end);
+  sayInit(false);
+  renderInitQuick();
+}
+
+/** The one thing the browser's date picker is missing: a way to say done. */
+function applyInit() {
+  sayInit(true);
+  renderInitQuick();
+  if (state.lastQuery) runQuery();
+}
+
 function fillInitDefaults() {
   const span = state.initSpan;
   // The window ends now: it follows the clock on a live system. It starts a week
@@ -1026,6 +1077,8 @@ function fillInitDefaults() {
                                   anchor.getTime() - WEEK));
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
+  sayInit(false);
+  renderInitQuick();
 }
 
 function fillLeadDefaults() {
@@ -1320,6 +1373,16 @@ $("#btn-save").addEventListener("click", saveConfig);
 $("#c-truth").addEventListener("input", applyGroundTruth);
 $("#c-truth").addEventListener("change", applyGroundTruth);
 $("#btn-query").addEventListener("click", runQuery);
+for (const id of ["#q-init-from", "#q-init-to"]) {
+  $(id).addEventListener("input", () => { sayInit(false); renderInitQuick(); });
+  // Enter is the confirm key the field does not have. Without it the only way to
+  // say "this is the time I meant" was to click some other part of the page, and
+  // nothing said whether it had taken.
+  $(id).addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); applyInit(); }
+  });
+}
+$("#btn-init-ok").addEventListener("click", applyInit);
 $("#q-config").addEventListener("change", onConfigPicked);
 $("#q-method").addEventListener("change", onMethodPicked);
 $("#q-axis").addEventListener("change", () => {
