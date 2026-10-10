@@ -923,3 +923,17 @@ def test_a_bad_chart_request_keeps_its_own_status_and_its_own_reason(client):
                                                 "x": "nonsense"})
     assert response.status_code == 400
     assert "nonsense" in response.json()["detail"]
+
+
+def test_the_page_and_its_files_are_revalidated_every_time(client):
+    """A stale app.js next to a fresh index.html looks like a deleted feature.
+
+    Starlette serves static files with an ETag and a Last-Modified and no
+    Cache-Control, and a browser may then keep its own copy and ask later. During
+    a review that is exactly how a button arrives with no text on it.
+    """
+    for path in ("/", "/static/app.js", "/static/style.css"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert "no-cache" in response.headers.get("cache-control", ""), \
+            f"{path} may be kept without asking"

@@ -487,6 +487,25 @@ def create_app(
 
     # ============================================================== static
     if STATIC_DIR.is_dir():
+        @app.middleware("http")
+        async def revalidate(request: Request, call_next):
+            """The page and its files are checked every time, not kept.
+
+            Starlette serves them with an ETag and a Last-Modified and no
+            Cache-Control, and a browser is then free to apply its own heurestic
+            -- keep a copy, ask later. During a review that is how a page ends up
+            with new markup and last week's script: the button that should say
+            the time range arrives empty and the quick picks never render, and it
+            looks like the feature was removed rather than like a stale file.
+
+            ``no-cache`` is not ``no-store``: nothing is thrown away, the copy is
+            revalidated and comes back 304 when it has not changed.
+            """
+            response = await call_next(request)
+            if request.url.path == "/" or request.url.path.startswith("/static/"):
+                response.headers["Cache-Control"] = "no-cache"
+            return response
+
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
         @app.get("/")
