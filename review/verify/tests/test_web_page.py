@@ -423,20 +423,25 @@ def test_the_time_fields_say_what_they_mean_and_have_a_key_to_confirm_it():
     assert "function sayInit" in app and "function applyInit" in app
     said = app[app.index("function sayInit"):]
     said = said[: said.index(chr(10) + "}" + chr(10))]
-    assert "function sayInit(applied)" in said
-    assert "applied ?" in said, "it says done after the fact, not only before"
+    assert "btn-init-range" in said, "the range is said on the button that opens it"
 
-    # Enter, from either field
-    boot = app[app.index('for (const id of ["#q-init-from"'):]
-    boot = boot[: boot.index("}\n")]
-    assert '"#q-init-from", "#q-init-to"' in boot or "#q-init-from" in boot
-    assert 'event.key === "Enter"' in app and "applyInit()" in app
+    # The one button, on the panel, where the choosing happens
+    panel = app[app.index("function applyInit"):]
+    panel = panel[: panel.index(chr(10) + "}" + chr(10))]
+    assert "closeInitPanel()" in panel and "sayInit()" in panel
+    assert "panelParts" in panel, "the panel is what is read, not the hidden field"
 
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    assert 'id="btn-init-ok"' in html and 'id="q-init-said"' in html
+    assert 'id="init-panel"' in html and 'id="btn-init-ok"' in html
     assert 'id="q-init-quick"' in html, "the week is a click, not a calendar"
-    # and the quick picks are above the fields, where the choice starts
-    assert html.index('id="q-init-quick"') < html.index('id="q-init-from"')
+    assert 'type="hidden" id="q-init-from"' in html, \
+        "the browser's own picker is not used: it draws Today and Clear and there is no way to change that"
+    # the panel is inside the same block as the fields it edits, not off to one side
+    assert html.index('id="q-init-quick"') < html.index('id="btn-init-range"') \
+        < html.index('id="init-panel"')
+    # and nothing of the picker's own footer is ours
+    for theirs in ("\u4eca\u5929", "\u6e05\u9664"):
+        assert theirs not in html, theirs
 
 
 def test_the_quick_picks_are_the_windows_people_ask_for():

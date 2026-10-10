@@ -302,3 +302,27 @@ pre.log {
   text-transform: uppercase;
   letter-spacing: .04em;
 }
+
+/* The time range: a button that says the range, and our own panel under it. The
+   browser's picker draws its own footer with Today and Clear on it and no way to
+   say done, and none of that can be changed -- so the panel is ours. */
+.range-button {
+  display: block; width: 100%; margin-top: 6px; padding: 6px 9px;
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  color: #22303c; background: #fff;
+  border: 1px solid #c6d6e6; border-radius: 6px;
+}
+.range-button:hover { border-color: #2e75b6; }
+.popup {
+  margin-top: 6px; padding: 9px 10px 8px;
+  background: #f7fafd; border: 1px solid #c6d6e6; border-radius: 8px;
+}
+.popup-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+.popup-row > .muted { flex: 0 0 28px; }
+.seg { display: flex; gap: 3px; }
+.seg-part {
+  font: inherit; font-size: 12px; padding: 3px 1px;
+  color: #22303c; background: #fff;
+  border: 1px solid #c6d6e6; border-radius: 5px;
+}
+.popup-foot { display: flex; justify-content: flex-end; padding-top: 2px; }

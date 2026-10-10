@@ -1023,18 +1023,81 @@ function initDays() {
   return (new Date(to) - new Date(from)) / 86400000;
 }
 
-/** What the two fields currently mean, in words. This is the confirmation the
- * browser's own picker does not give: it says the range back as you type it, so
- * there is nothing left to click elsewhere in order to make it take. */
-function sayInit(applied) {
+/** What the range currently is, on the button that opens the panel. The button
+ * is the confirmation: there is no separate line to read, and nothing has to be
+ * clicked elsewhere for the choice to have been made. */
+function sayInit() {
   const from = $("#q-init-from").value, to = $("#q-init-to").value;
   const days = initDays();
   const span = days !== null && days > 0.05
-    ? `\uff08${days < 10 ? days.toFixed(1) : Math.round(days)} \u5929\uff09` : "";
-  $("#q-init-said").textContent = (applied ? "\u2713 \u5df2\u5e94\u7528  " : "")
-    + (from ? from.replace("T", " ") : "\u6700\u65e9")
-    + " \u2192 " + (to ? to.replace("T", " ") : "\u73b0\u5728") + span;
+    ? `  \u00b7  ${days < 10 ? days.toFixed(1) : Math.round(days)} \u5929` : "";
+  $("#btn-init-range").textContent =
+    (from ? from.replace("T", " ") : "\u6700\u65e9") + "  \u2192  "
+    + (to ? to.replace("T", " ") : "\u73b0\u5728") + span;
 }
+
+//: The five dropdowns of one end of the range. Cheaper to use than a calendar
+//: and, unlike one, possible to put a button under.
+const SEGMENTS = [
+  ["\u5e74", 4], ["\u6708", 2], ["\u65e5", 2], ["\u65f6", 2], ["\u5206", 2],
+];
+
+function parts(value) {
+  const got = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || "");
+  const now = new Date();
+  return got ? got.slice(1).map(Number)
+             : [now.getFullYear(), now.getMonth() + 1, now.getDate(),
+                now.getHours(), now.getMinutes()];
+}
+
+function stamp(parts) {
+  const pad = value => String(value).padStart(2, "0");
+  const days = new Date(parts[0], parts[1], 0).getDate();      // month is 1-based
+  return `${parts[0]}-${pad(parts[1])}-${pad(Math.min(parts[2], days))}`
+       + `T${pad(Math.min(parts[3], 23))}:${pad(Math.min(parts[4], 59))}`;
+}
+
+function range(lo, hi) {
+  return Array.from({ length: hi - lo + 1 }, (unused, at) => lo + at);
+}
+
+function buildSeg(host, parts) {
+  const choices = [
+    range(2020, 2100),
+    range(1, 12),
+    range(1, new Date(parts[0], parts[1], 0).getDate()),
+    range(0, 23),
+    range(0, 59),
+  ];
+  mount(host, SEGMENTS.map(([label, width, pixels], at) => {
+    const pad = value => String(value).padStart(width, "0");
+    const pick = h("select", { class: "seg-part", title: label,
+                                "aria-label": label, style: `width:${pixels}px` });
+    for (const value of choices[at]) {
+      pick.appendChild(h("option", { value: String(value), text: pad(value) }));
+    }
+    pick.value = String(parts[at]);
+    pick.onchange = () => {
+      const now = parts.map((_, index) =>
+        Number(host.querySelectorAll("select")[index].value));
+      if (at === 1 || at === 0) buildSeg(host, now);      // the day count moved
+    };
+    return pick;
+  }));
+}
+
+function panelParts(host) {
+  return [...host.querySelectorAll("select")].map(pick => Number(pick.value));
+}
+
+function openInitPanel() {
+  buildSeg($("#init-from-fields"), parts($("#q-init-from").value));
+  buildSeg($("#init-to-fields"), parts($("#q-init-to").value));
+  $("#init-panel").hidden = false;
+  $("#init-panel").scrollIntoView({ block: "nearest" });
+}
+
+function closeInitPanel() { $("#init-panel").hidden = true; }
 
 function renderInitQuick() {
   const days = initDays();
@@ -1054,13 +1117,18 @@ function setInitDays(count) {
     : new Date(end.getTime() - count * 86400000);
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
-  sayInit(false);
+  closeInitPanel();
+  sayInit();
   renderInitQuick();
 }
 
-/** The one thing the browser's date picker is missing: a way to say done. */
+/** The button the browser's own picker does not have. It is on the panel, where
+ * the choosing happens, and it is the only way a change is taken. */
 function applyInit() {
-  sayInit(true);
+  $("#q-init-from").value = stamp(panelParts($("#init-from-fields")));
+  $("#q-init-to").value = stamp(panelParts($("#init-to-fields")));
+  closeInitPanel();
+  sayInit();
   renderInitQuick();
   if (state.lastQuery) runQuery();
 }
@@ -1077,7 +1145,8 @@ function fillInitDefaults() {
                                   anchor.getTime() - WEEK));
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
-  sayInit(false);
+  closeInitPanel();
+  sayInit();
   renderInitQuick();
 }
 
@@ -1374,14 +1443,9 @@ $("#c-truth").addEventListener("input", applyGroundTruth);
 $("#c-truth").addEventListener("change", applyGroundTruth);
 $("#btn-query").addEventListener("click", runQuery);
 for (const id of ["#q-init-from", "#q-init-to"]) {
-  $(id).addEventListener("input", () => { sayInit(false); renderInitQuick(); });
-  // Enter is the confirm key the field does not have. Without it the only way to
-  // say "this is the time I meant" was to click some other part of the page, and
-  // nothing said whether it had taken.
-  $(id).addEventListener("keydown", event => {
-    if (event.key === "Enter") { event.preventDefault(); applyInit(); }
-  });
+  $(id).addEventListener("change", () => { sayInit(false); renderInitQuick(); });
 }
+$("#btn-init-range").addEventListener("click", openInitPanel);
 $("#btn-init-ok").addEventListener("click", applyInit);
 $("#q-config").addEventListener("change", onConfigPicked);
 $("#q-method").addEventListener("change", onMethodPicked);

@@ -775,11 +775,22 @@ def test_the_defaults_come_off_the_config_and_not_off_the_clock(page, live_serve
     assert lead_from <= lead_to and lead_to > 0, (lead_from, lead_to)
     assert page.page.text_content("#tab-results").count("minutes") >= 1, \
         "the lead boxes say what they are measured in"
-    # the init boxes are real time pickers, not free text
-    assert page.page.eval_on_selector("#q-init-from", "e => e.type") == "datetime-local"
-    assert page.page.eval_on_selector("#q-init-to", "e => e.type") == "datetime-local"
+    # The range is chosen in a panel of our own, and the panel is the only place
+    # it can be accepted. The browser's picker draws its own footer -- Today, and
+    # Clear -- and none of that can be changed, so it is not used at all.
+    assert page.page.eval_on_selector("#q-init-from", "e => e.type") == "hidden"
     assert page.page.eval_on_selector("#q-init-from", "e => e.value") != ""
     assert page.page.eval_on_selector("#q-init-to", "e => e.value") != ""
+    assert page.page.locator("#init-panel").is_hidden(), "nothing opens on its own"
+    page.page.click("#btn-init-range")
+    page.page.wait_for_timeout(300)
+    assert page.page.locator("#init-panel select").count() == 10, "five per end"
+    assert [b.strip() for b in page.page.eval_on_selector_all(
+        "#init-panel button", "e => e.map(x => x.textContent)")] == ["\u786e\u5b9a"], \
+        "one button, and it is the one the picker was missing"
+    page.page.click("#btn-init-ok")
+    page.page.wait_for_timeout(300)
+    assert page.page.locator("#init-panel").is_hidden()
     assert page.errors == []
 
 
@@ -791,7 +802,7 @@ def test_the_results_tab_says_so_when_nothing_matches(page, live_server):
     """
     page.load(live_server).tab("results")
     page.page.wait_for_timeout(700)
-    page.page.fill("#q-init-from", "2030-01-01T00:00")
+    page.page.eval_on_selector("#q-init-from", "e => { e.value = '2030-01-01T00:00'; }")
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
 

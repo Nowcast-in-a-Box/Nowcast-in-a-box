@@ -166,17 +166,23 @@
         <div id="q-params"></div>
 
         <label class="tiny muted" style="display:block; margin-top:12px">Init time</label>
-        <!-- A week is what almost every query wants, so the week is a click and not
-             a calendar. The two fields stay for the rest, and the line under them
-             is the confirmation the browser's own picker does not give: it updates
-             as you type, so nothing has to be clicked elsewhere to "take". -->
         <div class="chips" id="q-init-quick"></div>
-        <input type="datetime-local" id="q-init-from" style="margin-top:6px">
-        <input type="datetime-local" id="q-init-to" style="margin-top:6px">
-        <div class="row" style="margin-top:6px; gap:8px; align-items:center">
-          <button class="chip" type="button" id="btn-init-ok"
-                  title="用这段时间重查">确定</button>
-          <span class="tiny muted" id="q-init-said"></span>
+        <!-- The browser's own date picker cannot be changed: it draws its own
+             footer, with Today and Clear on it and no way to say done. So the
+             value lives in hidden fields and the panel is ours, with the one
+             button it was missing on it. -->
+        <input type="hidden" id="q-init-from">
+        <input type="hidden" id="q-init-to">
+        <button type="button" id="btn-init-range" class="range-button"
+                title="选择起报时间范围"></button>
+        <div id="init-panel" class="popup" hidden>
+          <div class="popup-row"><span class="tiny muted">from</span>
+            <span class="seg" id="init-from-fields"></span></div>
+          <div class="popup-row"><span class="tiny muted">to</span>
+            <span class="seg" id="init-to-fields"></span></div>
+          <div class="popup-foot">
+            <button class="chip primary" type="button" id="btn-init-ok">确定</button>
+          </div>
         </div>
 
         <div class="row" style="gap:10px; margin-top:10px; align-items:flex-end">
