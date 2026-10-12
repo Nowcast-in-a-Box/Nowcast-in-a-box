@@ -1,4 +1,4 @@
-"""NPZ mosaic reader. NumPy only; the .bin decoder stays in source.py."""
+"""NPZ mosaic reader; the .bin decoder stays in source.py."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import datetime as dt
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 NPZ_KEYS = (
     "reflectivity",
@@ -74,10 +75,13 @@ def _crop(values, latitude, longitude, requested, native_bbox, resolution):
     lat_idx = np.where((latitude >= south) & (latitude <= north))[0]
     if lon_idx.size == 0 or lat_idx.size == 0:
         raise ValueError("Requested radar region contains no grid cells")
-    return values[
-        int(lat_idx[0]) : int(lat_idx[-1]) + 1,
-        int(lon_idx[0]) : int(lon_idx[-1]) + 1,
-    ]
+    lat_slice = slice(int(lat_idx[0]), int(lat_idx[-1]) + 1)
+    lon_slice = slice(int(lon_idx[0]), int(lon_idx[-1]) + 1)
+    return (
+        values[lat_slice, lon_slice],
+        latitude[lat_slice],
+        longitude[lon_slice],
+    )
 
 
 def load_cma_npz(config: dict, variable_id: str) -> dict:
@@ -147,16 +151,48 @@ def load_cma_npz(config: dict, variable_id: str) -> dict:
             raise ValueError(
                 f"NPZ reflectivity shape {values.shape} does not match coordinates"
             )
-        cropped = _crop(values, latitude, longitude, bbox, native_bbox, resolution)
+        cropped, cropped_latitude, cropped_longitude = _crop(
+            values, latitude, longitude, bbox, native_bbox, resolution
+        )
+        output_bbox = [
+            float(cropped_longitude.min()),
+            float(cropped_latitude.min()),
+            float(cropped_longitude.max()),
+            float(cropped_latitude.max()),
+        ]
+        data_array = xr.DataArray(
+            cropped,
+            dims=("latitude", "longitude"),
+            coords={
+                "latitude": cropped_latitude,
+                "longitude": cropped_longitude,
+            },
+            name=variable_id,
+            attrs={
+                "source": "cma_radar",
+                "product": variable_id,
+                "long_name": "CMA weather radar mosaic composite reflectivity",
+                "units": "dBZ",
+                "data_time": _iso_utc(data_time),
+                "generation_time": _iso_utc(generation_time),
+                "native_resolution_deg": resolution,
+                "native_bounds": native_bbox,
+                "requested_region": bbox,
+                "output_bounds": output_bbox,
+                "crop_applied": True,
+                "source_file": source_file,
+            },
+        )
         key = _iso_utc(requested_time)
         results[key] = {
             "files": [str(path)],
-            "channels": {variable_id: cropped},
+            "channels": {variable_id: data_array},
             "metadata": {
                 "data_time": _iso_utc(data_time),
                 "generation_time": _iso_utc(generation_time),
                 "available_region": native_bbox,
                 "requested_region": bbox,
+                "output_region": output_bbox,
                 "native_resolution_deg": resolution,
                 "source_file": source_file,
             },

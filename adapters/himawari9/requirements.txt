@@ -8,3 +8,5 @@ pyproj==3.8.0
 pyresample==1.35.0
 pyspectral==0.14.3
 PyYAML==6.0.3
+zarr==2.18.7
+numcodecs==0.15.1
