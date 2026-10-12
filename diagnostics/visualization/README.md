@@ -70,6 +70,13 @@ To view the PNG and GIF together in a local HTML page:
 Open `output/example/index.html` in a browser. The library uses a headless plotting
 backend. Matplotlib/Fontconfig cache directories must be writable by the run user.
 
+## Interactive map viewer
+
+The optional React/OpenLayers viewer reads prepared numeric COG layers and WMO
+vectors. It supports world navigation, independent layer controls, playback and
+PNG view export. See [map viewer setup and commands](docs/map_viewer.md).
+The included example is CMA observation replay, not a real Forecast integration.
+
 ## Tests
 
 ```bash
