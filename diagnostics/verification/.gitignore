@@ -1,0 +1,11 @@
+# Local run state: the store, the lock, and scratch output.
+_svc/
+_tmp/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+_shot/
+_demo/
+
+# What `nib-verify demo` builds by default.
+nib-demo/
