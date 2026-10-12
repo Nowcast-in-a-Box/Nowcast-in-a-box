@@ -25,7 +25,6 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: handler
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +36,7 @@ jobs:
         run: go test ./...
 
       - name: Build native
-        run: go build -o "nib-handler$(go env GOEXE)" .
+        run: go build -o "nib-handler$(go env GOEXE)" ./handler/cmd/nib-handler
 
   cross-build:
     if: false
@@ -57,7 +56,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nib-handler
-          path: handler/dist/nib-handler-*
+          path: |
+            bin/linux/nib-handler-*
+            bin/macos/nib-handler-*
+            bin/windows/nib-handler-*
           if-no-files-found: error
 
   ci:

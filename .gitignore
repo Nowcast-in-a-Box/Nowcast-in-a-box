@@ -5,6 +5,8 @@
 .codegraph/
 .opencode/
 .claude/
+.pi/
+.vscode/
 
 __pycache__/
 *.py[cod]
@@ -19,6 +21,10 @@ tmp/
 handler/nib-handler
 handler/nib-handler.exe
 handler/dist/
+
+bin/nib-handler
+bin/nib-handler.exe
+bin/**/nib-handler-*
 
 # Downloaded weights and docker files. Keep the directory.
 artifacts/*

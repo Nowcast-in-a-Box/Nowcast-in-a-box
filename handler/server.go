@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"encoding/json"
@@ -6,22 +6,35 @@ import (
 	"strconv"
 )
 
-const version = "0.1.0"
+// Version is the handler release identifier reported on /v1/status.
+const Version = "0.1.0"
 
-type server struct {
-	cfg Config
+// Server is the loopback HTTP API.
+type Server struct {
+	Config    Config
+	Preflight []func() Check
 }
 
-func (s *server) routes() http.Handler {
+// NewServer returns a server whose preflight list starts with DockerCheck.
+func NewServer(cfg Config) *Server {
+	return &Server{
+		Config:    cfg,
+		Preflight: []func() Check{DockerCheck},
+	}
+}
+
+// Routes returns the handler mux, wrapped so non-loopback Host values are
+// rejected.
+func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
 	return s.loopbackOnly(mux)
 }
 
-func (s *server) loopbackOnly(next http.Handler) http.Handler {
+func (s *Server) loopbackOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isLoopbackRequestHost(r.Host) {
+		if !IsLoopbackRequestHost(r.Host) {
 			http.Error(w, "refusing non-loopback host", http.StatusForbidden)
 			return
 		}
@@ -29,24 +42,51 @@ func (s *server) loopbackOnly(next http.Handler) http.Handler {
 	})
 }
 
-func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	source := s.cfg.Source
+type statusResponse struct {
+	Service    string  `json:"service"`
+	Version    string  `json:"version"`
+	Host       string  `json:"host"`
+	Port       string  `json:"port"`
+	ConfigFile string  `json:"config_file"`
+	Review     Addr    `json:"review"`
+	Paths      Paths   `json:"paths"`
+	Docker     Check   `json:"docker"`
+	Preflight  []Check `json:"preflight"`
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	source := s.Config.Source
 	if source == "" {
 		source = "defaults"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"service":     "nib-handler",
-		"version":     version,
-		"host":        s.cfg.Handler.Host,
-		"port":        strconv.Itoa(s.cfg.Handler.Port),
-		"config_file": source,
-		"review":      s.cfg.Review,
-		"paths":       s.cfg.Paths,
-		"docker":      dockerCheck(),
+	checks := make([]Check, 0, len(s.Preflight))
+	for _, fn := range s.Preflight {
+		if fn == nil {
+			continue
+		}
+		checks = append(checks, fn())
+	}
+	docker := Check{}
+	for _, c := range checks {
+		if c.ID == "docker" {
+			docker = c
+			break
+		}
+	}
+	writeJSON(w, http.StatusOK, statusResponse{
+		Service:    "nib-handler",
+		Version:    Version,
+		Host:       s.Config.Handler.Host,
+		Port:       strconv.Itoa(s.Config.Handler.Port),
+		ConfigFile: source,
+		Review:     s.Config.Review,
+		Paths:      s.Config.Paths,
+		Docker:     docker,
+		Preflight:  checks,
 	})
 }
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Double-click from Finder. Same entry as run.sh.
+# Dispatches to the macOS entry under bin/.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$ROOT/scripts/run.sh" "$@"
+exec "$ROOT/bin/macos/start.command" "$@"

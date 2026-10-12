@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"fmt"
@@ -18,16 +18,21 @@ const (
 	configFileName     = "config.yaml"
 )
 
+// Addr is a loopback bind address from config.yaml.
 type Addr struct {
 	Host string `yaml:"host" json:"host"`
 	Port int    `yaml:"port" json:"port"`
 }
 
+// Paths are host filesystem locations from config.yaml.
+// Relative values resolve against the directory that contains the file.
 type Paths struct {
 	Artifacts string `yaml:"artifacts" json:"artifacts"`
 	DataRoot  string `yaml:"data_root,omitempty" json:"data_root,omitempty"`
 }
 
+// Config is the host runtime settings loaded from config.yaml.
+// Source is the file that was read; it is not a YAML field.
 type Config struct {
 	Source  string `yaml:"-" json:"-"`
 	Handler Addr   `yaml:"handler"`
@@ -35,7 +40,9 @@ type Config struct {
 	Paths   Paths  `yaml:"paths"`
 }
 
-func defaultConfig() Config {
+// DefaultConfig is used when a key is missing from config.yaml, or when
+// no config file is found.
+func DefaultConfig() Config {
 	return Config{
 		Handler: Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
 		Review:  Addr{Host: defaultReviewHost, Port: defaultReviewPort},
@@ -43,8 +50,11 @@ func defaultConfig() Config {
 	}
 }
 
-func loadConfig(explicit string) (Config, error) {
-	cfg := defaultConfig()
+// Load reads config.yaml. An empty path uses NIB_CONFIG if set, otherwise
+// walks from the working directory and the executable toward the filesystem
+// root. An explicit path that cannot be read is an error.
+func Load(explicit string) (Config, error) {
+	cfg := DefaultConfig()
 	path := explicit
 	if path == "" {
 		found, ok := findConfigFile()
@@ -75,7 +85,7 @@ func loadConfig(explicit string) (Config, error) {
 }
 
 func (c *Config) applyDefaults() {
-	d := defaultConfig()
+	d := DefaultConfig()
 	if c.Handler.Host == "" {
 		c.Handler.Host = d.Handler.Host
 	}
@@ -120,7 +130,8 @@ func resolveAgainst(baseDir, path string) string {
 	return abs
 }
 
-func applyOverrides(cfg Config, host, port string) (Config, error) {
+// ApplyOverrides applies -host and -port flag values onto cfg.
+func ApplyOverrides(cfg Config, host, port string) (Config, error) {
 	if host != "" {
 		cfg.Handler.Host = host
 	}
