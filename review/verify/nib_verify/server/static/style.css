@@ -1,0 +1,328 @@
+/* The review page. Plain CSS, no framework, no build step.
+   Everything is a handful of reusable blocks: .card, .field, .table, .notice. */
+
+:root {
+  --ink: #1c2331;
+  --muted: #67728a;
+  --line: #dce2ec;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --accent: #2a6df4;
+  --accent-soft: #eaf0fe;
+  --ok: #1a7f52;
+  --warn: #9a6700;
+  --bad: #b42318;
+  --radius: 8px;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 22px;
+  display: flex;
+  align-items: baseline;
+  gap: 22px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+header .sub { color: var(--muted); font-size: 12px; }
+
+nav { display: flex; gap: 4px; margin-left: auto; }
+
+nav button {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+nav button:hover { background: var(--bg); color: var(--ink); }
+nav button[aria-selected="true"] {
+  background: var(--accent-soft);
+  border-color: #c9d8fd;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+main { padding: 22px; max-width: 1180px; margin: 0 auto; }
+[hidden] { display: none !important; }
+
+/* The results tab: the questions down the left, the answer filling the rest.
+   The right pane scrolls on its own so the picture stays on screen while the
+   table underneath it is read -- a page that scrolls as one piece puts the
+   chart above a forty-row table and therefore off the screen entirely. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(270px, 320px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.split > .ask { position: sticky; top: 14px; }
+.split > .answer {
+  min-width: 0;             /* a grid child will not shrink below its content */
+  max-height: calc(100vh - 130px);
+  overflow: auto;
+  padding-right: 4px;
+}
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; }
+  .split > .ask { position: static; }
+  .split > .answer { max-height: none; }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+/* The wizard's action bar. Sticky, because with four sections to fill in the
+   buttons would otherwise be a scroll away from wherever you are. */
+.card.create-foot {
+  position: sticky;
+  bottom: 10px;
+  z-index: 3;
+  box-shadow: 0 -2px 12px rgba(28, 35, 49, .06);
+}
+
+.card > h2 {
+  font-size: 14px;
+  margin: 0 0 4px;
+  font-weight: 650;
+}
+.card > h2 .step {
+  display: inline-block;
+  min-width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  margin-right: 8px;
+}
+.card > p.hint { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; }
+
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.grid.tight { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field > label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.field > .note { font-size: 11.5px; color: var(--muted); }
+
+input, select, textarea, button.act {
+  font: inherit;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  min-width: 0;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+/* A derived value is shown, not asked for. It has to look that way, or the one
+   box the form refuses to accept typing into reads as a bug. */
+input[readonly] { background: var(--bg); color: var(--muted); cursor: default; }
+/* A control that has stopped applying has to say so. A mesh spends both axes on
+   time and lead, so the "along" choice is off -- and a select that still looks
+   live and quietly does nothing is worse than one that is visibly out. */
+select:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+button.act {
+  cursor: pointer;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+button.act:hover { filter: brightness(1.08); }
+button.act.ghost,
+a.act.ghost {
+  display: inline-block;
+  text-decoration: none;
+  line-height: 1.6;
+}
+
+button.act.ghost {
+  background: #fff;
+  color: var(--accent);
+  border-color: #c9d8fd;
+}
+button.act.quiet {
+  background: #fff;
+  color: var(--muted);
+  border-color: var(--line);
+  font-weight: 500;
+}
+button.act.danger { background: #fff; color: var(--bad); border-color: #f3c6c1; }
+button.act:disabled { opacity: .5; cursor: not-allowed; }
+button.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 0 4px;
+}
+button.link.danger { color: var(--bad); }
+
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row.end { justify-content: flex-end; }
+.spacer { flex: 1; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+tbody tr:hover { background: #fafbfe; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+
+.notice {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 9px 12px;
+  border-radius: 0 6px 6px 0;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.notice.warn { border-color: #e8c25a; background: #fdf7e6; }
+.notice.bad { border-color: var(--bad); background: #fdeceb; }
+.notice.ok { border-color: var(--ok); background: #e9f6ef; }
+.notice ul { margin: 6px 0 0; padding-left: 18px; }
+
+.pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.pill.ok { color: var(--ok); border-color: #bfe3d0; background: #eefaf3; }
+.pill.bad { color: var(--bad); border-color: #f3c6c1; background: #fdeceb; }
+
+pre.log {
+  background: #1c2331;
+  color: #d6e0f0;
+  padding: 12px;
+  border-radius: var(--radius);
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.empty { color: var(--muted); font-size: 13px; padding: 14px 0; text-align: center; }
+.muted { color: var(--muted); }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.tiny { font-size: 12px; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 3px 11px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: #c9d8fd;
+  color: var(--accent);
+  font-weight: 600;
+}
+/* The legend, on the page and beside the form: the swatch has to be the colour
+   of the line it names, so the server hands the colours over and this only draws
+   them. Clicked off means struck through, not just paler -- a hidden line and a
+   dim one look the same otherwise. */
+.chip.legend .dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.chip.legend[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
+
+/* A parameter is tiled rather than folded into a select: the list is short, and
+   which thresholds were asked for is the thing being read back. */
+.chip.param { border-radius: 6px; font-variant-numeric: tabular-nums; }
+.param-row { display: flex; gap: 8px; align-items: baseline; margin-top: 6px; }
+.param-row > .who { font-size: 11.5px; color: var(--muted); min-width: 74px; }
+
+.groupbox {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.groupbox .head { display: flex; align-items: baseline; gap: 8px; }
+.groupbox .head strong { font-size: 13px; }
+
+.scroll { overflow-x: auto; }
+
+/* A caption for a table that is not inside a card — the plan preview is not a
+   card, it is an answer, and it arrives in two halves. */
+.plan-title {
+  margin: 16px 0 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* The time range: a button that says the range, and our own panel under it. The
+   browser's picker draws its own footer with Today and Clear on it and no way to
+   say done, and none of that can be changed -- so the panel is ours. */
+.range-button {
+  display: block; width: 100%; margin-top: 6px; padding: 6px 9px;
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  color: #22303c; background: #fff;
+  border: 1px solid #c6d6e6; border-radius: 6px;
+}
+.range-button:hover { border-color: #2e75b6; }
+.popup {
+  margin-top: 6px; padding: 9px 10px 8px;
+  background: #f7fafd; border: 1px solid #c6d6e6; border-radius: 8px;
+}
+.popup-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+.popup-row > .muted { flex: 0 0 28px; }
+.seg { display: flex; gap: 3px; }
+.seg-part {
+  font: inherit; font-size: 12px; padding: 3px 1px;
+  color: #22303c; background: #fff;
+  border: 1px solid #c6d6e6; border-radius: 5px;
+}
+.popup-foot { display: flex; justify-content: flex-end; padding-top: 2px; }
