@@ -21,7 +21,7 @@ Follow the step-by-step guidance down below:
 3. Go to the Release page and download the latest version of NiB
    - [Releases](https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/releases)
 4. Start the handler
-   - You only need to start the handler once; next time, NiB Hub will start it automatically.
+   - Start the local handler before connecting from NiB Hub. Automatic activation is not implemented yet.
    - Depending on your operating system, choose the right one.
    - For more details, check [here](#Run the handler)
 5. Open the NiB Hub, enjoy!
@@ -36,21 +36,15 @@ Follow the step-by-step guidance down below:
 bin/windows/run.ps1
 ```
 
-
-
 ### Linux
 
 ```sh
 bin/linux/run.sh
 ```
 
-
-
 ### macOS
 
-Double-click `bin/macos/start.command` in Finder, or run it from a terminal.
-The entry points use a prebuilt handler; users do not install Go.
-The scripts under `scripts/` forward to these entries.
+On macOS, double-click `bin/macos/start.command` in Finder, or run it from a terminal.
 
 
 

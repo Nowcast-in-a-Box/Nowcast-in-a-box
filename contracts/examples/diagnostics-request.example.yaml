@@ -1,0 +1,27 @@
+# Diagnostics 请求。不是 run YAML，也不是 evaluation.example.yaml。
+# 路径相对本文件，或写绝对路径。必须已经存在。
+# handler 启动前会把路径改写成容器内的 /run/inputs/...。
+
+observation: observation/future.zarr
+
+forecasts:
+  - id: wadepre
+    path: models/wadepre/forecast.zarr
+  - id: nowcastnet
+    path: models/nowcastnet/forecast.zarr
+
+metrics:
+  # 连续类：不吃阈值。
+  - family: continuous
+    items: [mae, rmse]
+
+  # 二分类：要一个等级。同一族可以再写一条，用另一套 levels。
+  - family: yes_or_no
+    items: [csi]
+    levels: [35]
+
+  # 空间类：等级和半窗口都要有。
+  - family: spatial
+    items: [fss]
+    levels: [35]
+    half_windows: [2, 4]

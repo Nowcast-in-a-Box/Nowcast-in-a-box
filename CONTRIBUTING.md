@@ -1,8 +1,9 @@
 # Contributing
 
 This repository is the Nowcast-in-a-Box local runtime. The host program
-is the handler. Model code runs in Docker. Evaluation and visualization
-run on the host from `review/`.
+is the handler. Model code runs in Docker. Metrics and visualization
+belong in the diagnostics container. The existing handler CLI stages its
+invocation; the computation entry point and HTTP integration are still pending.
 
 Read this before you write code. Maintainers: [GitHub setup][gh].
 
@@ -100,10 +101,16 @@ that title too.
 
 
 
+## Python formatting
+
+Format Python with Black before a pull request. The config is
+`black.toml`. Run `scripts/format-python.sh`. Do not add a root
+`pyproject.toml` to hold that config.
+
 ## What not to commit
 
 Weights, checkpoints, ONNX, HDF5, run PNGs, PDF, Word, Visio, `workspace/`,
-contents of `artifacts/`, secrets, `.env`, a root `pyproject.toml` /
+`runs/`, contents of `artifacts/`, secrets, `.env`, a root `pyproject.toml` /
 `uv.lock`. See [weights.md][weights].
 
 

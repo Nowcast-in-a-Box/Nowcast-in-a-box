@@ -1,0 +1,93 @@
+{
+  "source_id": "ocha-global-ab-stylized-un-geodata-simplified",
+  "kind": "arcgis-hosted-feature-service",
+  "title": "Global_AB_stylized_fs_imagery",
+  "publisher": "UN OCHA Field Information Services Section (FISS), hosted at gis.unocha.org",
+  "lineage": "Publisher item metadata: 'based on United Nations Geospatial WORLD STYLIZED Datasets (UN Geodata Simplified)'; credits 'UN Geospatial, OCHA FISS'; prepared in the context of the UN Administrative Instruction on the 'Guidelines for the Publication of Maps'",
+  "service_url": "https://gis.unocha.org/server/rest/services/Hosted/Global_AB_stylized_fs_imagery/FeatureServer",
+  "item_info_url": "https://gis.unocha.org/server/rest/services/Hosted/Global_AB_stylized_fs_imagery/FeatureServer/info/iteminfo?f=json",
+  "service_item_id": "a14849e4729b48f3a4c992228d40c2a9",
+  "verified_at": "2026-09-22",
+  "coverage": {
+    "claim": "global",
+    "evidence": "gbl_* (global) layers; service fullExtent spans the full Web Mercator world; publisher snippet describes world-size geoinfographics and global reference data"
+  },
+  "crs": {
+    "native": "EPSG:3857 (service wkid 102100)",
+    "export": "EPSG:4326 via ArcGIS REST outSR=4326, verified with f=geojson"
+  },
+  "scale_note": "Publisher states: 'The scale is unspecific for the United Nations Geodata simplified and is suitable for generalized world maps and web-maps'; the 1:25M tag on the lakes layer is a publisher scale hint, not a dataset-wide certification. Boundary geometry is intentionally generalized.",
+  "attribution": "Boundaries: UN Geospatial, OCHA FISS (Global_AB_stylized_fs_imagery, UN Geodata Simplified)",
+  "disclaimer": "The publisher dataset is a simplified/generalized world reference, not an official UN map product for boundary delimitation. Any map produced from it must not be presented as an official UN map. UN map use/credit guidance applies.",
+  "license_state": {
+    "publisher_license_info": "empty in item metadata (licenseInfo field)",
+    "un_map_permissions_reviewed": "https://www.un.org/geospatial/es/node/741 (use/credit/derived-map guidance; not an automatic geodata redistribution licence)",
+    "local_use": "Downloaded copy kept in gitignored local cache for offline development rendering within this project",
+    "redistribution": "unresolved - do not redistribute data files or claim production clearance"
+  },
+  "export_method": {
+    "protocol": "ArcGIS REST query, f=geojson, outSR=4326, where=1=1, outFields=*, ordered by objectid_1 with resultOffset pagination",
+    "capabilities_observed": "Query,Sync,Extract; maxRecordCount=2000; geojson export verified despite supportedQueryFormats listing JSON only",
+    "completeness_rule": "per-layer official count (returnCountOnly) must equal collected unique feature count; pagination continues until short page"
+  },
+  "layers": {
+    "country_land": {
+      "service_layer_id": 107,
+      "service_layer_name": "gbl_Country polygons_stylized",
+      "geometry_type": "Polygon/MultiPolygon",
+      "gpkg_layer": "country_land",
+      "role": "neutral_land_background",
+      "official_count_at_verification": 246,
+      "note": "Neutral land fill only; no labels or thematic country colors. Added after visual review showed line-only regional crops lacked a clear land/ocean cue."
+    },
+    "boundary_lines": {
+      "service_layer_id": 105,
+      "service_layer_name": "gbl_Administrative boundary lines_stylized",
+      "geometry_type": "LineString",
+      "gpkg_layer": "boundary_lines",
+      "type_field": "bdytyp",
+      "type_mapping": {
+        "0": "coastline",
+        "1": "international_boundary",
+        "2": "special_boundary_line",
+        "3": "armistice_or_international_administrative_line",
+        "4": "other_line_of_separation",
+        "8": "autonomous_region_boundary",
+        "9": "sovereign_base_limit",
+        "99": "other"
+      },
+      "type_mapping_source": "layer 105 renderer classes + iteminfo layer description (BDYTYP field codes), fetched 2026-09-22",
+      "required_types": ["coastline", "international_boundary"],
+      "official_count_at_verification": 743
+    },
+    "lakes": {
+      "service_layer_id": 104,
+      "service_layer_name": "gbl_Lakes_25M_stylized",
+      "geometry_type": "Polygon",
+      "gpkg_layer": "lakes",
+      "optional": true,
+      "official_count_at_verification": 1,
+      "note": "publisher lake layer currently contains only the Caspian Sea; included as the optional light water layer, no coverage claim beyond that"
+    }
+  },
+  "layers_deliberately_excluded": {
+    "region_layers": "service layers 103, 106, 108, 109, 110 (populated places, SDGA/intermediary/geographic regions) - outside MVP basemap scope",
+    "admin_level_1": "not requested (A-15 excludes admin-1 from MVP)"
+  },
+  "verification_log": {
+    "service_metadata_fetched": "2026-09-22, FeatureServer?f=pjson",
+    "item_info_fetched": "2026-09-22, FeatureServer/info/iteminfo?f=json",
+    "layer_metadata_fetched": "2026-09-22, FeatureServer/{105,104}?f=pjson",
+    "counts_observed": {
+      "layer_105_total": 743,
+      "layer_105_bdytyp_0_coastline": 332,
+      "layer_105_bdytyp_1_international": 397,
+      "layer_105_bdytyp_3_armistice": 13,
+      "layer_105_bdytyp_4_other_separation": 1,
+      "layer_104_lakes": 1,
+      "layer_107_country_land": 246
+    },
+    "full_export_probe": "single-page geojson export of layer 105 returned 743/743 unique objectid_1 values on 2026-09-22",
+    "agol_item_note": "serviceItemId a14849e4729b48f3a4c992228d40c2a9 is not publicly readable on www.arcgis.com sharing; the service's own info/iteminfo is the canonical item metadata record"
+  }
+}
