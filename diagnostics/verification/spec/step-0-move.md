@@ -1,5 +1,23 @@
 # 第 0 步：切分支，搬到 `diagnostics/verification/`
 
+> **已完成 2026-10-12。** 分支 `feat/diagnostics-verification`，基线 `origin/main`。
+>
+> | 提交 | 内容 |
+> |---|---|
+> | `18a2d41` | 合我们 93 个提交 —— **零冲突** |
+> | `e062403` | 纯搬家 —— **80 files changed, 0 insertions(+), 0 deletions(-)** |
+> | `bf65b29` | 两处文档里的旧路径（4 行） |
+>
+> **验收：699 例跑到 100%，0 个 FAILED，`EXIT=0`。**
+> `review/` 只剩上游的 `.gitkeep`。
+>
+> 管理员定调：**基线 `main`、PR 提给 `main`、不与 `feat/diagnostics` 合并。**
+> 所以下面的 §0.0 / §0.1 都已作废，保留供参考。
+
+---
+
+## 当时写的计划（保留全过程）
+
 > 计划，**还没执行**。执行时照这个顺序做，每步都要能看到结果。
 > 前置阅读：`spec/upstream-alignment.md`
 
