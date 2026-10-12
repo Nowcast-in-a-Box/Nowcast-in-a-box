@@ -22,7 +22,40 @@
 
 ---
 
-## 0.1 先把 main 合进来
+## 0.0 前置：等管理员更新 `feat/diagnostics`
+
+**已请人更新（2026-10-10）。** 如果他们把 `main` 合进去了，下面 §0.1 的合并就不需要做了。
+
+### 要问的四条
+
+1. **把 main 合进 `feat/diagnostics`** —— 分支上现在没有 `interfaces/` / `adapters/` / `utils/`
+   （从 `c0d622b` 分出去，漏了 `d252802`，只落后 1 个提交）。我们不 `import interfaces.data` 就写不下去。
+   合并或 rebase 都可以 —— **我们还没基于它开分支**。
+2. **存储粒度**：`diagnostics/README.md` 写的是每次调用一个库（`/run/products/diagnostics.sqlite`）；
+   我们是一个工作区一个库、按配置分区。最终以哪个为准？
+3. `contracts/README.md` 说 diagnostics request「**不是** evaluation draft」—— 两者什么关系？
+4. **`diagnostics` 入口**（`python -m diagnostics --config /run/request.yaml`）写着「暂未实现」——
+   **是不是可以由我们来填？**
+
+### 基线选谁，决定了 PR 提给谁 —— 这是硬约束
+
+| 基线 | PR 目标 | 结果 |
+|---|---|---|
+| `main` | `main` | ✅ 干净、独立、不依赖他们什么时候完成 |
+| `feat/diagnostics`（已含 main） | `feat/diagnostics` | ✅ 干净，但挂在别人未合并的分支上 |
+| `main` | `feat/diagnostics` | ❌ **diff 被污染** —— 那个分支少的 76 个文件会显示成"我们新增的" |
+| `feat/diagnostics`（未含 main） | 任意 | ❌ 没有 `interfaces/`，写不出第 ① 步 |
+
+**所以：要么等他们更新完、以它为基线、PR 也提给它；要么现在就换 `main` 为基线、PR 提给 `main`（两边路径不同，不冲突）。**
+
+### 顺带：`black.toml`
+
+上游用 **black** 格式化。我们的代码不一定符合 ——
+**提 PR 之前要跑一次**，否则 review 里全是纯格式 diff。
+
+---
+
+## 0.1 把 main 合进来（**若 §0.0 已由管理员完成，本步跳过**）
 
 ```bash
 cd D:/mins_root_workspace/nowcast-zhou/Nowcast-in-a-Box
