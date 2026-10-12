@@ -75,13 +75,16 @@ metadata={
 
 SEVIR 的 `targets` 是**未来的实况**。**`target` + `target_lead_minutes` 就是我们的「实时效排列的真值序列」** —— 拿到它就能算 TS/bias/FSS。这是接入点。
 
-### 2. `units = "raw"` 会和我们的硬校验相撞
+### 2. `units = "raw"` —— **已定：算一个单位，不做特殊处理**
 
 ```python
 VARIABLE_UNITS = "raw"      # SEVIR VIL 还原成 [0, 255]
 ```
 
-我们的模块在单位不一致时**拒绝**。**要问上游**：`"raw"` 是权宜还是正式？还是我们放宽成"同一数据源内部一致即可"？
+本模块的单位一律**按字符串精确比较**，`"raw"` 就是普通字符串。
+**不加白名单、不加特例、不归一化** —— 为某个字符串开口子就等于废掉「单位不一致就拒绝」这条不变量。
+后果是对的：SEVIR 的 VIL 只能和同样声明 `"raw"` 的真值相比。
+**真有实际问题，是上游改声明，不是我们在下面接住。**
 
 ### 3. adapter 不做重采样，缺数据是异常
 
@@ -127,18 +130,32 @@ python -m diagnostics --config /run/request.yaml
 
 **第 4 步**：填 `contracts/examples/diagnostics-request.example.yaml`（上游引用了但没写）
 
-## 六、还没定的（不该我拍）
+## 六、已定的 / 还没定的
 
-1. **放 `review/`（主机）还是 `diagnostics/`（容器）？** 上游两份文档互相矛盾：
-   `AGENTS.md` + `docs/modules.yaml` 说 `review/`；`diagnostics/README.md` 说都在容器里。
-   用户已定：**选 `feat/diagnostics`，放 `diagnostics/` 下。**
-2. **存储粒度**：一工作区一库（我们现在）还是一调用一库（上游写的 `/run/products/diagnostics.sqlite`）？
-   三个选项：① 只有 per-run ② per-run + 工作区汇总（建议）③ 只有工作区库。
-3. **`units = "raw"`** 怎么处理（见三.2）。
-4. **`"不是 evaluation draft"`**：`contracts/README.md` 明说 diagnostics request 与评估草案不是一回事，
-   关系要问清。
-5. **`docs/modules.yaml` 里 D1 还是 `status: planned`、`owner: null`**；
-   而 `nib-architecture/modules.yaml` 里是 `exists`。两处不一致，认领正好补上。
+### 已定（2026-10-10）
+
+**1. 放在 `diagnostics/`（容器），不走 `review/`。**
+上游两份文档互相矛盾：`AGENTS.md` + `docs/modules.yaml` 说 `review/`（主机）；
+`diagnostics/README.md` 说可视化和指标计算都在容器里。**选定后者**，即
+切到 `feat/diagnostics` 分支，代码放 `diagnostics/verification/`，和 `diagnostics/visualization/` 并列。
+
+**2. `units = "raw"` 算一个单位，我们不做特殊处理。**
+单位一律按字符串精确比较，`"raw"` 就是普通字符串。
+**不加白名单、不加特例、不做归一化。**
+理由：单位不一致就拒绝是本模块的核心不变量，为某一个字符串开口子就把它废了。
+**如果 `"raw"` 造成实际问题，那是上游该改声明，不是我们在下面接住。**
+相应地：SEVIR 的 VIL 只能和声明 `"raw"` 的真值相比，和声明 `dBZ` 的真值比不了 —— 这是对的。
+
+### 还没定（不该我拍）
+
+**3. 存储粒度**：一工作区一库（我们现在）还是一调用一库（上游写的 `/run/products/diagnostics.sqlite`）？
+三个选项：① 只有 per-run ② per-run + 工作区汇总（建议）③ 只有工作区库。
+
+**4. `contracts/README.md` 明说 diagnostics request「不是 evaluation draft」** ——
+两者的关系要问清。
+
+**5. `docs/modules.yaml` 里 D1 还是 `status: planned`、`owner: null`**；
+而 `nib-architecture/modules.yaml` 里是 `exists`。两处不一致，认领正好补上。
 
 ## 七、可以直接跑的
 
