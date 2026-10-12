@@ -11,6 +11,13 @@ built, in three layers:
   two halves of talking to a service. ``mockfeed`` wraps *any* provider, so it is
   both our test double and the reference the platform can copy.
 
+What we ask the platform to provide is written out in
+``spec/data-access-we-ask-for.md``: the same five methods, why the batch loader
+underneath them should stay, and the one performance requirement that is easy to
+get backwards -- one read per (source, init time), cached inside the
+implementation rather than demanded of the caller. :mod:`~nib_verify.access.probe`
+counts the reads, so that requirement can be checked instead of promised.
+
 Alongside: :mod:`~nib_verify.access.synthetic` and
 :mod:`~nib_verify.access.replay` are in-process providers, for when a socket is
 not worth the trouble; :mod:`~nib_verify.access.probe` counts reads;
