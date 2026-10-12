@@ -6,14 +6,7 @@ Closes #
 
 ## How to verify
 
-CI cross-compiles Linux, macOS, and Windows binaries and uploads the
-`nib-handler` artifact. Users do not build locally.
-
-Handler contributors, optional:
-
-```sh
-cd handler && go test ./...
-```
+CI and release workflows are parked. Describe how you checked the change.
 
 ## Checklist
 

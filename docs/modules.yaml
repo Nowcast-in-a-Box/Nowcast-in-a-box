@@ -15,7 +15,7 @@ modules:
     role: platform
     name: Handler
     purpose: Host daemon on Linux, macOS, and Windows. Users download and run this. No Python on the host.
-    paths: [handler/]
+    paths: [handler/, tests/handler/, bin/]
     do:
       - Loopback HTTP, Docker preflight, job lifecycle.
       - URI scheme from the Hub (nib://) in a later slice.

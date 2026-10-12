@@ -33,24 +33,24 @@ Follow the step-by-step guidance down below:
 ### Windows
 
 ```powershell
-scripts/run.ps1
+bin/windows/run.ps1
 ```
 
 
 
-## Linux
+### Linux
 
 ```sh
-scripts/run.sh
+bin/linux/run.sh
 ```
 
-The script is compatible with macOS.
 
 
+### macOS
 
-### MacOS
-
-On macOS, we recommend using `start.command` in Finder.
+Double-click `bin/macos/start.command` in Finder, or run it from a terminal.
+The entry points use a prebuilt handler; users do not install Go.
+The scripts under `scripts/` forward to these entries.
 
 
 

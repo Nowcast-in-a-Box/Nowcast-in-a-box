@@ -17,7 +17,9 @@ planning map in `docs/modules.yaml`, not git ids.
 ## Layout
 
 ```text
-handler/          host daemon (Go). This is what users run.
+handler/          host daemon source (Go); cmd/nib-handler is the entry
+tests/handler/    handler tests
+bin/              prebuilt binaries and OS entry points
 review/           evaluation + visualization web UI, started on the host
 artifacts/        downloaded weights and docker config (not committed)
 contracts/        YAML/manifest schemas. Not a Python package.
@@ -33,21 +35,24 @@ designed.
 
 ## Commands
 
-Users run a CI-built binary. They do not install Go.
+Users run a prebuilt binary. They do not install Go. CI and release
+workflows remain parked.
 
 ```sh
-scripts/run.sh          # Linux / macOS; Finder: scripts/start.command
-scripts/run.ps1         # Windows
+bin/linux/run.sh           # Linux
+bin/macos/start.command    # macOS (Finder or terminal)
+bin/windows/run.ps1        # Windows
 ```
 
-The script uses `handler/dist/nib-handler-<os>-<arch>`, or fetches it
+The wrappers in `scripts/` forward to these entries. Each uses
+`bin/<os>/nib-handler-<goos>-<arch>`, or fetches the matching asset
 from the latest GitHub Release. Host and port come from `config.yaml`.
 
 Handler source only (contributors with Go 1.22+):
 
 ```sh
-cd handler && go test ./...
-cd handler && go build -o "nib-handler$(go env GOEXE)" .
+go test ./...
+go build -o "bin/nib-handler$(go env GOEXE)" ./handler/cmd/nib-handler
 scripts/cross-build.sh
 ```
 
@@ -101,7 +106,7 @@ Never:
 
 ## Style
 
-Handler: Go 1.22, stdlib plus `gopkg.in/yaml.v3`, tests in `handler/`.
+Handler: Go 1.22, stdlib plus `gopkg.in/yaml.v3`, tests in `tests/handler/`.
 Use `filepath` and `os.PathSeparator` for host paths; do not assume `/`.
 Container modules follow their own image. File an issue and get it
 assigned before you write code.
