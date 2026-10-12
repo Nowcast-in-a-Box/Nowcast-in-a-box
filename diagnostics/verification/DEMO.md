@@ -1,6 +1,6 @@
 # 演示脚本：一条命令，从"还没有平台"到一张图
 
-给项目组的演示。全部内容都在 `review/verify/` 里，不依赖平台、不依赖真实数据、
+给项目组的演示。全部内容都在 `diagnostics/verification/` 里，不依赖平台、不依赖真实数据、
 不依赖网络。**唯一虚构的是"平台那一侧"**，而且虚构得明明白白——不是藏起来装作
 真的。
 
@@ -20,7 +20,7 @@
 ## 第 1 步 · 一条命令（10 秒）
 
 ```bash
-cd review/verify
+cd diagnostics/verification
 python -m nib_verify demo --open
 ```
 

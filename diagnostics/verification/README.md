@@ -1,4 +1,4 @@
-# review/verify — the verification module (D1)
+# diagnostics/verification — the verification module (D1)
 
 Metrics from stored prediction and truth, computed so that changing a threshold
 is a query rather than a recomputation.
@@ -11,7 +11,7 @@ as an RFC; this directory is the implementation that follows it.
 ## Quick start
 
 ```bash
-cd review/verify
+cd diagnostics/verification
 pip install -e '.[dev,web]'         # .[dev] alone runs everything but the page
 python -m pytest                   # 694 tests, no GPU, no network, no data
 ```
