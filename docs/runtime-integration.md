@@ -1,0 +1,82 @@
+# SEVIR local runtime integration (#14)
+
+The runtime uses stored-run contract `nib.run.v1`, defined in the pinned atlas
+revision. Users run a prebuilt Go handler; Python stays in Docker. The Hub is a
+remote provisioning site, and its browser talks directly to the user's loopback
+handler. The Hub server never proxies the user's localhost.
+
+## Prepare resources
+
+Initialize the atlas submodule and build images from the repository root:
+
+```sh
+git submodule update --init --recursive
+docker build -f ingestion/Dockerfile -t nib-ingestion:dev .
+docker build -f containers/models/Dockerfile --build-arg MODEL=wadepre -t nib-wadepre:dev .
+docker build -f containers/models/Dockerfile --build-arg MODEL=nowcastnet -t nib-nowcastnet:dev .
+docker build -f containers/models/Dockerfile --build-arg MODEL=exprecast -t nib-exprecast:dev .
+docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .
+```
+
+The local data root must contain the configured processed SEVIR file and CATALOG;
+no path is invented when it is missing. Weights stay under `artifacts/sevir/...`
+and are checked against the model declarations' SHA256 before offline inference.
+The initial reader requires six context and twenty target 128x128 frames. It
+rejects event/time ambiguity and events with missing pixels that the processed
+file can no longer mask reliably. Sample listings show this limitation.
+
+Maps require an explicitly prepared WMO cache under `artifacts/basemap/wmo`.
+Acquire it before execution with the existing visualization acquisition script;
+runtime containers never download basemaps or weights. Metrics-only jobs do not
+need a basemap. Scientific VIL units are `raw`; they are not dBZ or rain rate.
+
+## Connection and execution
+
+`config.yaml` controls loopback addresses, paths, images, optional Docker context
+and explicitly allowed Hub origins. The handler prints a local connection token;
+enter it in Hub's Local runs page. The token remains in browser memory. Browsers
+may also require local-network permission for an HTTPS site to access loopback.
+A successful CORS preflight is not evidence that permission was granted.
+
+Choose an explicit SEVIR event/window, then models and optional evaluation or
+visualization in the existing Hub catalog/Checkout. Run locally from the frozen
+order page: the browser uploads the actual ZIP and package checksum. The handler
+checks bounded ZIP entries, paths, checksums, supported product versions and
+frozen data/model/diagnostic bindings. Template bytes are never executed.
+
+The handler writes controlled Compose definitions. Each stage is offline, has a
+read-only root, tmpfs `/tmp`, read-only input/weight mounts, and runs as the host
+UID on Unix. Algorithms have distinct images. All data and generated outputs
+remain in configured `runs/<unique-id>/`; no outputs live in Hub or atlas.
+
+Execution is serialized in this first integration. Jobs record queued/running/
+succeeded/failed/partial states with a stage, request identity and logs. A repeated
+idempotency key returns the same run, including after restart. A new explicit
+submission creates a new run. Restarted unfinished jobs are marked interrupted,
+not silently resumed. Successful Forecasts survive diagnostic failure.
+
+## Results
+
+The manifest records explicit sample identity, context start, init time, valid
+times and actual leads, plus field paths/digests/grid/units/masks. Forecast init is
+the last context frame; targets are +5 through +100 minutes. The storage reader
+loads each verified cube once for all requested leads.
+
+Verification compares the matching native LAEA grid without display resampling.
+Geographic default behavior stays compatible; projected regridding or different
+CRSs are refused. Each diagnostic attempt has a fresh ID and retains its config,
+provenance, SQLite or rendering manifest, summary, logs and webpage. Adding a new
+threshold supplements quantities from stored Forecasts; it never invokes ONNX.
+Existing threshold queries use SQLite only.
+
+Go exposes registered HTML/SVG/PNG/GIF result files on loopback, with containment
+checks and a restrictive content policy. Runs is an independent Hub destination,
+not merely a link from an order. Its diagnostic retry starts a new attempt from
+saved Forecasts, never overwrites previous report output and never reruns models.
+
+## Validation status
+
+This feature is still in integration. See the actual verification record and PR
+for completed container/browser checks; library tests or successful image builds
+alone do not prove a real inference run. Public HTTPS Hub deployment, other host
+platform execution and unavailable input cases must be reported separately.

@@ -49,6 +49,7 @@ class Ruler:
     time_step_minutes: int
     extent: tuple[float, float, float, float]
     resolution: float
+    crs: str = "EPSG:4326"
 
     def __post_init__(self) -> None:
         if self.time_step_minutes <= 0:
@@ -66,16 +67,16 @@ class Ruler:
     @property
     def fingerprint(self) -> str:
         """Stable hash of the immutable fields only."""
-        payload = json.dumps(
-            {
-                "ground_truth": self.ground_truth,
-                "unit": self.unit,
-                "time_step_minutes": self.time_step_minutes,
-                "extent": list(self.extent),
-                "resolution": self.resolution,
-            },
-            sort_keys=True,
-        )
+        payload_fields = {
+            "ground_truth": self.ground_truth,
+            "unit": self.unit,
+            "time_step_minutes": self.time_step_minutes,
+            "extent": list(self.extent),
+            "resolution": self.resolution,
+        }
+        if self.crs != "EPSG:4326":
+            payload_fields["crs"] = self.crs
+        payload = json.dumps(payload_fields, sort_keys=True)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -143,7 +144,6 @@ class MetricGroup:
                 raise ConfigError(f"metric {item!r} needs at least one half_window")
         if any(h < 0 for h in self.half_windows):
             raise ConfigError("half_windows must be >= 0")
-
 
 
 @dataclass(frozen=True)
@@ -250,6 +250,7 @@ class VerificationConfig:
                 "extent": list(self.ruler.extent),
                 "resolution": self.ruler.resolution,
                 "fingerprint": self.ruler.fingerprint,
+                **({"crs": self.ruler.crs} if self.ruler.crs != "EPSG:4326" else {}),
             },
             "members": [
                 {
@@ -282,8 +283,10 @@ class VerificationConfig:
             raise ConfigError("group must be a mapping")
         ruler_in = data.get("ruler")
         if not isinstance(ruler_in, Mapping):
-            raise ConfigError("ruler is required (ground_truth, unit, "
-                              "time_step_minutes, extent, resolution)")
+            raise ConfigError(
+                "ruler is required (ground_truth, unit, "
+                "time_step_minutes, extent, resolution)"
+            )
         try:
             ruler = Ruler(
                 ground_truth=str(ruler_in["ground_truth"]),
@@ -291,6 +294,7 @@ class VerificationConfig:
                 time_step_minutes=int(ruler_in["time_step_minutes"]),
                 extent=tuple(float(x) for x in ruler_in["extent"]),
                 resolution=float(ruler_in["resolution"]),
+                crs=str(ruler_in.get("crs", "EPSG:4326")),
             )
         except KeyError as exc:
             raise ConfigError(f"ruler is missing {exc.args[0]!r}") from None
@@ -407,7 +411,9 @@ def _parse_date(value: Any) -> date | None:
     return date.fromisoformat(str(value))
 
 
-def _dropped_metrics(before: "VerificationConfig", after: "VerificationConfig") -> set[str]:
+def _dropped_metrics(
+    before: "VerificationConfig", after: "VerificationConfig"
+) -> set[str]:
     """Metrics present in ``before`` but gone in ``after``."""
     had = {item for g in before.metrics for item in g.items}
     have = {item for g in after.metrics for item in g.items}
@@ -437,6 +443,7 @@ def dump(cfg: VerificationConfig, path: str | "Path") -> None:  # noqa: F821
     text = cfg.to_json()
     try:
         import yaml  # type: ignore
+
         if p.suffix.lower() in (".yaml", ".yml"):
             text = yaml.safe_dump(cfg.to_dict(), sort_keys=False, allow_unicode=True)
     except ModuleNotFoundError:

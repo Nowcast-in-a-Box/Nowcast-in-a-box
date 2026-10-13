@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..access.base import Coords, Field
+from ..access.base import Coords, Field, ProjectedCoords
 
 
 def target_coords(
-    extent: tuple[float, float, float, float], resolution: float
-) -> Coords:
+    extent: tuple[float, float, float, float], resolution: float, crs: str = "EPSG:4326"
+) -> Coords | ProjectedCoords:
     """Regular grid over ``(lon0, lat0, lon1, lat1)`` at ``resolution``."""
     lon0, lat0, lon1, lat1 = extent
     if resolution <= 0:
@@ -31,6 +31,8 @@ def target_coords(
         raise ValueError("extent must be (lon0, lat0, lon1, lat1) with lon1 >= lon0")
     lon = _axis(lon0, lon1, resolution)
     lat = _axis(lat0, lat1, resolution)
+    if crs != "EPSG:4326":
+        return ProjectedCoords(x=lon, y=lat, crs=crs)
     return Coords(lon=lon, lat=lat)
 
 
@@ -50,12 +52,14 @@ def grid_shape(
 
 def regrid(field: Field, target: Coords) -> Field:
     """Resample ``field`` onto ``target``, bilinearly, conservative on missing."""
-    src_lon = field.coords.lon
-    src_lat = field.coords.lat
+    if field.coords.crs != target.crs:
+        raise ValueError("cross-CRS verification regridding is not supported")
+    src_lon = field.coords.x
+    src_lat = field.coords.y
 
     # identical grid: copy straight through, no interpolation artefacts
-    if src_lon.shape == target.lon.shape and src_lat.shape == target.lat.shape:
-        if np.array_equal(src_lon, target.lon) and np.array_equal(src_lat, target.lat):
+    if src_lon.shape == target.x.shape and src_lat.shape == target.y.shape:
+        if np.array_equal(src_lon, target.x) and np.array_equal(src_lat, target.y):
             return Field(
                 data=field.data.copy(),
                 coords=target,
@@ -66,12 +70,14 @@ def regrid(field: Field, target: Coords) -> Field:
                 mask=None if field.mask is None else field.mask.copy(),
             )
 
+    if field.coords.crs != "EPSG:4326":
+        raise ValueError("projected verification requires identical native grids")
     values = field.values()  # missing -> NaN
-    tmp = _interp_1d(src_lon, target.lon, values, axis=1)
-    out = _interp_1d(src_lat, target.lat, tmp, axis=0)
+    tmp = _interp_1d(src_lon, target.x, values, axis=1)
+    out = _interp_1d(src_lat, target.y, tmp, axis=0)
 
-    _, lon_ok = nearest_index(src_lon, target.lon)
-    _, lat_ok = nearest_index(src_lat, target.lat)
+    _, lon_ok = nearest_index(src_lon, target.x)
+    _, lat_ok = nearest_index(src_lat, target.y)
     outside = ~(lat_ok[:, None] & lon_ok[None, :])
 
     mask = outside | np.isnan(out)
@@ -130,6 +136,8 @@ def align_pair(
             "truth and prediction are at different valid times: "
             f"{truth.valid_time.isoformat()} vs {prediction.valid_time.isoformat()}"
         )
+    if truth.variable != prediction.variable:
+        raise ValueError("variable mismatch between observation and prediction")
     if truth.unit != prediction.unit:
         raise ValueError(
             f"unit mismatch: truth is {truth.unit!r}, prediction is "

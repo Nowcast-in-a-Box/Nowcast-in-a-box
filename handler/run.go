@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 const exitUsage = 2
@@ -62,8 +63,22 @@ func Main(args []string) int {
 	if source == "" {
 		source = "defaults"
 	}
-	fmt.Fprintf(os.Stderr, "nib-handler %s on http://%s (config %s)\n", Version, addr, source)
-	if err := http.ListenAndServe(addr, srv.Routes()); err != nil {
+	reviewAddress := net.JoinHostPort(srv.Config.Review.Host, strconv.Itoa(srv.Config.Review.Port))
+	review, err := net.Listen("tcp", reviewAddress)
+	if err != nil {
+		log.Print(err)
+		return 1
+	}
+	defer review.Close()
+	go func() {
+		if err := http.Serve(review, srv.ReviewRoutes()); err != nil {
+			log.Print(err)
+		}
+	}()
+	fmt.Fprintf(os.Stderr, "Local connection token: %s\n", srv.Token)
+	fmt.Fprintf(os.Stderr, "nib-handler %s on http://%s (config %s); results http://%s\n", Version, addr, source, reviewAddress)
+	server := &http.Server{Addr: addr, Handler: srv.Routes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
+	if err := server.ListenAndServe(); err != nil {
 		log.Print(err)
 		return 1
 	}

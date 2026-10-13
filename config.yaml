@@ -6,7 +6,7 @@ handler:
   host: 127.0.0.1
   port: 8765
 
-# Reserved loopback address for a later review page. This process does not start it.
+# Loopback listener for registered diagnostic result pages.
 review:
   host: 127.0.0.1
   port: 8766
@@ -14,14 +14,28 @@ review:
 paths:
   # Downloaded weights and docker files. Relative to this file.
   artifacts: artifacts
-  # One directory per diagnostics invocation. Relative to this file.
+  # One unique directory per inference run; diagnostic attempts stay below it.
   runs: runs
   # Required before a job starts. Set here or with NIB_DATA_ROOT.
   # The handler never invents this path; omit it until the machine has one.
   # data_root:
 
-# Metrics and visualization image. The HTTP server does not start it.
-# The Dockerfile is a scaffold; its computation entry point is not implemented.
-# Build: docker build -t nib-diagnostics:dev diagnostics/
+# Metrics and visualization image, started by the handler with controlled Compose.
+# Build from repository root: docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .
 diagnostics:
   image: nib-diagnostics:dev
+
+runtime:
+  # Optional explicit local Docker context; omitted uses Docker's current context.
+  # docker_context: desktop-linux
+  data_file: SEVIR/processed/sevir_vil.h5
+  catalog_file: source/CATALOG.csv
+  ingestion_image: nib-ingestion:dev
+  model_images:
+    nowcastnet: nib-nowcastnet:dev
+    exprecast: nib-exprecast:dev
+    wadepre: nib-wadepre:dev
+  # Add the exact authorized HTTPS Hub origin; never use '*'.
+  allowed_origins: []
+  # Published atlas main after contract PR #2. Consumers pin this commit, not a branch.
+  atlas_revision: "43e2b306c247ce5633dca0d65c06893dc37409f2"

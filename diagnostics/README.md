@@ -10,18 +10,23 @@ describe the current APIs and dependency setup.
 review service delivered in PR #12. Its [README](verification/README.md) describes
 that module and the real field-provider contract it still needs from the platform.
 
-The common computation entry point and real Forecast reader are not implemented
-in this handoff. The Dockerfile is a scaffold: building it does not establish that
-`python -m diagnostics` can run. Installing both diagnostic modules in the image,
-providing real stored fields and implementing the common entry point are part of
-the subsequent runtime integration.
+The integrated `python -m diagnostics --config request.json` entrypoint consumes
+version 2 stored-run requests and installs both diagnostic modules in the image.
+Its reader validates NPZ+manifest fields, and calls verification or visualization
+only when selected. See [runtime integration](../docs/runtime-integration.md) for
+resource preparation, scientific semantics and completed validation limits.
+
+Build from the repository root with
+`docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .`. A successful
+build does not establish real model or basemap acceptance.
 
 ## Existing handler CLI
 
-The CLI prepares an inspectable directory under `paths.runs` (default `runs/`),
-validates the request, mounts inputs read-only and invokes the configured image
-with no network. It needs an image implementing the protocol below; the provided
-scaffold does not yet provide that implementation.
+The legacy CLI below prepares an inspectable directory under `paths.runs`,
+validates its old request, mounts inputs read-only and invokes a configured image
+with no network. Its v1 protocol is not the stored-run v2 protocol used by the
+new HTTP jobs. Use a matching legacy image for this CLI; the integrated image
+refuses a v1 request rather than silently inventing fields.
 
 ```sh
 bin/macos/start.command diagnostics --request /path/to/request.yaml
@@ -69,9 +74,9 @@ request format; grid and scientific metadata there are illustrative declarations
 
 This legacy CLI requires a non-null JSON `products/metrics.json` and a
 `products/frames/` directory before reporting success. Runner tests establish
-that protocol only. The subsequent integration will make metrics/visualization
-optional and validate selected real artifacts. There are no HTTP job endpoints
-or result web server in this handoff.
+that legacy protocol only. New HTTP jobs make metrics/visualization optional and
+validate their selected stored-run outputs. The Go handler serves registered
+result webpages; the standalone verification service remains a module tool.
 
 ## Verification
 
