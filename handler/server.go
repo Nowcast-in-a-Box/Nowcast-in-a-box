@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"sync"
 )
 
 // Version is the handler release identifier reported on /v1/status.
@@ -11,14 +14,28 @@ const Version = "0.1.0"
 
 // Server is the loopback HTTP API.
 type Server struct {
-	Config    Config
-	Preflight []func() Check
+	Config      Config
+	Preflight   []func() Check
+	Runner      CommandRunner
+	Token       string
+	configMu    sync.RWMutex
+	jobsMu      sync.Mutex
+	jobs        map[string]*Job
+	executionMu sync.Mutex
 }
 
 // NewServer returns a server whose preflight list starts with DockerCheck.
 func NewServer(cfg Config) *Server {
+	token := cfg.Runtime.Token
+	if token == "" {
+		var value [32]byte
+		if _, err := rand.Read(value[:]); err != nil {
+			panic(err)
+		}
+		token = hex.EncodeToString(value[:])
+	}
 	return &Server{
-		Config:    cfg,
+		Config: cfg, Runner: execRunner{}, Token: token, jobs: make(map[string]*Job),
 		Preflight: []func() Check{DockerCheck},
 	}
 }
@@ -29,7 +46,15 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
-	return s.loopbackOnly(mux)
+	s.runtimeRoutes(mux)
+	return s.loopbackOnly(s.originControl(mux))
+}
+
+// ReviewRoutes serves only registered diagnostic results on the review listener.
+func (s *Server) ReviewRoutes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/runs/{id}/files/{file...}", s.handleResultFile)
+	return s.loopbackOnly(s.originControl(mux))
 }
 
 func (s *Server) loopbackOnly(next http.Handler) http.Handler {
@@ -58,8 +83,15 @@ type statusResponse struct {
 	Preflight  []Check `json:"preflight"`
 }
 
+func (s *Server) currentConfig() Config {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+	return s.Config
+}
+
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	source := s.Config.Source
+	cfg := s.currentConfig()
+	source := cfg.Source
 	if source == "" {
 		source = "defaults"
 	}
@@ -80,11 +112,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, statusResponse{
 		Service:    "nib-handler",
 		Version:    Version,
-		Host:       s.Config.Handler.Host,
-		Port:       strconv.Itoa(s.Config.Handler.Port),
+		Host:       cfg.Handler.Host,
+		Port:       strconv.Itoa(cfg.Handler.Port),
 		ConfigFile: source,
-		Review:     s.Config.Review,
-		Paths:      s.Config.Paths,
+		Review:     cfg.Review,
+		Paths:      cfg.Paths,
 		Docker:     docker,
 		Preflight:  checks,
 	})

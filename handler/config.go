@@ -42,6 +42,18 @@ type Diagnostics struct {
 	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 }
 
+// Runtime configures controlled container execution; browser requests cannot set these values.
+type Runtime struct {
+	DockerContext  string            `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
+	DataFile       string            `yaml:"data_file" json:"data_file"`
+	CatalogFile    string            `yaml:"catalog_file" json:"catalog_file"`
+	IngestionImage string            `yaml:"ingestion_image" json:"ingestion_image"`
+	ModelImages    map[string]string `yaml:"model_images" json:"model_images"`
+	AllowedOrigins []string          `yaml:"allowed_origins" json:"allowed_origins"`
+	Token          string            `yaml:"token,omitempty" json:"-"`
+	AtlasRevision  string            `yaml:"atlas_revision" json:"atlas_revision"`
+}
+
 // Config is the host runtime settings loaded from config.yaml.
 // Source is the file that was read; it is not a YAML field.
 type Config struct {
@@ -50,6 +62,7 @@ type Config struct {
 	Review      Addr        `yaml:"review"`
 	Paths       Paths       `yaml:"paths"`
 	Diagnostics Diagnostics `yaml:"diagnostics"`
+	Runtime     Runtime     `yaml:"runtime"`
 }
 
 // DefaultConfig is used when a key is missing from config.yaml, or when
@@ -60,6 +73,9 @@ func DefaultConfig() Config {
 		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
 		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns},
 		Diagnostics: Diagnostics{Image: defaultDiagnosticsImage},
+		Runtime: Runtime{DataFile: "SEVIR/processed/sevir_vil.h5", CatalogFile: "source/CATALOG.csv",
+			IngestionImage: "nib-ingestion:dev", ModelImages: map[string]string{
+				"nowcastnet": "nib-nowcastnet:dev", "exprecast": "nib-exprecast:dev", "wadepre": "nib-wadepre:dev"}},
 	}
 }
 
@@ -119,6 +135,18 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Diagnostics.Image == "" {
 		c.Diagnostics.Image = d.Diagnostics.Image
+	}
+	if c.Runtime.DataFile == "" {
+		c.Runtime.DataFile = d.Runtime.DataFile
+	}
+	if c.Runtime.CatalogFile == "" {
+		c.Runtime.CatalogFile = d.Runtime.CatalogFile
+	}
+	if c.Runtime.IngestionImage == "" {
+		c.Runtime.IngestionImage = d.Runtime.IngestionImage
+	}
+	if c.Runtime.ModelImages == nil {
+		c.Runtime.ModelImages = d.Runtime.ModelImages
 	}
 }
 

@@ -1,0 +1,505 @@
+package handler
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Job struct {
+	ID             string         `json:"id"`
+	Status         string         `json:"status"`
+	Stage          string         `json:"stage"`
+	Error          string         `json:"error,omitempty"`
+	Request        RuntimeRequest `json:"request"`
+	CreatedAt      time.Time      `json:"created_at"`
+	IdempotencyKey string         `json:"idempotency_key,omitempty"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+func (s *Server) runtimeRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/settings", s.authorize(s.handleSettings))
+	mux.HandleFunc("PATCH /v1/settings", s.authorize(s.handleSettings))
+	mux.HandleFunc("POST /v1/runs/{id}/diagnostics", s.authorize(s.handleRetryDiagnostics))
+	mux.HandleFunc("GET /v1/capabilities", s.authorize(s.handleCapabilities))
+	mux.HandleFunc("GET /v1/datasets/sevir/samples", s.authorize(s.handleSamples))
+	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))
+	mux.HandleFunc("GET /v1/jobs/{id}", s.authorize(s.handleJob))
+	mux.HandleFunc("GET /v1/runs", s.authorize(s.handleRuns))
+	mux.HandleFunc("GET /v1/runs/{id}", s.authorize(s.handleRun))
+	mux.HandleFunc("GET /v1/runs/{id}/files/{file...}", s.handleResultFile)
+}
+
+func (s *Server) docker(ctx context.Context, args ...string) (int, []byte, error) {
+	if s.Config.Runtime.DockerContext != "" {
+		args = append([]string{"--context", s.Config.Runtime.DockerContext}, args...)
+	}
+	return s.Runner.Run(ctx, args...)
+}
+
+func (s *Server) dataPaths() (string, string, error) {
+	root := s.currentConfig().Paths.DataRoot
+	if root == "" {
+		return "", "", fmt.Errorf("configure paths.data_root before execution")
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return "", "", fmt.Errorf("configured data root is unavailable")
+	}
+	resolve := func(relative string) (string, error) {
+		if filepath.IsAbs(relative) {
+			return "", fmt.Errorf("input files must be relative to configured data root")
+		}
+		path, err := ResolveDataDir(root, relative)
+		if err != nil {
+			return "", err
+		}
+		real, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return "", err
+		}
+		realRoot, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			return "", err
+		}
+		rel, err := filepath.Rel(realRoot, real)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("input escapes data root")
+		}
+		info, err := os.Stat(real)
+		if err != nil || !info.Mode().IsRegular() {
+			return "", fmt.Errorf("input must be a regular file")
+		}
+		return real, nil
+	}
+	data, err := resolve(s.Config.Runtime.DataFile)
+	if err != nil {
+		return "", "", err
+	}
+	catalog, err := resolve(s.Config.Runtime.CatalogFile)
+	return data, catalog, err
+}
+
+func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
+	_, _, dataErr := s.dataPaths()
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	code, out, err := s.docker(ctx, "info", "--format", "{{.ServerVersion}}")
+	dockerReady := err == nil && code == 0
+	readyModels := []map[string]any{}
+	for _, model := range []string{"nowcastnet", "exprecast", "wadepre"} {
+		image := s.Config.Runtime.ModelImages[model]
+		imageCode, _, imageErr := s.docker(ctx, "image", "inspect", image)
+		weightErr := verifyModelWeights(filepath.Join(s.Config.Paths.Artifacts, "sevir", model, modelWeightName(model)), model)
+		readyModels = append(readyModels, map[string]any{"id": model, "ready": dockerReady && dataErr == nil && image != "" && imageErr == nil && imageCode == 0 && weightErr == nil})
+	}
+	reason := ""
+	if dataErr != nil {
+		reason = dataErr.Error()
+	}
+	diagnosticCode, _, diagnosticErr := s.docker(ctx, "image", "inspect", s.Config.Diagnostics.Image)
+	diagnosticsReady := dockerReady && diagnosticErr == nil && diagnosticCode == 0
+	writeJSON(w, 200, map[string]any{"data": map[string]any{"id": "sevir", "ready": dataErr == nil, "reason": reason}, "models": readyModels,
+		"docker": map[string]any{"ready": dockerReady, "detail": strings.TrimSpace(string(out))}, "atlas_revision": s.Config.Runtime.AtlasRevision,
+		"diagnostics": map[string]any{"verification": diagnosticsReady, "visualization": diagnosticsReady && s.basemapReady()}})
+}
+
+func verifyModelWeights(path, model string) error {
+	pins := map[string]string{"nowcastnet": "773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d", "exprecast": "534b91b63524f775c460334385f0f0b0b92759fa1596a053d1cac489c84cd00d", "wadepre": "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b"}
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return err
+	}
+	if expected, ok := pins[model]; !ok || hex.EncodeToString(hash.Sum(nil)) != expected {
+		return fmt.Errorf("weight checksum mismatch")
+	}
+	return nil
+}
+
+func modelWeightName(model string) string {
+	switch model {
+	case "nowcastnet":
+		return "NowcastNet.onnx"
+	case "exprecast":
+		return "exPreCast.onnx"
+	case "wadepre":
+		return "WADEPre.onnx"
+	}
+	return ""
+}
+func (s *Server) basemapReady() bool {
+	info, err := os.Stat(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo", "acquisition.json"))
+	return err == nil && info.Mode().IsRegular()
+}
+
+func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
+	offset, limit, err := pagination(r)
+	if err != nil {
+		runtimeError(w, 400, err)
+		return
+	}
+	data, catalog, err := s.dataPaths()
+	if err != nil {
+		runtimeError(w, 409, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+	code, out, err := s.docker(ctx, "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
+		"-v", volumeSpec(data, "/inputs/data.h5", true), "-v", volumeSpec(catalog, "/inputs/CATALOG.csv", true), s.Config.Runtime.IngestionImage,
+		"--data", "/inputs/data.h5", "--catalog", "/inputs/CATALOG.csv", "--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit))
+	if err != nil || code != 0 {
+		runtimeError(w, 502, fmt.Errorf("sample reader failed: %v %s", err, out))
+		return
+	}
+	var value any
+	if json.Unmarshal(out, &value) != nil {
+		runtimeError(w, 502, fmt.Errorf("invalid sample reader response"))
+		return
+	}
+	writeJSON(w, 200, value)
+}
+
+func pagination(r *http.Request) (int, int, error) {
+	offset, limit := 0, 100
+	for key, target := range map[string]*int{"offset": &offset, "limit": &limit} {
+		if raw := r.URL.Query().Get(key); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil {
+				return 0, 0, fmt.Errorf("invalid pagination")
+			}
+			*target = value
+		}
+	}
+	if offset < 0 || limit < 1 || limit > 500 {
+		return 0, 0, fmt.Errorf("invalid pagination")
+	}
+	return offset, limit, nil
+}
+
+func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
+	var upload struct {
+		Package []byte `json:"package"`
+		SHA256  string `json:"sha256"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 12<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&upload); err != nil {
+		runtimeError(w, 400, err)
+		return
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		runtimeError(w, 400, fmt.Errorf("one request object required"))
+		return
+	}
+	key := r.Header.Get("Idempotency-Key")
+	if len(key) > 128 {
+		runtimeError(w, 400, fmt.Errorf("idempotency key is too long"))
+		return
+	}
+	request, err := ParseRuntimePackage(upload.Package, upload.SHA256)
+	if err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
+	initial, parseErr := time.Parse(time.RFC3339, request.StartTime)
+	_, zoneOffset := initial.Zone()
+	if parseErr != nil || zoneOffset != 0 {
+		runtimeError(w, 422, fmt.Errorf("sample context time must be explicit UTC"))
+		return
+	}
+	if _, _, err := s.dataPaths(); err != nil {
+		runtimeError(w, 409, err)
+		return
+	}
+	if request.Visualization && !s.basemapReady() {
+		runtimeError(w, 409, fmt.Errorf("prepare the WMO basemap cache first"))
+		return
+	}
+	if len(s.Config.Runtime.AtlasRevision) != 40 {
+		runtimeError(w, 409, fmt.Errorf("configure the pinned atlas revision first"))
+		return
+	}
+	s.jobsMu.Lock()
+	// A frozen package is idempotent; explicit rerun is a separate request identity.
+	if key != "" {
+		for _, job := range s.jobs {
+			if job.IdempotencyKey == key {
+				if job.Request.PackageSHA256 != request.PackageSHA256 {
+					s.jobsMu.Unlock()
+					runtimeError(w, 409, fmt.Errorf("idempotency key belongs to another package"))
+					return
+				}
+				copy := *job
+				s.jobsMu.Unlock()
+				writeJSON(w, 200, copy)
+				return
+			}
+		}
+		entries, _ := os.ReadDir(s.Config.Paths.Runs)
+		for _, entry := range entries {
+			if !entry.IsDir() || !idPattern.MatchString(entry.Name()) {
+				continue
+			}
+			raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, entry.Name(), "job.json"))
+			if readErr != nil {
+				continue
+			}
+			var recorded Job
+			if json.Unmarshal(raw, &recorded) != nil || recorded.ID != entry.Name() || recorded.IdempotencyKey != key {
+				continue
+			}
+			if recorded.Request.PackageSHA256 != request.PackageSHA256 {
+				s.jobsMu.Unlock()
+				runtimeError(w, 409, fmt.Errorf("idempotency key belongs to another package"))
+				return
+			}
+			if recorded.Status == "running" || recorded.Status == "queued" {
+				recorded.Status = "interrupted"
+				recorded.Error = "handler restarted before this job completed"
+				_ = writeJob(filepath.Join(s.Config.Paths.Runs, entry.Name()), &recorded)
+			}
+			s.jobs[recorded.ID] = &recorded
+			s.jobsMu.Unlock()
+			writeJSON(w, 200, recorded)
+			return
+		}
+	}
+	id, err := newRunID(time.Now())
+	if err != nil {
+		s.jobsMu.Unlock()
+		runtimeError(w, 500, err)
+		return
+	}
+	directory := filepath.Join(s.Config.Paths.Runs, id)
+	if err := os.MkdirAll(s.Config.Paths.Runs, 0o755); err != nil {
+		s.jobsMu.Unlock()
+		runtimeError(w, 500, err)
+		return
+	}
+	if err := os.Mkdir(directory, 0o755); err != nil {
+		s.jobsMu.Unlock()
+		runtimeError(w, 500, err)
+		return
+	}
+	job := &Job{ID: id, Status: "queued", Stage: "queued", Request: request, IdempotencyKey: key, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	if err := writeJob(directory, job); err != nil {
+		s.jobsMu.Unlock()
+		runtimeError(w, 500, err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(directory, "package.zip"), upload.Package, 0o600); err != nil {
+		s.jobsMu.Unlock()
+		runtimeError(w, 500, err)
+		return
+	}
+	s.jobs[id] = job
+	copy := *job
+	s.jobsMu.Unlock()
+	go s.executeJob(id)
+	writeJSON(w, http.StatusAccepted, copy)
+}
+
+func writeJob(directory string, job *Job) error {
+	raw, err := json.MarshalIndent(job, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporary := filepath.Join(directory, "job.tmp")
+	if err := os.WriteFile(temporary, append(raw, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, filepath.Join(directory, "job.json"))
+}
+
+func (s *Server) updateJob(id, status, stage string, err error) {
+	s.jobsMu.Lock()
+	defer s.jobsMu.Unlock()
+	job := s.jobs[id]
+	job.Status = status
+	job.Stage = stage
+	job.UpdatedAt = time.Now().UTC()
+	if err != nil {
+		job.Error = err.Error()
+	}
+	if err := writeJob(filepath.Join(s.Config.Paths.Runs, id), job); err != nil {
+		job.Error = err.Error()
+		job.Status = "failed"
+	}
+}
+
+func (s *Server) executeJob(id string) {
+	s.executionMu.Lock()
+	defer s.executionMu.Unlock()
+	s.jobsMu.Lock()
+	request := s.jobs[id].Request
+	s.jobsMu.Unlock()
+	directory := filepath.Join(s.Config.Paths.Runs, id)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	run := func(stage string, args ...string) error {
+		s.updateJob(id, "running", stage, nil)
+		name := "nib-" + strings.ToLower(id) + "-" + stage
+		volumes := []string{}
+		for len(args) >= 2 && args[0] == "-v" {
+			volumes = append(volumes, args[1])
+			args = args[2:]
+		}
+		if len(args) == 0 {
+			return fmt.Errorf("missing configured image")
+		}
+		service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}}
+		if user := containerUser(); user != "" {
+			service["user"] = user
+		}
+		composition := map[string]any{"services": map[string]any{"task": service}}
+		raw, err := yaml.Marshal(composition)
+		if err != nil {
+			return err
+		}
+		composePath := filepath.Join(directory, "compose-"+stage+".yaml")
+		if err := os.WriteFile(composePath, raw, 0o600); err != nil {
+			return err
+		}
+		code, out, err := s.docker(ctx, "compose", "-f", composePath, "-p", name, "up", "--abort-on-container-exit", "--exit-code-from", "task")
+		logs := filepath.Join(directory, "logs")
+		_ = os.MkdirAll(logs, 0o755)
+		_ = os.WriteFile(filepath.Join(logs, stage+".log"), out, 0o644)
+		cleanup, c := context.WithTimeout(context.Background(), 15*time.Second)
+		_, _, cleanupErr := s.docker(cleanup, "compose", "-f", composePath, "-p", name, "down", "--remove-orphans")
+		c()
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if cleanupErr != nil && err == nil {
+			err = cleanupErr
+		}
+		if err != nil {
+			return err
+		}
+		if code != 0 {
+			return fmt.Errorf("%s exited %d: %s", stage, code, out)
+		}
+		return nil
+	}
+	data, catalog, err := s.dataPaths()
+	if err != nil {
+		s.updateJob(id, "failed", "preflight", err)
+		return
+	}
+	// Ingestion creates a child run inside the job workspace, then publishes its contents.
+	err = run("ingestion", "-v", volumeSpec(data, "/inputs/data.h5", true), "-v", volumeSpec(catalog, "/inputs/CATALOG.csv", true),
+		"-v", volumeSpec(directory, "/workspace", false), s.Config.Runtime.IngestionImage, "--data", "/inputs/data.h5", "--catalog", "/inputs/CATALOG.csv",
+		"--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+	if err == nil {
+		entries, readErr := os.ReadDir(filepath.Join(directory, id))
+		if readErr != nil {
+			err = readErr
+		} else {
+			for _, entry := range entries {
+				if moveErr := os.Rename(filepath.Join(directory, id, entry.Name()), filepath.Join(directory, entry.Name())); moveErr != nil {
+					err = moveErr
+					break
+				}
+			}
+			if err == nil {
+				err = os.Remove(filepath.Join(directory, id))
+			}
+		}
+	}
+	if err != nil {
+		s.updateJob(id, "failed", "ingestion", err)
+		return
+	}
+	for _, model := range request.Models {
+		image := s.Config.Runtime.ModelImages[model]
+		if image == "" {
+			s.updateJob(id, "failed", "model", fmt.Errorf("model image not configured"))
+			return
+		}
+		weights := filepath.Join(s.Config.Paths.Artifacts, "sevir", model, modelWeightName(model))
+		err = run(model, "-v", volumeSpec(directory, "/run", false), "-v", volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true), "-v", volumeSpec(weights, "/weights/model.onnx", true), image, "--run", "/run", "--weights", "/weights/model.onnx")
+		if err != nil {
+			s.updateJob(id, "failed", model, err)
+			return
+		}
+	}
+	if len(request.Metrics) > 0 || request.Visualization {
+		config := map[string]any{"version": 2, "run": "/run"}
+		if len(request.Metrics) > 0 {
+			config["metrics"] = request.Metrics
+			config["verification_models"] = request.VerificationModels
+		}
+		args := []string{"-v", volumeSpec(directory, "/run", false),
+			"-v", volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true),
+			"-v", volumeSpec(filepath.Join(directory, "forecasts"), "/run/forecasts", true)}
+		if request.Visualization {
+			config["visualization"] = map[string]any{"models": request.VisualizationModels, "basemap": "/basemap"}
+			args = append(args, "-v", volumeSpec(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo"), "/basemap", true))
+		}
+		raw, _ := json.Marshal(config)
+		err = os.WriteFile(filepath.Join(directory, "diagnostics-request.json"), raw, 0o644)
+		if err == nil {
+			err = run("diagnostics", append(args, s.Config.Diagnostics.Image, "--config", "/run/diagnostics-request.json")...)
+		}
+		if err != nil {
+			s.updateJob(id, "partial", "diagnostics", err)
+			return
+		}
+	}
+	s.updateJob(id, "succeeded", "finished", nil)
+}
+
+func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idPattern.MatchString(id) {
+		runtimeError(w, 400, fmt.Errorf("invalid job ID"))
+		return
+	}
+	s.jobsMu.Lock()
+	job := s.jobs[id]
+	if job != nil {
+		copy := *job
+		s.jobsMu.Unlock()
+		writeJSON(w, 200, copy)
+		return
+	}
+	s.jobsMu.Unlock()
+	raw, err := os.ReadFile(filepath.Join(s.Config.Paths.Runs, id, "job.json"))
+	if err != nil {
+		runtimeError(w, 404, fmt.Errorf("job not found"))
+		return
+	}
+	var recorded Job
+	if json.Unmarshal(raw, &recorded) != nil {
+		runtimeError(w, 500, fmt.Errorf("invalid recorded job"))
+		return
+	}
+	if recorded.Status == "running" || recorded.Status == "queued" {
+		recorded.Status = "interrupted"
+		recorded.Error = "handler restarted before this job completed"
+		recorded.UpdatedAt = time.Now().UTC()
+		_ = writeJob(filepath.Join(s.Config.Paths.Runs, id), &recorded)
+	}
+	writeJSON(w, 200, recorded)
+}
+
+func runtimeError(w http.ResponseWriter, status int, err error) {
+	writeJSON(w, status, map[string]string{"code": "RUNTIME_ERROR", "message": err.Error()})
+}

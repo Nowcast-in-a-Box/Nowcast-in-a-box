@@ -27,6 +27,10 @@ class FieldUnavailable(Exception):
     """
 
 
+class PredictionUnavailable(FieldUnavailable):
+    """A forecast gap, distinct from an unavailable observation."""
+
+
 @dataclass(frozen=True)
 class Coords:
     """Native grid coordinates.  Both axes are 1-D and strictly increasing."""
@@ -45,14 +49,68 @@ class Coords:
             raise ValueError("Coords axes must be strictly increasing")
 
     @property
+    def crs(self) -> str:
+        return "EPSG:4326"
+
+    @property
+    def x(self) -> np.ndarray:
+        return self.lon
+
+    @property
+    def y(self) -> np.ndarray:
+        return self.lat
+
+    @property
     def shape(self) -> tuple[int, int]:
         return (int(self.lat.size), int(self.lon.size))
 
     @property
     def extent(self) -> tuple[float, float, float, float]:
         """``(lon_min, lat_min, lon_max, lat_max)``."""
-        return (float(self.lon[0]), float(self.lat[0]),
-                float(self.lon[-1]), float(self.lat[-1]))
+        return (
+            float(self.lon[0]),
+            float(self.lat[0]),
+            float(self.lon[-1]),
+            float(self.lat[-1]),
+        )
+
+
+@dataclass(frozen=True)
+class ProjectedCoords:
+    """Regular projected axes with an explicit CRS; never labelled lon/lat."""
+
+    x: np.ndarray
+    y: np.ndarray
+    crs: str
+
+    def __post_init__(self) -> None:
+        if not self.crs or self.crs == "EPSG:4326":
+            raise ValueError("projected grid requires a projected CRS")
+        for name in ("x", "y"):
+            axis = np.asarray(getattr(self, name), dtype=float)
+            if (
+                axis.ndim != 1
+                or axis.size < 2
+                or not np.isfinite(axis).all()
+                or not np.all(np.diff(axis) > 0)
+            ):
+                raise ValueError(
+                    "projected axes must be finite and strictly increasing"
+                )
+            object.__setattr__(self, name, axis)
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return (self.y.size, self.x.size)
+
+    @property
+    def extent(self) -> tuple[float, float, float, float]:
+        return (
+            float(self.x[0]),
+            float(self.y[0]),
+            float(self.x[-1]),
+            float(self.y[-1]),
+        )
 
 
 @dataclass
@@ -64,7 +122,7 @@ class Field:
     """
 
     data: np.ndarray
-    coords: Coords
+    coords: Coords | ProjectedCoords
     valid_time: datetime
     unit: str
     variable: str
@@ -101,8 +159,10 @@ class Field:
         return out
 
     def describe(self) -> str:
-        return (f"{self.name}@{self.valid_time.isoformat()} "
-                f"{self.variable}[{self.unit}] {self.coords.shape}")
+        return (
+            f"{self.name}@{self.valid_time.isoformat()} "
+            f"{self.variable}[{self.unit}] {self.coords.shape}"
+        )
 
 
 @dataclass(frozen=True)
@@ -163,7 +223,9 @@ def coords_from_extent(
 
 
 def describe_capabilities(caps: Capabilities) -> str:
-    return (f"cadence={caps.cadence_minutes}min "
-            f"obs={list(caps.observation_names)} "
-            f"models={list(caps.model_ids)} "
-            f"retrospective={caps.retrospective}")
+    return (
+        f"cadence={caps.cadence_minutes}min "
+        f"obs={list(caps.observation_names)} "
+        f"models={list(caps.model_ids)} "
+        f"retrospective={caps.retrospective}"
+    )

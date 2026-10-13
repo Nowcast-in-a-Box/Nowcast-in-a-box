@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Iterable, Sequence
 
-from ..access.base import FieldAccess, FieldUnavailable
+from ..access.base import FieldAccess, FieldUnavailable, PredictionUnavailable
 from ..config.schema import ConfigError, VerificationConfig
 from ..core import quantities as Q
 from ..core.regrid import align_pair, target_coords
@@ -72,6 +72,29 @@ class RunStats:
         }
 
 
+def covers_quantities(
+    store: Store, cfg: VerificationConfig, member: str, init_iso: str, lead: int
+) -> bool:
+    for family in cfg.families():
+        filters = {
+            "group_id": cfg.group_id,
+            "member": member,
+            "init_time": init_iso,
+            "lead_minutes": lead,
+        }
+        spec = Q.FAMILY_OF[family]
+        expected = 1
+        if spec.needs_level:
+            filters["level"] = list(cfg.levels())
+            expected *= len(cfg.levels())
+        if spec.needs_window:
+            filters["half_window"] = list(cfg.half_windows())
+            expected *= len(cfg.half_windows())
+        if store.count_rows(family, filters=filters) != expected:
+            return False
+    return True
+
+
 def run_tasks(
     access: FieldAccess,
     store: Store,
@@ -89,7 +112,7 @@ def run_tasks(
     """
     stats = RunStats()
     stats.started_at = datetime.now(UTC)
-    target = target_coords(cfg.ruler.extent, cfg.ruler.resolution)
+    target = target_coords(cfg.ruler.extent, cfg.ruler.resolution, cfg.ruler.crs)
     families = cfg.families()
     levels = cfg.levels()
     half_windows = cfg.half_windows()
@@ -101,7 +124,12 @@ def run_tasks(
         for lead in member.leads:
             stats.total += 1
             init_iso = iso_utc(run.init_time)
-            if not force and store.task_state(cfg.group_id, member.name, init_iso, lead) == "done":
+            if (
+                not force
+                and store.task_state(cfg.group_id, member.name, init_iso, lead)
+                == "done"
+                and covers_quantities(store, cfg, member.name, init_iso, lead)
+            ):
                 stats.skipped += 1
                 continue
 
@@ -124,8 +152,11 @@ def run_tasks(
                 )
             except FieldUnavailable as exc:
                 stats.unavailable += 1
-                stats.obs_missing += 1
-                store.mark_obs_gap(cfg.group_id, cfg.ruler.ground_truth, iso_utc(valid_time))
+                if not isinstance(exc, PredictionUnavailable):
+                    stats.obs_missing += 1
+                    store.mark_obs_gap(
+                        cfg.group_id, cfg.ruler.ground_truth, iso_utc(valid_time)
+                    )
                 store.set_task_state(
                     cfg.group_id, member.name, init_iso, lead, "unavailable", str(exc)
                 )
@@ -202,7 +233,9 @@ def _run_one(
     }
 
     payload = Q.accumulate(
-        t, p, valid,
+        t,
+        p,
+        valid,
         families=tuple(families),
         levels=tuple(levels),
         half_windows=tuple(half_windows),
@@ -217,7 +250,9 @@ def _run_one(
             # A keyed family: the block is stored once per point in its key.
             for point, values in result.items():
                 parts = point if isinstance(point, tuple) else (point,)
-                store.upsert(family, {**key, **dict(zip(spec.extra_key, parts))}, values)
+                store.upsert(
+                    family, {**key, **dict(zip(spec.extra_key, parts))}, values
+                )
         else:
             store.upsert(family, key, result)
     store.commit()

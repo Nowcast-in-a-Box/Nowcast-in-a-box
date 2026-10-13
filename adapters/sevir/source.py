@@ -121,9 +121,10 @@ class Source(DeclaredDataAdapter):
                 "event_type": event_type,
                 "target": target,
                 "target_lead_minutes": [
-                    NATIVE_CADENCE_MINUTES * (CONTEXT_FRAMES + index)
+                    NATIVE_CADENCE_MINUTES * (index + 1)
                     for index in range(TARGET_FRAMES)
                 ],
+                "init_time": times[-1],
                 "context_times": times,
             },
         )
@@ -147,9 +148,15 @@ def _hdf5_time(value: str) -> str:
 
 
 def _match_row(start_times, wanted: str) -> int:
-    for index, value in enumerate(start_times):
-        if _text(value) == wanted:
-            return index
+    matches = [
+        index for index, value in enumerate(start_times) if _text(value) == wanted
+    ]
+    if len(matches) > 1:
+        raise ConstraintError(
+            "ambiguous SEVIR time; use ingestion with event_id and start_time"
+        )
+    if matches:
+        return matches[0]
     raise FileNotFoundError(f"SEVIR sample not found for start time {wanted}")
 
 

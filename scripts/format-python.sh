@@ -1,4 +1,7 @@
 #!/bin/sh
-# Format every Python file in the repository with Black.
+# Format the repository by default, or only the explicitly named paths.
 cd "$(dirname "$0")/.." || exit 1
-exec black --config black.toml .
+if [ "$#" -eq 0 ]; then
+    set -- .
+fi
+exec black --config black.toml "$@"
