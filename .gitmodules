@@ -1,0 +1,3 @@
+[submodule "atlas"]
+	path = atlas
+	url = https://github.com/Nowcast-in-a-Box/atlas.git

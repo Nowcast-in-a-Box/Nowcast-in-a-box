@@ -37,5 +37,5 @@ runtime:
     wadepre: nib-wadepre:dev
   # Add the exact authorized HTTPS Hub origin; never use '*'.
   allowed_origins: []
-  # Published atlas main after contract PR #2. Consumers pin this commit, not a branch.
-  atlas_revision: "43e2b306c247ce5633dca0d65c06893dc37409f2"
+  # Published atlas main after catalog PR #4. The run schema blob matches 43e2b306.
+  atlas_revision: "e9ecd84f217eef9658d433133bc588a3128d05e0"
