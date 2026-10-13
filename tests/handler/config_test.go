@@ -3,6 +3,7 @@ package handler_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler"
@@ -217,5 +218,53 @@ func TestFindConfigFileWalksParents(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("found %q want %q", got, want)
+	}
+}
+
+func TestResolveDataDirRelative(t *testing.T) {
+	dir := t.TempDir()
+	got, err := handler.ResolveDataDir(dir, "cma_radar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "cma_radar")
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestResolveDataDirRequiresRoot(t *testing.T) {
+	_, err := handler.ResolveDataDir("", "cma_radar")
+	if err == nil {
+		t.Fatal("expected error for relative data_dir without a data root")
+	}
+}
+
+func TestResolveDataDirRejectsEscape(t *testing.T) {
+	dir := t.TempDir()
+	_, err := handler.ResolveDataDir(dir, ".."+string(filepath.Separator)+"outside")
+	if err == nil {
+		t.Fatal("expected escape to fail")
+	}
+}
+
+func TestResolveDataDirAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	got, err := handler.ResolveDataDir("", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(dir) {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestResolveDataDirForeignAbsolute(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("drive-letter paths are native on Windows")
+	}
+	_, err := handler.ResolveDataDir(t.TempDir(), "C:/data")
+	if err == nil {
+		t.Fatal("expected a foreign absolute path to fail")
 	}
 }

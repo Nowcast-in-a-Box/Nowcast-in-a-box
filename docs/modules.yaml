@@ -2,8 +2,9 @@
 # Branches, commits, and PRs use the GitHub issue number (#12).
 #
 # The host program is the handler (Linux, macOS, Windows). Model code
-# runs inside Docker images. Evaluation and visualization run on the
-# host from review/, started by the handler. Adapters are packaging-time.
+# runs inside Docker images. Metrics and visualization run in the
+# diagnostics container, started by the handler, outside the model image.
+# Adapters are packaging-time.
 #
 # status: exists | design | planned
 
@@ -107,7 +108,7 @@ modules:
     role: interface
     name: Data adapter interface
     purpose: Packaging-time conversion to the NiB data spec. Not a runtime stage.
-    paths: []
+    paths: [interfaces/, adapters/cma_radar/, adapters/gk2a/, adapters/himawari9/, adapters/fy4b/, adapters/mtg/, adapters/sevir/]
     do:
       - Contract a data package must satisfy (list/load sample).
       - Tests a fake package in its image must pass.
@@ -158,7 +159,7 @@ modules:
     role: interface
     name: Model adapter interface
     purpose: Packaging-time / in-container inference contract. Not WADEPre.
-    paths: []
+    paths: [interfaces/model.py]
     do:
       - predict(sample) contract. Context-frame selection belongs to the model image.
     done_when: A new model ships as models/PACKAGE_ID/ without editing C1 or the handler.
@@ -192,7 +193,7 @@ modules:
     role: implementation
     name: WADEPre
     purpose: First Model Container. One image, one algorithm.
-    paths: []
+    paths: [adapters/sevir/wadepre/]
     do:
       - Dockerfile, adapter, manifest. ONNX mounted from artifacts/.
     done_when: The handler can start this image and get a NiB-compliant forecast.
@@ -209,7 +210,7 @@ modules:
     role: implementation
     name: NowcastNet
     purpose: One Model Container implementing C1.
-    paths: []
+    paths: [adapters/sevir/nowcastnet/]
     do:
       - Same bar as C2.
     done_when: Same bar as C2.
@@ -241,7 +242,7 @@ modules:
     role: implementation
     name: exPreCast
     purpose: One Model Container implementing C1.
-    paths: []
+    paths: [adapters/sevir/exprecast/]
     do:
       - Same bar as C2.
     done_when: Same bar as C2.
@@ -256,10 +257,10 @@ modules:
     workstream: products
     role: platform
     name: Evaluation
-    purpose: Host-side metrics from saved prediction and truth. Lives in review/ with visualization.
-    paths: [review/]
+    purpose: Metrics from saved prediction and truth. Runs in the diagnostics container, outside the model image.
+    paths: [diagnostics/]
     do:
-      - MAE, RMSE, CSI. Outside Model Containers.
+      - Configured metric families. Outside Model Containers.
     done_when: Changing a CSI threshold does not start inference again.
     does_not_own:
       - Inference
@@ -272,10 +273,10 @@ modules:
     workstream: products
     role: platform
     name: Visualization
-    purpose: Host-side frame PNGs and comparisons. Lives in review/ with evaluation.
-    paths: [review/]
+    purpose: Frame PNGs and comparisons. Runs in the diagnostics container with evaluation.
+    paths: [diagnostics/]
     do:
-      - Renderer registry. vil-frames is one renderer.
+      - Writes products/frames. Figure names belong to the diagnostics image.
     done_when: A new variable can register a renderer without editing SEVIR.
     does_not_own:
       - Data decoding

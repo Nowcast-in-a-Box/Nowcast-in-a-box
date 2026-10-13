@@ -25,5 +25,10 @@ Download it from a GitHub Release, or build with scripts/cross-build.sh, and put
 "@
     }
 }
-& $Bin -config (Join-Path $Root "config.yaml") @args
+if ($args.Count -gt 0 -and $args[0] -eq "diagnostics") {
+    $DiagnosticsArgs = @($args | Select-Object -Skip 1)
+    & $Bin diagnostics -config (Join-Path $Root "config.yaml") @DiagnosticsArgs
+} else {
+    & $Bin -config (Join-Path $Root "config.yaml") @args
+}
 exit $LASTEXITCODE

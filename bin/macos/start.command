@@ -38,4 +38,8 @@ if [[ ! -x "$bin" ]]; then
 	chmod +x "$bin"
 fi
 
+if [[ "${1:-}" == diagnostics ]]; then
+	shift
+	exec "$bin" diagnostics -config "$ROOT/config.yaml" "$@"
+fi
 exec "$bin" -config "$ROOT/config.yaml" "$@"

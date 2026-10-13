@@ -48,6 +48,9 @@ func Prepare(args []string) (*Server, string, error) {
 
 // Main is the process entry used by cmd/nib-handler.
 func Main(args []string) int {
+	if len(args) > 0 && args[0] == "diagnostics" {
+		return DiagnosticsCLI(args[1:])
+	}
 	srv, addr, err := Prepare(args)
 	if err != nil {
 		if !errors.Is(err, errUsage) {
