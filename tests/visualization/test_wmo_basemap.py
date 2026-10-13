@@ -20,7 +20,7 @@ from nib_visualization.wmo_basemap import (
     resolve_tile,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 SOURCE = ROOT / "basemap_sources" / "wmo-source.json"
 
 

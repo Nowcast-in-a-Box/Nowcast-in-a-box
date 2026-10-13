@@ -83,7 +83,7 @@ func TestRuntimePackageTrustBoundary(t *testing.T) {
 
 func TestOriginAndLocalToken(t *testing.T) {
 	cfg := handler.DefaultConfig()
-	cfg.Runtime.AllowedOrigins = []string{"https://hub.example"}
+	cfg.Runtime.AllowedOrigins = []string{"https://hub.example", "http://hub.example"}
 	cfg.Runtime.Token = "test-token"
 	server := handler.NewServer(cfg)
 	for _, tc := range []struct {
@@ -92,6 +92,7 @@ func TestOriginAndLocalToken(t *testing.T) {
 	}{
 		{"GET", "https://evil.example", "/health", "", 403},
 		{"OPTIONS", "https://hub.example", "/v1/jobs", "", 204},
+		{"GET", "http://hub.example", "/v1/runs", "", 401},
 		{"GET", "https://hub.example", "/v1/runs", "", 401},
 		{"GET", "", "/v1/runs", "wrong", 401},
 	} {
@@ -103,7 +104,7 @@ func TestOriginAndLocalToken(t *testing.T) {
 		if out.Code != tc.status {
 			t.Fatalf("%s %s: %d", tc.method, tc.path, out.Code)
 		}
-		if tc.origin == "https://hub.example" && out.Header().Get("Access-Control-Allow-Origin") != tc.origin {
+		if (tc.origin == "https://hub.example" || tc.origin == "http://hub.example") && out.Header().Get("Access-Control-Allow-Origin") != tc.origin {
 			t.Fatal("missing exact CORS origin")
 		}
 	}

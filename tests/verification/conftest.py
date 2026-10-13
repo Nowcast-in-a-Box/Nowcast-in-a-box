@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diagnostics" / "verification"))
 
 from nib_verify.access import CountingAccess, SyntheticAccess  # noqa: E402
 from nib_verify.config import (  # noqa: E402

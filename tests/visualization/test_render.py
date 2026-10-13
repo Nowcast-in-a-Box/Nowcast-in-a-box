@@ -35,7 +35,7 @@ from nib_visualization.cli import main as cli_main
 from nib_visualization.field import VisualizationField
 from nib_visualization.fixtures import make_fixture
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 SOURCE_RECORD = REPO_ROOT / "basemap_sources" / "selected-source.json"
 
 

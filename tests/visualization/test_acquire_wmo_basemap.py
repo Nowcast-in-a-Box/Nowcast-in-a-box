@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "acquire_wmo_basemap.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization" / "scripts" / "acquire_wmo_basemap.py"
 SPEC = importlib.util.spec_from_file_location("acquire_wmo_basemap", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 acquire_wmo_basemap = importlib.util.module_from_spec(SPEC)

@@ -20,7 +20,7 @@ from nib_verify.server import create_app
 
 from .conftest import make_access, make_config
 
-STATIC = Path(__file__).resolve().parents[1] / "nib_verify" / "server" / "static"
+STATIC = Path(__file__).resolve().parents[2] / "diagnostics" / "verification" / "nib_verify" / "server" / "static"
 
 #: the page writes a call either literally or as a template string with an id
 #: interpolated into it, so the match has to allow the interpolated expression
