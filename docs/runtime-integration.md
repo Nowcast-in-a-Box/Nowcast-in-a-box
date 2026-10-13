@@ -1,7 +1,7 @@
 # SEVIR local runtime integration (#14)
 
-The runtime uses stored-run contract `nib.run.v1`, defined in the pinned atlas
-revision. Users run a prebuilt Go handler; Python stays in Docker. The Hub is a
+The runtime uses stored-run contract `nib.run.v1`, defined in atlas commit
+`e9ecd84f217eef9658d433133bc588a3128d05e0`. Users run a prebuilt Go handler; Python stays in Docker. The Hub is a
 remote provisioning site, and its browser talks directly to the user's loopback
 handler. The Hub server never proxies the user's localhost.
 
