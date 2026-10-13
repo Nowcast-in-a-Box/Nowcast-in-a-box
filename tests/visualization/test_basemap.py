@@ -39,7 +39,7 @@ from nib_visualization.cli import (
     render_basemap_png,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 SOURCE_RECORD = REPO_ROOT / "basemap_sources" / "selected-source.json"
 ACQUISITION_RECORD = REPO_ROOT / "basemap_sources" / "acquisition.json"
 

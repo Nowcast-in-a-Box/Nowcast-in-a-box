@@ -36,7 +36,7 @@ from nib_visualization import RenderConfig, make_fixture, prepare_scene, write_a
 from nib_visualization.field import VisualizationField, validate_field
 from nib_visualization.wmo_basemap import load_wmo_basemap
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 WMO_SOURCE_RECORD = REPO_ROOT / "basemap_sources" / "wmo-source.json"
 OCHA_SOURCE_RECORD = REPO_ROOT / "basemap_sources" / "selected-source.json"
 

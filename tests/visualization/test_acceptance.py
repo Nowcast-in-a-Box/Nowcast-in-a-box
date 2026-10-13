@@ -38,7 +38,7 @@ from nib_visualization.artifacts import (
 )
 from nib_visualization.cli import main
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 WMO_SOURCE_RECORD = ROOT / "basemap_sources" / "wmo-source.json"
 OCHA_SOURCE_RECORD = ROOT / "basemap_sources" / "selected-source.json"
 PRODUCT_FILES = {"animation.gif", "map.png", "manifest.json"}

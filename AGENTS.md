@@ -39,7 +39,7 @@ adapters/         packaging-time source; not a host package
     <model-id>/   one model; its program is adapter.py
 docs/             architecture and process
 scripts/          cross-build.sh; wrappers that call bin/
-tests/handler/    handler tests
+tests/             handler, runtime, verification, and visualization tests
 config.yaml       bind addresses, ports, paths
 ```
 
