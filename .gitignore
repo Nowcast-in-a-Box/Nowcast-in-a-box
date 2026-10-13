@@ -30,14 +30,29 @@ bin/**/nib-handler-*
 artifacts/*
 !artifacts/.gitkeep
 
-# Weights and observations never belong in git. See docs/weights.md.
+# Diagnostics run outputs. Keep the directory.
+runs/*
+!runs/.gitkeep
+
+# Weights never belong in git. Extension list, not a blanket binary rule.
+# *.bin is intentionally omitted: CMA radar observations use that suffix.
 *.onnx
+*.onnx.data
 *.ckpt
 *.pt
 *.pth
+*.pb
+*.tflite
+*.ort
+*.msgpack
+*.gguf
 *.h5
 *.hdf5
 *.safetensors
+
+# Local observation samples. Not demo fixtures.
+/data/
+testdata/
 
 # Design drafts stay on disk. Git keeps markdown.
 *.pdf

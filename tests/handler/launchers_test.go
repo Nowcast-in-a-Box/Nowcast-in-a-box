@@ -39,17 +39,30 @@ func TestUnixLaunchersForwardPathsArgumentsAndExitCode(t *testing.T) {
 			writeExecutable(t, filepath.Join(tools, "uname"), "#!/bin/bash\ncase \"$1\" in -s) echo "+tc.os+" ;; -m) echo "+tc.arch+" ;; esac\n")
 			writeExecutable(t, filepath.Join(tools, "curl"), "#!/bin/bash\necho unexpected-download >&2\nexit 90\n")
 			writeExecutable(t, filepath.Join(root, filepath.FromSlash(tc.binary)), "#!/bin/bash\nprintf '%s\\n' \"$@\"\nexit 23\n")
-			cmd := exec.Command(bash, filepath.Join(root, filepath.FromSlash(tc.script)), "-host", "localhost", "-config", "override with spaces.yaml")
-			cmd.Dir = t.TempDir()
-			cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"))
-			out, err := cmd.CombinedOutput()
-			exit, ok := err.(*exec.ExitError)
-			if !ok || exit.ExitCode() != 23 {
-				t.Fatalf("exit=%v output=%s", err, out)
-			}
-			want := strings.Join([]string{"-config", filepath.Join(root, "config.yaml"), "-host", "localhost", "-config", "override with spaces.yaml", ""}, "\n")
-			if string(out) != want {
-				t.Fatalf("output=%q want=%q", out, want)
+			for _, invocation := range []struct {
+				args, want []string
+			}{
+				{
+					[]string{"-host", "localhost", "-config", "override with spaces.yaml"},
+					[]string{"-config", filepath.Join(root, "config.yaml"), "-host", "localhost", "-config", "override with spaces.yaml", ""},
+				},
+				{
+					[]string{"diagnostics", "-request", "request with spaces.yaml", "-config", "override.yaml"},
+					[]string{"diagnostics", "-config", filepath.Join(root, "config.yaml"), "-request", "request with spaces.yaml", "-config", "override.yaml", ""},
+				},
+			} {
+				cmd := exec.Command(bash, append([]string{filepath.Join(root, filepath.FromSlash(tc.script))}, invocation.args...)...)
+				cmd.Dir = t.TempDir()
+				cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+				out, err := cmd.CombinedOutput()
+				exit, ok := err.(*exec.ExitError)
+				if !ok || exit.ExitCode() != 23 {
+					t.Fatalf("exit=%v output=%s", err, out)
+				}
+				want := strings.Join(invocation.want, "\n")
+				if string(out) != want {
+					t.Fatalf("output=%q want=%q", out, want)
+				}
 			}
 		})
 	}

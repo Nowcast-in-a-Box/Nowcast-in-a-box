@@ -4,18 +4,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	defaultHandlerHost = "127.0.0.1"
-	defaultHandlerPort = 8765
-	defaultReviewHost  = "127.0.0.1"
-	defaultReviewPort  = 8766
-	defaultArtifacts   = "artifacts"
-	configFileName     = "config.yaml"
+	defaultHandlerHost      = "127.0.0.1"
+	defaultHandlerPort      = 8765
+	defaultReviewHost       = "127.0.0.1"
+	defaultReviewPort       = 8766
+	defaultArtifacts        = "artifacts"
+	defaultRuns             = "runs"
+	defaultDiagnosticsImage = "nib-diagnostics:dev"
+	configFileName          = "config.yaml"
 )
 
 // Addr is a loopback bind address from config.yaml.
@@ -29,24 +33,33 @@ type Addr struct {
 type Paths struct {
 	Artifacts string `yaml:"artifacts" json:"artifacts"`
 	DataRoot  string `yaml:"data_root,omitempty" json:"data_root,omitempty"`
+	Runs      string `yaml:"runs,omitempty" json:"runs,omitempty"`
+}
+
+// Diagnostics is the metrics and visualization image. The request YAML
+// cannot override it.
+type Diagnostics struct {
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 }
 
 // Config is the host runtime settings loaded from config.yaml.
 // Source is the file that was read; it is not a YAML field.
 type Config struct {
-	Source  string `yaml:"-" json:"-"`
-	Handler Addr   `yaml:"handler"`
-	Review  Addr   `yaml:"review"`
-	Paths   Paths  `yaml:"paths"`
+	Source      string      `yaml:"-" json:"-"`
+	Handler     Addr        `yaml:"handler"`
+	Review      Addr        `yaml:"review"`
+	Paths       Paths       `yaml:"paths"`
+	Diagnostics Diagnostics `yaml:"diagnostics"`
 }
 
 // DefaultConfig is used when a key is missing from config.yaml, or when
 // no config file is found.
 func DefaultConfig() Config {
 	return Config{
-		Handler: Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
-		Review:  Addr{Host: defaultReviewHost, Port: defaultReviewPort},
-		Paths:   Paths{Artifacts: defaultArtifacts},
+		Handler:     Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
+		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
+		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns},
+		Diagnostics: Diagnostics{Image: defaultDiagnosticsImage},
 	}
 }
 
@@ -101,10 +114,17 @@ func (c *Config) applyDefaults() {
 	if c.Paths.Artifacts == "" {
 		c.Paths.Artifacts = d.Paths.Artifacts
 	}
+	if c.Paths.Runs == "" {
+		c.Paths.Runs = d.Paths.Runs
+	}
+	if c.Diagnostics.Image == "" {
+		c.Diagnostics.Image = d.Diagnostics.Image
+	}
 }
 
 func (c *Config) resolvePaths(baseDir string) {
 	c.Paths.Artifacts = resolveAgainst(baseDir, c.Paths.Artifacts)
+	c.Paths.Runs = resolveAgainst(baseDir, c.Paths.Runs)
 	if c.Paths.DataRoot != "" {
 		c.Paths.DataRoot = resolveAgainst(baseDir, c.Paths.DataRoot)
 	}
@@ -114,6 +134,50 @@ func (c *Config) applyDataRootEnv() {
 	if env := os.Getenv("NIB_DATA_ROOT"); env != "" {
 		c.Paths.DataRoot = env
 	}
+}
+
+// ResolveDataDir joins a request data_dir onto the host data root.
+// It does not create directories and has no production caller yet.
+// A later job slice must use this instead of a second path rule.
+func ResolveDataDir(dataRoot, dataDir string) (string, error) {
+	dataDir = strings.TrimSpace(dataDir)
+	if dataDir == "" {
+		return "", fmt.Errorf("data_dir is empty")
+	}
+	if runtime.GOOS != "windows" && foreignAbsolute(dataDir) {
+		return "", fmt.Errorf("data_dir %q is an absolute path for another operating system; pass a path relative to the data root", dataDir)
+	}
+	if filepath.IsAbs(dataDir) {
+		return filepath.Clean(dataDir), nil
+	}
+	if strings.TrimSpace(dataRoot) == "" {
+		return "", fmt.Errorf("relative data_dir requires a data root (NIB_DATA_ROOT or config.yaml paths.data_root)")
+	}
+	cleaned := filepath.Clean(dataDir)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("data_dir %q escapes the data root", dataDir)
+	}
+	root := filepath.Clean(dataRoot)
+	joined := filepath.Join(root, cleaned)
+	rel, err := filepath.Rel(root, joined)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("data_dir %q escapes the data root", dataDir)
+	}
+	return joined, nil
+}
+
+func foreignAbsolute(path string) bool {
+	if strings.HasPrefix(path, `\\`) {
+		return true
+	}
+	if len(path) < 3 || path[1] != ':' {
+		return false
+	}
+	if path[2] != '/' && path[2] != '\\' {
+		return false
+	}
+	letter := path[0]
+	return (letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z')
 }
 
 func resolveAgainst(baseDir, path string) string {

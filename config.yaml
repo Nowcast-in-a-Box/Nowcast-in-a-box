@@ -21,6 +21,7 @@ paths:
   # data_root:
 
 # Metrics and visualization image. The HTTP server does not start it.
+# The Dockerfile is a scaffold; its computation entry point is not implemented.
 # Build: docker build -t nib-diagnostics:dev diagnostics/
 diagnostics:
   image: nib-diagnostics:dev
