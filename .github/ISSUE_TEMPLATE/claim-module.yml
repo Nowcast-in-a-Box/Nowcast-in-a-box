@@ -7,40 +7,25 @@ body:
   - type: markdown
     attributes:
       value: |
-        GitHub will give this issue a number. Use that number in the
-        branch (`feat/12-short-slug`), commits (`feat: … (#12)`), and
+        GitHub will give this issue a number. Use that number in your commits (`feat: … (#12)`), and
         the PR (`Closes #12`). See [CONTRIBUTING.md](https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/blob/main/CONTRIBUTING.md).
-        Wait until a maintainer assigns the issue to you.
   - type: dropdown
-    id: action
+    id: part
     attributes:
-      label: Action
+      label: Part
+      description: "Which part of the project is this work related to?"
       options:
-        - claim
-        - comment
-        - object
-    validations:
-      required: true
-  - type: input
-    id: area
-    attributes:
-      label: Area
-      description: "Free text. Examples: handler, review, artifacts, compose, contracts, docs."
-      placeholder: handler
-    validations:
-      required: true
-  - type: input
-    id: owner
-    attributes:
-      label: GitHub username
-      description: Who will do the work if this claim is accepted.
-      placeholder: octocat
+        - Handler
+        - Visualization
+        - Evaluation
+        - Docker
+        - Framework
     validations:
       required: true
   - type: textarea
     id: plan
     attributes:
       label: Plan
-      description: What the first PR will contain, and how we will know it is done.
+      description: What will be done, and how. Briefly describe the plan for the work.
     validations:
       required: true
