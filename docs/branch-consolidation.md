@@ -16,7 +16,7 @@ The user requested that existing development branches be integrated into main an
 | `feat/init` | Record retirement of the original layout | Handler code evolved; root Go module and `tests/handler` replaced the nested module and tests. The old `review` directory was replaced by diagnostics. |
 | Already-ancestor branches | No source merge needed | `feat/handler-init`, `feat/diagnostics-stage`, `refactor/handler-layout`, `pilot/github-issue-sync`, and `fix/report-graphql-errors` were already ancestors. |
 
-An explicit `ours` history merge was used only for the audited superseded runtime branches. It preserves main's source tree rather than reintroducing old layouts or undoing delivered work. The original commits remain reachable in main's history.
+An explicit `ours` history merge was used only for the audited superseded runtime branches. It preserves main's source tree rather than reintroducing old layouts or undoing delivered work. Repository rules require a PR and do not allow merge commits on the PR merge path, so the original branch histories are retained in the integration PR and local backup bundles; main receives the verified consolidated tree through a squash merge.
 
 ## Other repositories
 
