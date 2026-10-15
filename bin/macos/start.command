@@ -21,7 +21,7 @@ case "$uname_m" in
 esac
 
 name="nib-handler-darwin-${goarch}"
-bin="$HERE/$name"
+bin="${NIB_HANDLER_BIN:-$HERE/$name}"
 if [[ ! -x "$bin" ]]; then
 	url="https://github.com/${REPO}/releases/latest/download/${name}"
 	echo "fetching $url" >&2
@@ -38,8 +38,18 @@ if [[ ! -x "$bin" ]]; then
 	chmod +x "$bin"
 fi
 
+if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 ]]; then
+	app="$HOME/Applications/NiB Handler.app"
+	mkdir -p "$app/Contents/MacOS"
+	printf '#!/bin/bash\nexec "%s" "$1"\n' "$bin" > "$app/Contents/MacOS/nib-handler"
+	chmod +x "$app/Contents/MacOS/nib-handler"
+	printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>app.nowcast.nib-handler</string><key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>nib</string></array></dict></array></dict></plist>\n' > "$app/Contents/Info.plist"
+	lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+	"$lsregister" -f "$app" >/dev/null 2>&1 || true
+fi
+
 if [[ "${1:-}" == diagnostics ]]; then
 	shift
 	exec "$bin" diagnostics -config "$ROOT/config.yaml" "$@"
 fi
-exec "$bin" -config "$ROOT/config.yaml" "$@"
+exec "$bin" -config "${NIB_HANDLER_CONFIG:-$ROOT/config.yaml}" "$@"

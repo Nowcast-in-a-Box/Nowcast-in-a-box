@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--id")
     parser.add_argument("--atlas-revision")
     parser.add_argument("--list-samples", action="store_true")
+    parser.add_argument("--check-window", action="store_true")
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=100)
     args = parser.parse_args()
@@ -31,6 +32,13 @@ def main():
                 )
             )
         )
+        return
+    if args.check_window:
+        if not args.event or not args.start:
+            parser.error("check-window requires --event and --start")
+        from ingestion.samples import check_window
+
+        print(json.dumps(check_window(args.data, args.catalog, args.event, args.start)))
         return
     if not all((args.event, args.start, args.runs, args.id, args.atlas_revision)):
         parser.error(

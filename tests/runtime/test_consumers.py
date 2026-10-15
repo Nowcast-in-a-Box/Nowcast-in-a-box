@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from utils.stored_fields import add_forecast
-from test_stored_fields import run, fixture_window, START
+from test_stored_fields import fixture_window, START
+from test_stored_fields import run as run  # noqa: F811 — pytest fixture shared by these tests
 
 
 def test_prediction_gap_does_not_mark_observation_gap(run):
@@ -26,6 +27,34 @@ def test_prediction_gap_does_not_mark_observation_gap(run):
     )
     assert stats.unavailable == 1
     assert stats.obs_missing == 0
+
+
+def test_three_models_are_all_scored_in_one_verification(run):
+    import json
+    from diagnostics.verification_run import verification
+
+    models = ("nowcastnet", "exprecast", "wadepre")
+    for index, model in enumerate(models):
+        add_forecast(
+            run,
+            model,
+            "0.1.0",
+            "a" * 64,
+            np.full((20, 4, 4), index + 2, np.float32),
+            list(range(5, 101, 5)),
+        )
+    result = verification(
+        run,
+        [{"family": "continuous", "items": ["mae", "rmse"]}],
+        models=list(models),
+    )
+    summary = json.loads((run / result["path"] / "summary.json").read_text())
+    assert result["status"] == "succeeded"
+    assert summary["ran"] == 60
+    for method in ("mae", "rmse"):
+        records = summary["scores"][method]["records"]
+        assert len(records) == 60
+        assert {record["member"] for record in records} == set(models)
 
 
 def test_verification_attempts_preserve_previous_reports(run):

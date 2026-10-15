@@ -110,7 +110,7 @@ func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
 		server.Routes().ServeHTTP(response, req)
 		var job handler.Job
 		_ = json.Unmarshal(response.Body.Bytes(), &job)
-		if job.Status == "succeeded" {
+		if job.Status == "ready" {
 			break
 		}
 		if job.Status == "failed" || time.Now().After(deadline) {
@@ -125,7 +125,11 @@ func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
 	}
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	if len(runner.calls) != 4 {
+	joined := ""
+	for _, call := range runner.calls {
+		joined += strings.Join(call, " ")
+	}
+	if len(runner.calls) != 4 || strings.Contains(joined, "diagnostics") {
 		t.Fatalf("calls=%v", runner.calls)
 	}
 	for _, stage := range []string{"ingestion", "wadepre"} {

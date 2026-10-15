@@ -6,7 +6,28 @@ from pathlib import Path
 
 import h5py
 
-from ingestion.sevir import grid_from_row, stamp, text, utc
+from ingestion.sevir import grid_from_row, read_grid, stamp, text, utc
+
+
+def check_window(path, catalog_path, event_id, start_time):
+    """Confirm one window from metadata only. Do not read meteorological arrays."""
+    wanted = utc(start_time).strftime("%Y-%m-%d %H:%M:%S")
+    with h5py.File(path, "r") as handle:
+        events = [text(value) for value in handle["event_id"][:]]
+        starts = [text(value) for value in handle["start_time_utc"][:]]
+    rows = [
+        index
+        for index, (event, start) in enumerate(zip(events, starts))
+        if event == event_id and start == wanted
+    ]
+    if len(rows) != 1:
+        raise FileNotFoundError(f"SEVIR window not found: {event_id} {wanted}")
+    read_grid(catalog_path, event_id)
+    return {
+        "event_id": event_id,
+        "context_start_time": stamp(utc(start_time)),
+        "ready": True,
+    }
 
 
 def list_samples(path, catalog_path, *, offset=0, limit=100):
