@@ -1,125 +1,147 @@
 # Contributing
 
-This repository is the Nowcast-in-a-Box local runtime. The host program
-is the handler. Model code runs in Docker. Metrics and visualization
-belong in the diagnostics container. The existing handler CLI stages its
-invocation; the computation entry point and HTTP integration are still pending.
+This documentation is for anyone who wants to contribute to the NiB framework.
 
-Read this before you write code. Maintainers: [GitHub setup][gh].
+We appreciate contributors like you; this project is better because of you.
 
-Further reading:
+Get started.
 
-- [Development][dev]
-- [How we work][collab]
-- [Weights on Hugging Face][weights]
-- [Architecture][docs]
+## Before you start
 
-## Git workflow
+You need basic knowledge of Git, GitHub, and code style. If not, check online tutorials; it will not take long.
 
-GitHub Flow. One long-lived branch: `main`.
+### Assignment
 
-The work ID is the GitHub issue number. GitHub turns `#12` in commits and PRs into a link.
+**Do not start working until an issue is assigned to you.** This prevents duplicate work on the same issue.
 
-```text
-main
-  └── feat/status-docker     your branch
-        └── pull request → main   body contains Closes #12
+1. Search the issue list and check whether a similar issue already exists.
+2. If an issue is ongoing, join it by adding comments.
+3. If not, submit a new issue and assign it to yourself.
+
+### New issue type
+
+So far, this repo has offered two types of issues:
+
+- *Claim*: Say that you want to do something.
+- *Bug:* Report a bug while running, or anything that does not feel right.
+
+If you are a developer, a claim is for you. Bug reports are mainly for users.
+
+### Git and GitHub
+
+You are assigned to do something now. Before you start, do it on your own branch.
+
+**You cannot edit the `main` branch directly.** Check out `main`, then open a new branch like `feat/some-work`.
+
+```
+  ┼── feat/some-work                  # Your branch
+  └── feat/new-things-a               # other's branch; they are working on it
+  └── fix/docker-bug-fixing           # someone is fixing something
 ```
 
-Do not create `develop` or `release/*`. Do not push commits to `main`.
+Name a branch like:
 
-### Branch names
-
-```text
-<type>/<short-slug>
+```
+{type}/{introduction}
 ```
 
-`type` is the same set as commit types below. Examples:
-`feat/uri-scheme`, `fix/loopback-windows`, `docs/weights`.
+The recommended options for {type} are:
 
-One branch, one issue. If the work splits, open a new issue and a new
-branch.
+- fix  Bug fixed
+- feat  New feature introduced
+- docs Update documentation
+- test Testing related
+- ci Continuous system
+- i18n Internationalization and localization
 
-### Commit messages
+You may use others, but keep it neat and formal.
 
-We follow [Conventional Commits][conv]. Every commit on a branch, and
-the PR title (which becomes the squash commit on `main`), uses:
+To start a new branch, use commands like:
 
-```text
-<type>(<scope>): (#<issue-number>) <summary> 
+```
+git fetch origin
+git checkout main
+git pull
+git checkout -b feat/some-work
 ```
 
-`scope` is optional. `(#<issue>)` is the issue number if there is one.
+### Coding
 
-```text
-feat:(#12) report docker daemon version on /v1/status 
-fix(handler): reject 0.0.0.0 on windows as well
-docs: describe branch protection
+Work on coding in your branch.
+
+Please keep each branch limited to related work*.*
+
+### Testing
+
+Most code should be tested before committing to Git.
+
+Tests live under `tests/`. Run `go test ./...` for the handler; each diagnostics module documents its Python suite.
+
+### Commit
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Put the issue number in the subject as (#12).
+
+Every commit and the PR title look like:
+
+```
+<type>(<scope>):(#<issue>) <summary>
 ```
 
-| Type | When |
-| --- | --- |
-| `feat` | New behaviour |
-| `fix` | A bug |
-| `docs` | Documentation only |
-| `test` | Tests only |
-| `ci` | GitHub Actions |
-| `chore` | Tooling, ignore files, busywork |
-| `refactor` | Code change with no behaviour change |
+(<scope>) is optional. (#<issue>) is required when the work has an issue.
+
+Examples:
+
+```
+feat:(#12) report docker daemon version on /v1/status
 
 
+fix(handler):(#18) reject 0.0.0.0 on windows as well
 
-Summary:
 
-- Imperative: `add` / `reject` / `report`, not `added` or `adds`
+docs:(#7) describe branch protection
+```
+
+Subject line:
+
+- Imperative: add, reject, report
 - English, lowercase after the colon, no trailing period
-- Roughly 72 characters for the whole first line
-- One change. Unrelated work belongs in a separate commit or issue.
+- Keep the first line around 72 characters.
+- One change per commit
 
-Body is optional. Use it to explain why; keep it simple and clean.
+Breaking change (rare):
 
-Footer: the PR body has `Closes #12,` so GitHub closes the issue on
-merge. Individual commits only need `(#12)` in the subject.
-
-Breaking change (rare): `feat(handler)!: drop YAML v0 run config (#40)`
-and a `BREAKING CHANGE:` footer explaining what callers must do.
-
-Squash-merge uses the PR title as the commit on `main`. Put `(#12)` in
-that title too.
-
-### How to send a change
-
-1. Open an issue ([claim][claim] or [bug][bug]) and wait until it is
-   assigned to you. That issue's number is the ID for the branch,
-   commits, and PR.
-2. `git fetch origin && git checkout main && git pull`
-3. `git checkout -b feat/short-slug` (name it by yourself)
-4. Do you job
-5. Open a pull request against `main`. Title:
-   `feat:(#12) short description `. Body: `Closes #12`.
-6. Wait for review
+```
+feat(handler)!:(#40) drop YAML v0 run config
 
 
+BREAKING CHANGE: run configs must use schema v1
+```
 
-## Python formatting
+Commands for committing:
 
-Format Python with Black before a pull request. The config is
-`black.toml`. Run `scripts/format-python.sh`. Do not add a root
-`pyproject.toml` to hold that config.
-
-## What not to commit
-
-Weights, checkpoints, ONNX, HDF5, run PNGs, PDF, Word, Visio, `workspace/`,
-`runs/`, contents of `artifacts/`, secrets, `.env`, a root `pyproject.toml` /
-`uv.lock`. See [weights.md][weights].
+```
+git add -p
+git commit -m "feat:(#12) add nib:// handler uri scheme"
+```
 
 
+## Pull requests
 
-[gh]: docs/github-setup.md
-[dev]: docs/development.md
-[collab]: docs/collaboration.md
-[weights]: docs/weights.md
-[docs]: docs/
-[claim]: .github/ISSUE_TEMPLATE/claim-module.yml
-[bug]: .github/ISSUE_TEMPLATE/bug.yml
-[conv]: https://www.conventionalcommits.org/en/v1.0.0/
+Push the branch:
+
+```
+git push -u origin feat/some-work
+```
+
+On GitHub, open a pull request from that branch into main:
+
+1. GitHub often shows a **Compare & pull request** banner after the push. Otherwise, go to **Pull requests** → **New pull request**.
+2. Set the base to main and compare it to your branch (`feat/some-work`).
+3. The title should match the commit format (feat:(#12) add nib:// handler uri scheme), because GitHub writes that title onto `main`.
+4. Create the pull request and wait for review.
+
+## Runtime boundaries and formatting
+
+The host handler is Go. Model inference, metrics, and visualization run in Docker. Python formatting uses `black.toml` and `scripts/format-python.sh`.
+
+Do not commit weights, checkpoints, ONNX, HDF5, run images, PDFs, Word or Visio files, secrets, runtime outputs under `runs/`, or downloaded `artifacts/`. Do not add a root Python project or `uv.lock`. See [weights](docs/weights.md).
