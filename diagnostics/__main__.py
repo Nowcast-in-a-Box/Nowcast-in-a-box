@@ -93,7 +93,7 @@ def main():
             print(json.dumps(error), file=sys.stderr)
     source = StoredFields(directory)
     source.manifest["status"] = "partial" if failed else "succeeded"
-    if not failed and len(results) > 1:
+    if not failed and results:
         report = write_report(directory, results)
         source.manifest["diagnostics"].append(report)
         results.append(report)
@@ -114,11 +114,15 @@ def write_report(directory, results):
         if manifest_path.is_file()
         else {}
     )
+    stored = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+    notice = stored.get("sample", {}).get("provenance", {}).get("notice", "")
     for index, result in enumerate(results):
         source = directory / result["entry"].rsplit("/", 1)[0]
         images = []
         names = [
-            name for name in ("map.png", "animation.gif") if (source / name).is_file()
+            name
+            for name in ("comparison.png", "map.png", "animation.gif")
+            if (source / name).is_file()
         ]
         names.extend(image.name for image in sorted(source.glob("*.svg")))
         for name in names:
@@ -138,7 +142,7 @@ def write_report(directory, results):
         '<!doctype html><meta charset="utf-8"><title>NiB result</title>'
         "<style>body{margin:0;font-family:sans-serif;background:#edf1f2}"
         "main{max-width:1480px;margin:auto;padding:32px}img{width:100%;height:auto;background:#fff}</style>"
-        f'<main><h1>Run result</h1>{ "".join(sections) }</main>'
+        f'<main><h1>Run result</h1><p>{escape(notice)}</p>{ "".join(sections) }</main>'
     )
     return {
         "kind": "report",

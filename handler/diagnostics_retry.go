@@ -61,8 +61,10 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		config["metrics"] = groups
 		config["verification_models"] = selection.Models
 	}
+	data, _ := manifest["data"].(map[string]any)
+	needsBasemap := data["id"] != "cma_radar"
 	if selection.Visualization {
-		if !s.basemapReady() {
+		if needsBasemap && !s.basemapReady() {
 			runtimeError(w, 409, fmt.Errorf("prepare offline WMO basemap"))
 			return
 		}
@@ -117,7 +119,7 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 	volumes := []string{volumeSpec(directory, "/run", false),
 		volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true),
 		volumeSpec(filepath.Join(directory, "forecasts"), "/run/forecasts", true)}
-	if selection.Visualization {
+	if selection.Visualization && needsBasemap {
 		volumes = append(volumes, volumeSpec(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo"), "/basemap", true))
 	}
 	service := map[string]any{"image": s.Config.Diagnostics.Image, "command": []string{"--config", "/run/logs/diagnostics-" + attempt + "/request.json"}, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}}

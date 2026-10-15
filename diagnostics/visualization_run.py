@@ -27,6 +27,10 @@ ROOT = Path(__file__).resolve().parent / "visualization"
 
 
 def visualization(directory, model_id, basemap_path, *, attempt_id=None):
+    if StoredFields(directory).manifest["data"]["id"] == "cma_radar":
+        from diagnostics.cma_visualization import visualization as cma_visualization
+
+        return cma_visualization(directory, model_id, attempt_id=attempt_id)
     field = display_grid(visualization_field(directory, model_id))
     source_record = ROOT / "basemap_sources/wmo-source.json"
     acquisition_record = Path(basemap_path) / "acquisition.json"
@@ -36,11 +40,16 @@ def visualization(directory, model_id, basemap_path, *, attempt_id=None):
         )
     basemap = load_wmo_basemap(Path(basemap_path), source_record)
     verify_source_identity("wmo", basemap, source_record)
+    source = StoredFields(directory)
+    is_cref = field.units == "dBZ"
+    notice = (
+        source.manifest["sample"]
+        .get("provenance", {})
+        .get("notice", "VIL raw encoding; display resampling only")
+    )
     scene = prepare_scene(
         field,
-        RenderConfig(
-            vmin=0, vmax=255, notice="VIL raw encoding; display resampling only"
-        ),
+        RenderConfig(vmin=0, vmax=75 if is_cref else 255, notice=notice),
         basemap,
     )
     attempt_id = attempt_id or uuid.uuid4().hex

@@ -29,7 +29,9 @@ def verification(directory, metrics, *, attempt_id=None, models=None):
     model_ids = list(manifest["forecasts"]) if models is None else models
     if not model_ids or any(model not in manifest["forecasts"] for model in model_ids):
         raise ValueError("verification requires selected saved Forecasts")
-    reference = access.get_observation("sevir", initial)
+    data_id = manifest["data"]["id"]
+    field_spec = manifest["observations"]["target"]
+    reference = access.get_observation(data_id, initial)
     dx, dy = np.diff(reference.coords.x), np.diff(reference.coords.y)
     if not np.allclose(dx, dx[0]) or not np.allclose(dy, dx[0]):
         raise ValueError("verification currently requires square regular cells")
@@ -37,15 +39,20 @@ def verification(directory, metrics, *, attempt_id=None, models=None):
         group_id=manifest["id"],
         name=manifest["sample"]["sample_id"],
         ruler=Ruler(
-            "sevir",
-            "raw",
-            5,
+            data_id,
+            field_spec["unit"],
+            manifest["data"].get("cadence_minutes", 5),
             reference.coords.extent,
             float(dx[0]),
             reference.coords.crs,
         ),
         members=tuple(
-            Member(m, "vil", "raw", tuple(access.list_predictions(m, initial)))
+            Member(
+                m,
+                field_spec["variable"],
+                field_spec["unit"],
+                tuple(access.list_predictions(m, initial)),
+            )
             for m in model_ids
         ),
         metrics=tuple(

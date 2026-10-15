@@ -13,6 +13,8 @@ import (
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	var request struct {
+		ProductID string   `json:"data_product_id,omitempty"`
+		DataID    string   `json:"data_id,omitempty"`
 		EventID   string   `json:"event_id"`
 		StartTime string   `json:"context_start_time"`
 		Models    []string `json:"models"`
@@ -21,6 +23,14 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		runtimeError(w, 400, err)
+		return
+	}
+	if request.ProductID != "" && request.ProductID != map[string]string{"sevir": "sevir-vil", "cma_radar": "cma-radar"}[s.dataID()] {
+		runtimeError(w, 409, fmt.Errorf("selected data product differs from configured local dataset"))
+		return
+	}
+	if request.DataID != "" && request.DataID != s.dataID() {
+		runtimeError(w, 409, fmt.Errorf("selected data differs from handler configuration"))
 		return
 	}
 	checks := []Check{}
@@ -37,7 +47,9 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		checks = append(checks, Check{ID: "weights", OK: false, Message: "select a model before checking weights"})
 	}
 	for _, model := range request.Models {
-		checks = append(checks, weightCheck(s.Config, model))
+		cfg := s.Config
+		cfg.Runtime.Dataset = s.dataID()
+		checks = append(checks, weightCheck(cfg, model))
 	}
 	ok := true
 	for _, check := range checks {
@@ -52,10 +64,9 @@ func (s *Server) windowCheck(parent context.Context, data, catalog, eventID, sta
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Minute)
 	defer cancel()
-	code, out, err := s.docker(ctx, "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
-		"-v", volumeSpec(data, "/inputs/data.h5", true), "-v", volumeSpec(catalog, "/inputs/CATALOG.csv", true),
-		s.Config.Runtime.IngestionImage, "--data", "/inputs/data.h5", "--catalog", "/inputs/CATALOG.csv",
-		"--check-window", "--event", eventID, "--start", start)
+	args := []string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}
+	args = append(args, s.ingestionArgs(data, catalog, "--check-window", "--event", eventID, "--start", start)...)
+	code, out, err := s.docker(ctx, args...)
 	if err != nil || code != 0 {
 		return Check{ID: "window", OK: false, Message: fmt.Sprintf("metadata check failed: %v %s", err, strings.TrimSpace(string(out)))}
 	}
@@ -73,7 +84,14 @@ func weightCheck(cfg Config, model string) Check {
 	if name == "" {
 		return Check{ID: "weight:" + model, OK: false, Message: "unknown model"}
 	}
-	path := filepath.Join(cfg.Paths.Artifacts, "sevir", model, name)
+	dataset := cfg.Runtime.Dataset
+	if dataset == "" {
+		dataset = "sevir"
+	}
+	if dataset == "cma_radar" && model != "nowcastnet" {
+		return Check{ID: "weight:" + model, OK: false, Message: "Choose a model paired with CMA Radar"}
+	}
+	path := filepath.Join(cfg.Paths.Artifacts, dataset, model, name)
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {
 		return Check{ID: "weight:" + model, OK: false, Message: "weight is not on this machine; download is required before running. Revision lookup stays paused."}
