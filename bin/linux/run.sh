@@ -38,6 +38,13 @@ if [[ ! -x "$bin" ]]; then
 	chmod +x "$bin"
 fi
 
+if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 ]]; then
+	desktop="${XDG_DATA_HOME:-$HOME/.local/share}/applications/nib-handler.desktop"
+	mkdir -p "$(dirname "$desktop")"
+	printf '[Desktop Entry]\nType=Application\nName=NiB handler\nExec=%s %%u\nMimeType=x-scheme-handler/nib;\nNoDisplay=true\n' "$bin" > "$desktop"
+	xdg-mime default nib-handler.desktop x-scheme-handler/nib >/dev/null 2>&1 || true
+fi
+
 if [[ "${1:-}" == diagnostics ]]; then
 	shift
 	exec "$bin" diagnostics -config "$ROOT/config.yaml" "$@"

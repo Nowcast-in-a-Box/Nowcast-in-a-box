@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,13 +30,17 @@ type Job struct {
 }
 
 func (s *Server) runtimeRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/pair", s.handlePair)
 	mux.HandleFunc("GET /v1/settings", s.authorize(s.handleSettings))
 	mux.HandleFunc("PATCH /v1/settings", s.authorize(s.handleSettings))
+	mux.HandleFunc("POST /v1/settings/pick", s.authorize(s.handlePickDataRoot))
 	mux.HandleFunc("POST /v1/runs/{id}/diagnostics", s.authorize(s.handleRetryDiagnostics))
 	mux.HandleFunc("GET /v1/capabilities", s.authorize(s.handleCapabilities))
+	mux.HandleFunc("POST /v1/preflight", s.authorize(s.handlePreflight))
 	mux.HandleFunc("GET /v1/datasets/sevir/samples", s.authorize(s.handleSamples))
 	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))
 	mux.HandleFunc("GET /v1/jobs/{id}", s.authorize(s.handleJob))
+	mux.HandleFunc("GET /v1/jobs/{id}/log", s.authorize(s.handleJobLog))
 	mux.HandleFunc("GET /v1/runs", s.authorize(s.handleRuns))
 	mux.HandleFunc("GET /v1/runs/{id}", s.authorize(s.handleRun))
 	mux.HandleFunc("GET /v1/runs/{id}/files/{file...}", s.handleResultFile)
@@ -281,22 +286,28 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	id, err := newRunID(time.Now())
-	if err != nil {
-		s.jobsMu.Unlock()
-		runtimeError(w, 500, err)
-		return
+	id := s.matchingRunID(request)
+	reuse := id != ""
+	if !reuse {
+		id, err = newRunID(time.Now())
+		if err != nil {
+			s.jobsMu.Unlock()
+			runtimeError(w, 500, err)
+			return
+		}
 	}
 	directory := filepath.Join(s.Config.Paths.Runs, id)
-	if err := os.MkdirAll(s.Config.Paths.Runs, 0o755); err != nil {
+	if err = os.MkdirAll(s.Config.Paths.Runs, 0o755); err != nil {
 		s.jobsMu.Unlock()
 		runtimeError(w, 500, err)
 		return
 	}
-	if err := os.Mkdir(directory, 0o755); err != nil {
-		s.jobsMu.Unlock()
-		runtimeError(w, 500, err)
-		return
+	if !reuse {
+		if err = os.Mkdir(directory, 0o755); err != nil {
+			s.jobsMu.Unlock()
+			runtimeError(w, 500, err)
+			return
+		}
 	}
 	job := &Job{ID: id, Status: "queued", Stage: "queued", Request: request, IdempotencyKey: key, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	if err := writeJob(directory, job); err != nil {
@@ -316,6 +327,43 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, copy)
 }
 
+func sameRunConfig(stored, next RuntimeRequest) bool {
+	left := append([]string(nil), stored.Models...)
+	right := append([]string(nil), next.Models...)
+	sort.Strings(left)
+	sort.Strings(right)
+	return stored.EventID == next.EventID && stored.StartTime == next.StartTime && strings.Join(left, "\x00") == strings.Join(right, "\x00")
+}
+
+// matchingRunID reuses one run when the sample and selected models are unchanged.
+// A different sample or model set starts a new run. Metric choices do not.
+func (s *Server) matchingRunID(request RuntimeRequest) string {
+	for id, job := range s.jobs {
+		if sameRunConfig(job.Request, request) {
+			return id
+		}
+	}
+	entries, err := os.ReadDir(s.Config.Paths.Runs)
+	if err != nil {
+		return ""
+	}
+	var found string
+	for _, entry := range entries {
+		if !entry.IsDir() || !idPattern.MatchString(entry.Name()) {
+			continue
+		}
+		raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, entry.Name(), "job.json"))
+		var recorded Job
+		if readErr != nil || json.Unmarshal(raw, &recorded) != nil || !sameRunConfig(recorded.Request, request) {
+			continue
+		}
+		if found == "" || entry.Name() > found {
+			found = entry.Name()
+		}
+	}
+	return found
+}
+
 func writeJob(directory string, job *Job) error {
 	raw, err := json.MarshalIndent(job, "", "  ")
 	if err != nil {
@@ -326,6 +374,20 @@ func writeJob(directory string, job *Job) error {
 		return err
 	}
 	return os.Rename(temporary, filepath.Join(directory, "job.json"))
+}
+
+func (s *Server) note(message string) {
+	if s.Config.Source == "" {
+		return
+	}
+	dir := filepath.Join(filepath.Dir(s.Config.Source), "logs")
+	_ = os.MkdirAll(dir, 0o755)
+	file, err := os.OpenFile(filepath.Join(dir, "handler.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, _ = fmt.Fprintf(file, "%s %s\n", time.Now().UTC().Format(time.RFC3339), message)
 }
 
 func (s *Server) updateJob(id, status, stage string, err error) {
@@ -342,6 +404,14 @@ func (s *Server) updateJob(id, status, stage string, err error) {
 		job.Error = err.Error()
 		job.Status = "failed"
 	}
+}
+
+func (s *Server) ExecutionAvailableForTest() bool {
+	ok := s.executionMu.TryLock()
+	if ok {
+		s.executionMu.Unlock()
+	}
+	return ok
 }
 
 func (s *Server) executeJob(id string) {
@@ -408,18 +478,26 @@ func (s *Server) executeJob(id string) {
 		"-v", volumeSpec(directory, "/workspace", false), s.Config.Runtime.IngestionImage, "--data", "/inputs/data.h5", "--catalog", "/inputs/CATALOG.csv",
 		"--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 	if err == nil {
-		entries, readErr := os.ReadDir(filepath.Join(directory, id))
+		child := filepath.Join(directory, id)
+		entries, readErr := os.ReadDir(child)
 		if readErr != nil {
 			err = readErr
 		} else {
 			for _, entry := range entries {
-				if moveErr := os.Rename(filepath.Join(directory, id, entry.Name()), filepath.Join(directory, entry.Name())); moveErr != nil {
+				if entry.Name() == "forecasts" {
+					continue
+				}
+				target := filepath.Join(directory, entry.Name())
+				if entry.Name() == "inputs" || entry.Name() == "manifest.json" {
+					_ = os.RemoveAll(target)
+				}
+				if moveErr := os.Rename(filepath.Join(child, entry.Name()), target); moveErr != nil {
 					err = moveErr
 					break
 				}
 			}
 			if err == nil {
-				err = os.Remove(filepath.Join(directory, id))
+				err = os.RemoveAll(child)
 			}
 		}
 	}
@@ -427,7 +505,30 @@ func (s *Server) executeJob(id string) {
 		s.updateJob(id, "failed", "ingestion", err)
 		return
 	}
+	if len(request.ModelNames) > 0 {
+		rawManifest, readErr := os.ReadFile(filepath.Join(directory, "manifest.json"))
+		manifest := map[string]any{}
+		if readErr == nil {
+			readErr = json.Unmarshal(rawManifest, &manifest)
+		}
+		if readErr != nil {
+			s.updateJob(id, "failed", "ingestion", readErr)
+			return
+		}
+		manifest["model_names"] = request.ModelNames
+		raw, marshalErr := json.MarshalIndent(manifest, "", "  ")
+		if marshalErr != nil {
+			s.updateJob(id, "failed", "ingestion", marshalErr)
+			return
+		}
+		if writeErr := os.WriteFile(filepath.Join(directory, "manifest.json"), raw, 0o644); writeErr != nil {
+			s.updateJob(id, "failed", "ingestion", writeErr)
+			return
+		}
+	}
 	for _, model := range request.Models {
+		// Rerunning this configuration replaces only this model's previous forecast.
+		_ = os.RemoveAll(filepath.Join(directory, "forecasts", model))
 		image := s.Config.Runtime.ModelImages[model]
 		if image == "" {
 			s.updateJob(id, "failed", "model", fmt.Errorf("model image not configured"))
@@ -436,34 +537,12 @@ func (s *Server) executeJob(id string) {
 		weights := filepath.Join(s.Config.Paths.Artifacts, "sevir", model, modelWeightName(model))
 		err = run(model, "-v", volumeSpec(directory, "/run", false), "-v", volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true), "-v", volumeSpec(weights, "/weights/model.onnx", true), image, "--run", "/run", "--weights", "/weights/model.onnx")
 		if err != nil {
+			s.note(id + " model failed: " + err.Error())
 			s.updateJob(id, "failed", model, err)
 			return
 		}
 	}
-	if len(request.Metrics) > 0 || request.Visualization {
-		config := map[string]any{"version": 2, "run": "/run"}
-		if len(request.Metrics) > 0 {
-			config["metrics"] = request.Metrics
-			config["verification_models"] = request.VerificationModels
-		}
-		args := []string{"-v", volumeSpec(directory, "/run", false),
-			"-v", volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true),
-			"-v", volumeSpec(filepath.Join(directory, "forecasts"), "/run/forecasts", true)}
-		if request.Visualization {
-			config["visualization"] = map[string]any{"models": request.VisualizationModels, "basemap": "/basemap"}
-			args = append(args, "-v", volumeSpec(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo"), "/basemap", true))
-		}
-		raw, _ := json.Marshal(config)
-		err = os.WriteFile(filepath.Join(directory, "diagnostics-request.json"), raw, 0o644)
-		if err == nil {
-			err = run("diagnostics", append(args, s.Config.Diagnostics.Image, "--config", "/run/diagnostics-request.json")...)
-		}
-		if err != nil {
-			s.updateJob(id, "partial", "diagnostics", err)
-			return
-		}
-	}
-	s.updateJob(id, "succeeded", "finished", nil)
+	s.updateJob(id, "ready", "model", nil)
 }
 
 func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
@@ -498,6 +577,32 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 		_ = writeJob(filepath.Join(s.Config.Paths.Runs, id), &recorded)
 	}
 	writeJSON(w, 200, recorded)
+}
+
+func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idPattern.MatchString(id) {
+		runtimeError(w, 400, fmt.Errorf("invalid job ID"))
+		return
+	}
+	logs := filepath.Join(s.Config.Paths.Runs, id, "logs")
+	entries, err := os.ReadDir(logs)
+	if err != nil {
+		writeJSON(w, 200, map[string]string{"path": filepath.Join(filepath.Dir(s.Config.Source), "logs", "handler.log"), "tail": ""})
+		return
+	}
+	var tail strings.Builder
+	for _, entry := range entries {
+		raw, readErr := os.ReadFile(filepath.Join(logs, entry.Name()))
+		if readErr == nil {
+			tail.WriteString(entry.Name() + "\n" + string(raw))
+		}
+	}
+	text := tail.String()
+	if len(text) > 8000 {
+		text = text[len(text)-8000:]
+	}
+	writeJSON(w, 200, map[string]string{"path": filepath.Join(filepath.Dir(s.Config.Source), "logs", "handler.log"), "tail": text})
 }
 
 func runtimeError(w http.ResponseWriter, status int, err error) {

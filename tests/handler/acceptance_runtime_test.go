@@ -28,6 +28,7 @@ func selectionPackage(t *testing.T, event string, models []string, diagnostics s
 	for _, model := range models {
 		items = append(items, map[string]any{
 			"order_item_id": model, "product_id": model + "-sevir", "version_id": "v1", "category": "model",
+			"product_name":           "Display name " + model,
 			"resolved_configuration": map[string]any{},
 			"input_bindings": []map[string]any{{
 				"consumer_order_item_id": model, "producer_order_item_id": "data",
@@ -35,24 +36,30 @@ func selectionPackage(t *testing.T, event string, models []string, diagnostics s
 			}},
 		})
 	}
+	forecastBindings := func(consumer string) []map[string]any {
+		bindings := []map[string]any{}
+		for _, model := range models {
+			bindings = append(bindings, map[string]any{
+				"consumer_order_item_id": consumer, "producer_order_item_id": model,
+				"input_name": "forecast", "output_name": "forecast", "compatibility": "compatible",
+			})
+		}
+		return bindings
+	}
 	if diagnostics == "metrics" || diagnostics == "both" {
 		items = append(items, map[string]any{
 			"order_item_id": "metrics", "product_id": "vil-verification", "version_id": "v1", "category": "evaluation",
 			"resolved_configuration": map[string]any{"methods": []string{"mae"}, "levels": []float64{16}, "half_windows": []int{0}},
-			"input_bindings": []map[string]any{
-				{"consumer_order_item_id": "metrics", "producer_order_item_id": "data", "input_name": "observations", "output_name": "observations", "compatibility": "compatible"},
-				{"consumer_order_item_id": "metrics", "producer_order_item_id": models[0], "input_name": "forecast", "output_name": "forecast", "compatibility": "compatible"},
-			},
+			"input_bindings": append(forecastBindings("metrics"), map[string]any{
+				"consumer_order_item_id": "metrics", "producer_order_item_id": "data", "input_name": "observations", "output_name": "observations", "compatibility": "compatible",
+			}),
 		})
 	}
 	if diagnostics == "visualization" || diagnostics == "both" {
 		items = append(items, map[string]any{
 			"order_item_id": "maps", "product_id": "vil-visualization", "version_id": "v1", "category": "visualization",
 			"resolved_configuration": map[string]any{},
-			"input_bindings": []map[string]any{{
-				"consumer_order_item_id": "maps", "producer_order_item_id": models[0],
-				"input_name": "forecast", "output_name": "forecast", "compatibility": "compatible",
-			}},
+			"input_bindings":         forecastBindings("maps"),
 		})
 	}
 	files := map[string][]byte{}
@@ -88,6 +95,23 @@ func selectionPackage(t *testing.T, event string, models []string, diagnostics s
 	}
 	sum := sha256.Sum256(raw.Bytes())
 	return raw.Bytes(), hex.EncodeToString(sum[:])
+}
+
+func TestThreeModelPackageBindsEveryDiagnosticModel(t *testing.T) {
+	models := []string{"nowcastnet", "exprecast", "wadepre"}
+	raw, hash := selectionPackage(t, "S710140", models, "both")
+	request, err := handler.ParseRuntimePackage(raw, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range models {
+		if request.ModelNames[model] != "Display name "+model {
+			t.Fatalf("catalog name was lost: %+v", request.ModelNames)
+		}
+	}
+	if strings.Join(request.VerificationModels, ",") != strings.Join(models, ",") || strings.Join(request.VisualizationModels, ",") != strings.Join(models, ",") {
+		t.Fatalf("models were lost: %+v", request)
+	}
 }
 
 func submitSelection(t *testing.T, server *handler.Server, event string, models []string, diagnostics, key string) handler.Job {
@@ -129,6 +153,46 @@ func waitJob(t *testing.T, server *handler.Server, id, want string) handler.Job 
 	}
 }
 
+func TestSameConfigurationRerunsInPlaceButKeepsOtherModels(t *testing.T) {
+	cfg := handler.DefaultConfig()
+	cfg.Paths.Runs = t.TempDir()
+	cfg.Paths.DataRoot = t.TempDir()
+	cfg.Paths.Artifacts = t.TempDir()
+	cfg.Runtime.Token = "token"
+	cfg.Runtime.AtlasRevision = strings.Repeat("b", 40)
+	for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
+		target := filepath.Join(cfg.Paths.DataRoot, name)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, []byte("fixture"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := handler.NewServer(cfg)
+	server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
+	first := waitJob(t, server, submitSelection(t, server, "S710140", []string{"wadepre"}, "", "first").ID, "ready")
+	other := filepath.Join(cfg.Paths.Runs, first.ID, "forecasts", "nowcastnet", "fields.npz")
+	if err := os.MkdirAll(filepath.Dir(other), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(other, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second := waitJob(t, server, submitSelection(t, server, "S710140", []string{"wadepre"}, "", "second").ID, "ready")
+	if second.ID != first.ID {
+		t.Fatalf("same configuration created %s after %s", second.ID, first.ID)
+	}
+	raw, err := os.ReadFile(other)
+	if err != nil || string(raw) != "keep" {
+		t.Fatalf("other model forecast changed: %q %v", raw, err)
+	}
+	changed := waitJob(t, server, submitSelection(t, server, "S710140", []string{"nowcastnet"}, "", "changed").ID, "ready")
+	if changed.ID == first.ID {
+		t.Fatal("a different model selection reused the run")
+	}
+}
+
 func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	cfg := handler.DefaultConfig()
 	cfg.Paths.Runs = t.TempDir()
@@ -155,8 +219,10 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	server := handler.NewServer(cfg)
 	server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
 	models := []string{"nowcastnet", "exprecast", "wadepre"}
-	first := waitJob(t, server, submitSelection(t, server, "S696651", models, "both", "all-models").ID, "succeeded")
-	second := waitJob(t, server, submitSelection(t, server, "S696652", models[:1], "", "other-event").ID, "succeeded")
+	first := waitJob(t, server, submitSelection(t, server, "S696651", models, "both", "all-models").ID, "ready")
+	second := waitJob(t, server, submitSelection(t, server, "S696652", models[:1], "", "other-event").ID, "ready")
+	postDiagnostics(t, server, first.ID, true)
+	postDiagnostics(t, server, second.ID, false)
 	if first.ID == second.ID || first.Request.EventID == second.Request.EventID || first.Request.StartTime != second.Request.StartTime {
 		t.Fatalf("events were not kept apart: %+v %+v", first.Request, second.Request)
 	}
@@ -181,7 +247,11 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 			t.Fatalf("%s image: %s", model, raw)
 		}
 	}
-	raw, err := os.ReadFile(filepath.Join(cfg.Paths.Runs, first.ID, "diagnostics-request.json"))
+	matches, err := filepath.Glob(filepath.Join(cfg.Paths.Runs, first.ID, "logs", "diagnostics-*", "request.json"))
+	if err != nil || len(matches) != 1 {
+		t.Fatal(matches, err)
+	}
+	raw, err := os.ReadFile(matches[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,17 +261,56 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(cfg.Paths.Runs, second.ID, "compose-diagnostics.yaml")); !os.IsNotExist(err) {
 		t.Fatal("data and model job started diagnostics")
 	}
-	metrics := waitJob(t, server, submitSelection(t, server, "S696653", models[:1], "metrics", "metrics-only").ID, "succeeded")
-	diag, err := os.ReadFile(filepath.Join(cfg.Paths.Runs, metrics.ID, "compose-diagnostics.yaml"))
+	metrics := waitJob(t, server, submitSelection(t, server, "S696653", models[:1], "metrics", "metrics-only").ID, "ready")
+	postDiagnostics(t, server, metrics.ID, false)
+	diagMatches, err := filepath.Glob(filepath.Join(cfg.Paths.Runs, metrics.ID, "logs", "diagnostics-*", "compose.yaml"))
+	if err != nil || len(diagMatches) != 1 {
+		t.Fatal(diagMatches, err)
+	}
+	diag, err := os.ReadFile(diagMatches[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(diag), "/basemap") {
 		t.Fatal("metrics-only job mounted a basemap")
 	}
-	maps := waitJob(t, server, submitSelection(t, server, "S696654", models[:1], "visualization", "maps-only").ID, "succeeded")
-	if _, err := os.Stat(filepath.Join(cfg.Paths.Runs, maps.ID, "compose-diagnostics.yaml")); err != nil {
+	maps := waitJob(t, server, submitSelection(t, server, "S696654", models[:1], "visualization", "maps-only").ID, "ready")
+	postDiagnostics(t, server, maps.ID, true)
+	mapMatches, err := filepath.Glob(filepath.Join(cfg.Paths.Runs, maps.ID, "logs", "diagnostics-*", "compose.yaml"))
+	if err != nil || len(mapMatches) != 1 {
+		t.Fatal(mapMatches, err)
+	}
+}
+
+func postDiagnostics(t *testing.T, server *handler.Server, id string, visualization bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for {
+		if server.ExecutionAvailableForTest() || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	raw, err := os.ReadFile(filepath.Join(server.Config.Paths.Runs, id, "manifest.json"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest["forecasts"] = map[string]any{"wadepre": map[string]any{"path": "forecasts/wadepre.npz"}}
+	raw, _ = json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(server.Config.Paths.Runs, id, "manifest.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"models":["wadepre"],"methods":["mae"],"levels":[16],"half_windows":[0],"visualization":%t}`, visualization)
+	req := httptest.NewRequest("POST", "http://127.0.0.1/v1/runs/"+id+"/diagnostics", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer token")
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, req)
+	if response.Code != 202 && response.Code != 200 {
+		t.Fatalf("diagnostics: %d %s", response.Code, response.Body.String())
 	}
 }
 

@@ -16,21 +16,23 @@ import (
 const maxPackageBytes = 8 << 20
 
 type RuntimeRequest struct {
-	OrderID             string           `json:"order_id"`
-	PackageID           string           `json:"package_id"`
-	PackageSHA256       string           `json:"package_sha256"`
-	EventID             string           `json:"event_id"`
-	StartTime           string           `json:"context_start_time"`
-	Models              []string         `json:"models"`
-	Metrics             []map[string]any `json:"metrics,omitempty"`
-	Visualization       bool             `json:"visualization"`
-	VerificationModels  []string         `json:"verification_models,omitempty"`
-	VisualizationModels []string         `json:"visualization_models,omitempty"`
+	OrderID             string            `json:"order_id"`
+	PackageID           string            `json:"package_id"`
+	PackageSHA256       string            `json:"package_sha256"`
+	EventID             string            `json:"event_id"`
+	StartTime           string            `json:"context_start_time"`
+	Models              []string          `json:"models"`
+	ModelNames          map[string]string `json:"model_names,omitempty"`
+	Metrics             []map[string]any  `json:"metrics,omitempty"`
+	Visualization       bool              `json:"visualization"`
+	VerificationModels  []string          `json:"verification_models,omitempty"`
+	VisualizationModels []string          `json:"visualization_models,omitempty"`
 }
 
 type packageItem struct {
 	ID       string                     `json:"order_item_id"`
 	Product  string                     `json:"product_id"`
+	Name     string                     `json:"product_name"`
 	Version  string                     `json:"version_id"`
 	Category string                     `json:"category"`
 	Config   map[string]json.RawMessage `json:"resolved_configuration"`
@@ -41,6 +43,14 @@ type packageItem struct {
 		Output        string `json:"output_name"`
 		Compatibility string `json:"compatibility"`
 	} `json:"input_bindings"`
+}
+
+// MetricFamilies is the atlas verification catalog's method-to-family map.
+// Runtime does not fetch atlas; tests fail if this copy drifts.
+var MetricFamilies = map[string]string{
+	"mae": "continuous", "rmse": "continuous", "me": "continuous",
+	"ts": "yes_or_no", "bias": "yes_or_no", "ets": "yes_or_no", "far": "yes_or_no", "pod": "yes_or_no", "dts": "yes_or_no",
+	"fss": "spatial", "corr": "moments",
 }
 
 func metricGroups(config map[string]json.RawMessage) ([]map[string]any, error) {
@@ -64,7 +74,7 @@ func metricGroups(config map[string]json.RawMessage) ([]map[string]any, error) {
 		}
 		windowSet[window] = true
 	}
-	families := map[string]string{"mae": "continuous", "rmse": "continuous", "me": "continuous", "ts": "yes_or_no", "bias": "yes_or_no", "ets": "yes_or_no", "far": "yes_or_no", "pod": "yes_or_no", "dts": "yes_or_no", "fss": "spatial", "corr": "moments"}
+	families := MetricFamilies
 	selected := map[string][]string{}
 	seen := map[string]bool{}
 	for _, method := range methods {
@@ -237,6 +247,12 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 				}
 			}
 			request.Models = append(request.Models, model)
+			if item.Name != "" {
+				if request.ModelNames == nil {
+					request.ModelNames = map[string]string{}
+				}
+				request.ModelNames[model] = item.Name
+			}
 			modelItems[item.ID] = true
 			modelIDs[item.ID] = model
 		case "vil-verification":
@@ -275,30 +291,27 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 			}
 		}
 		if item.Category == "evaluation" || item.Category == "visualization" {
-			expected := 1
-			if item.Category == "evaluation" {
-				expected = 2
-			}
-			if len(item.Bindings) != expected {
-				return request, fmt.Errorf("incomplete diagnostic bindings")
-			}
-			forecastModel := ""
+			forecastModels := []string{}
+			seen := map[string]bool{}
 			observation := false
 			for _, binding := range item.Bindings {
-				if binding.Input == "forecast" && binding.Output == "forecast" {
-					forecastModel = modelIDs[binding.Producer]
-				}
-				if binding.Input == "observations" && binding.Output == "observations" && binding.Producer == dataItem {
+				model := modelIDs[binding.Producer]
+				if binding.Input == "forecast" && binding.Output == "forecast" && model != "" && !seen[model] {
+					seen[model] = true
+					forecastModels = append(forecastModels, model)
+				} else if item.Category == "evaluation" && !observation && binding.Input == "observations" && binding.Output == "observations" && binding.Producer == dataItem {
 					observation = true
+				} else {
+					return request, fmt.Errorf("invalid or repeated diagnostic binding")
 				}
 			}
-			if forecastModel == "" || (item.Category == "evaluation" && !observation) {
+			if len(forecastModels) == 0 || (item.Category == "evaluation" && !observation) {
 				return request, fmt.Errorf("diagnostic is not bound to selected fields")
 			}
 			if item.Category == "evaluation" {
-				request.VerificationModels = []string{forecastModel}
+				request.VerificationModels = forecastModels
 			} else {
-				request.VisualizationModels = []string{forecastModel}
+				request.VisualizationModels = forecastModels
 			}
 		}
 	}

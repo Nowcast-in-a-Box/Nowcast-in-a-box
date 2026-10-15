@@ -53,7 +53,7 @@ func TestUnixLaunchersForwardPathsArgumentsAndExitCode(t *testing.T) {
 			} {
 				cmd := exec.Command(bash, append([]string{filepath.Join(root, filepath.FromSlash(tc.script))}, invocation.args...)...)
 				cmd.Dir = t.TempDir()
-				cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+				cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"), "NIB_SKIP_URI_REGISTRATION=1")
 				out, err := cmd.CombinedOutput()
 				exit, ok := err.(*exec.ExitError)
 				if !ok || exit.ExitCode() != 23 {

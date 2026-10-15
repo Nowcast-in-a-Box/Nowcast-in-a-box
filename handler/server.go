@@ -18,6 +18,7 @@ type Server struct {
 	Preflight   []func() Check
 	Runner      CommandRunner
 	Token       string
+	PickFolder  func() (string, error)
 	configMu    sync.RWMutex
 	jobsMu      sync.Mutex
 	jobs        map[string]*Job

@@ -198,7 +198,7 @@ def test_the_plan_alias_works(config_file, platform, capsys):
 
 def test_the_plan_lists_leads_outside_the_horizon(config_file, platform, capsys):
     from nib_verify.catalog.runs import discover as discover_runs
-    from tests.conftest import run_config_text, write_yaml
+    from .conftest import run_config_text, write_yaml
 
     short = platform.root / "short" / "j"
     write_yaml(short / "run.yaml", run_config_text(horizon=2))

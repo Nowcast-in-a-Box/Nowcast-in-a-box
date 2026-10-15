@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -28,11 +29,33 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, fmt.Errorf("one data_root setting is required"))
 		return
 	}
+	s.saveDataRoot(w, update.DataRoot)
+}
+
+func (s *Server) handlePickDataRoot(w http.ResponseWriter, r *http.Request) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8))
+	if err != nil || len(strings.TrimSpace(string(raw))) != 0 {
+		runtimeError(w, 400, fmt.Errorf("folder selection does not accept a path"))
+		return
+	}
+	pick := s.PickFolder
+	if pick == nil {
+		pick = nativePickFolder
+	}
+	chosen, err := pick()
+	if err != nil {
+		runtimeError(w, 409, err)
+		return
+	}
+	s.saveDataRoot(w, chosen)
+}
+
+func (s *Server) saveDataRoot(w http.ResponseWriter, requested string) {
 	if os.Getenv("NIB_DATA_ROOT") != "" {
 		runtimeError(w, 409, fmt.Errorf("NIB_DATA_ROOT overrides this setting; unset it before changing config"))
 		return
 	}
-	root, err := filepath.Abs(update.DataRoot)
+	root, err := filepath.Abs(requested)
 	if err != nil {
 		runtimeError(w, 400, err)
 		return
@@ -100,6 +123,46 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Config.Paths.DataRoot = root
 	writeJSON(w, 200, map[string]string{"data_root": root})
+}
+
+func appendYAMLList(path, section, key, value string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var document yaml.Node
+	if yaml.Unmarshal(raw, &document) != nil || len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+		return fmt.Errorf("invalid local config document")
+	}
+	parent := yamlMapping(document.Content[0], section)
+	var list *yaml.Node
+	for i := 0; i < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			list = parent.Content[i+1]
+		}
+	}
+	if list == nil {
+		list = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		parent.Content = append(parent.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, list)
+	}
+	if list.Kind != yaml.SequenceNode {
+		return fmt.Errorf("%s must be a list", key)
+	}
+	for _, item := range list.Content {
+		if item.Value == value {
+			return nil
+		}
+	}
+	list.Content = append(list.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+	body, err := yaml.Marshal(&document)
+	if err != nil {
+		return err
+	}
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, body, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, path)
 }
 
 func yamlMapping(parent *yaml.Node, key string) *yaml.Node {

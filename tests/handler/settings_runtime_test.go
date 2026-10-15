@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -52,6 +53,55 @@ func TestSettingsOnlyUpdatesExistingDataRootAndPreservesConfig(t *testing.T) {
 	}
 	if reloaded.Paths.DataRoot != root || reloaded.Handler.Port != 9000 {
 		t.Fatal(reloaded)
+	}
+}
+
+func TestPickDataRootSavesAndOverwritesWithoutAcceptingABrowserPath(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(source, []byte("paths:\n  runs: runs\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Runtime.Token = "token"
+	server := handler.NewServer(cfg)
+	first := t.TempDir()
+	second := t.TempDir()
+	server.PickFolder = func() (string, error) { return first, nil }
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "http://127.0.0.1/v1/settings/pick", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer token")
+		result := httptest.NewRecorder()
+		server.Routes().ServeHTTP(result, req)
+		return result
+	}
+	if response := post(`{"data_root":"/tmp"}`); response.Code != 400 {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	if response := post(""); response.Code != 200 || !strings.Contains(response.Body.String(), first) {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	server.PickFolder = func() (string, error) { return second, nil }
+	if response := post(""); response.Code != 200 {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	reloaded, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Paths.DataRoot != second {
+		t.Fatal(reloaded.Paths.DataRoot)
+	}
+	server.PickFolder = func() (string, error) { return "", fmt.Errorf("folder selection was canceled") }
+	if response := post(""); response.Code != 409 {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	reloaded, err = handler.Load(source)
+	if err != nil || reloaded.Paths.DataRoot != second {
+		t.Fatal(reloaded.Paths.DataRoot, err)
 	}
 }
 

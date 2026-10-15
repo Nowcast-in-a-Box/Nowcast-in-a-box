@@ -1,7 +1,9 @@
 """Offline diagnostics container entry; only explicitly requested products run."""
 
 import argparse
+from html import escape
 import json
+import os
 from pathlib import Path
 import sys
 import uuid
@@ -91,9 +93,60 @@ def main():
             print(json.dumps(error), file=sys.stderr)
     source = StoredFields(directory)
     source.manifest["status"] = "partial" if failed else "succeeded"
+    if not failed and len(results) > 1:
+        report = write_report(directory, results)
+        source.manifest["diagnostics"].append(report)
+        results.append(report)
     save_manifest(directory, source.manifest)
     print(json.dumps({"run_id": source.manifest["id"], "diagnostics": results}))
     return 1 if failed else 0
+
+
+def write_report(directory, results):
+    """One page for a completed diagnostic request. Separate entries stay available."""
+    report_id = uuid.uuid4().hex
+    out = directory / "diagnostics" / "report" / report_id
+    out.mkdir(parents=True)
+    sections = []
+    manifest_path = directory / "manifest.json"
+    model_names = (
+        json.loads(manifest_path.read_text()).get("model_names", {})
+        if manifest_path.is_file()
+        else {}
+    )
+    for index, result in enumerate(results):
+        source = directory / result["entry"].rsplit("/", 1)[0]
+        images = []
+        names = [
+            name for name in ("map.png", "animation.gif") if (source / name).is_file()
+        ]
+        names.extend(image.name for image in sorted(source.glob("*.svg")))
+        for name in names:
+            target = f"{index}-{name}"
+            os.link(source / name, out / target)
+            images.append(
+                f'<img src="{escape(target)}" alt="{escape(Path(name).stem)}">'
+            )
+        if images:
+            model = result.get("model_id")
+            label = model_names.get(model, model)
+            title = f"{label} — Maps and animation" if model else "Metrics"
+            sections.append(
+                f'<section><h2>{escape(title)}</h2>{ "".join(images) }</section>'
+            )
+    (out / "index.html").write_text(
+        '<!doctype html><meta charset="utf-8"><title>NiB result</title>'
+        "<style>body{margin:0;font-family:sans-serif;background:#edf1f2}"
+        "main{max-width:1480px;margin:auto;padding:32px}img{width:100%;height:auto;background:#fff}</style>"
+        f'<main><h1>Run result</h1>{ "".join(sections) }</main>'
+    )
+    return {
+        "kind": "report",
+        "id": report_id,
+        "status": "succeeded",
+        "path": out.relative_to(directory).as_posix(),
+        "entry": (out / "index.html").relative_to(directory).as_posix(),
+    }
 
 
 if __name__ == "__main__":
