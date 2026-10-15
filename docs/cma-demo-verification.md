@@ -40,11 +40,11 @@ ONNX, PNG/GIF and SQLite output are not committed.
 Checks already completed:
 
 - `go test ./...` passed, including CMA read-only directory routing.
-- Runtime/adapters/verification suites: 698 passed, 3 skipped; visualization:
-  170 passed, 25 skipped. A combined full run also passed 868 tests with 28
-  skips. The final added non-finite-output and real PNG/GIF checks passed in
-  the seven-test CMA regression file; the final combined suite is recorded
-  below when complete.
+- Final complete Python suite: **869 passed, 28 skipped**, in 634.97 seconds.
+  This includes the seven-test CMA regression file, non-finite-output rejection,
+  actual comparison PNG generation and twenty-frame GIF verification. Skips
+  concern optional dependencies, external fixtures and basemap resources; the
+  real CMA run and rendering above did execute.
 - Hub backend: 278 passed; Ruff passed.
 - Hub frontend: 103 passed, TypeScript and production build passed. ESLint
   reported no errors and the existing fast-refresh export warning in
