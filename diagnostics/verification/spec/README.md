@@ -7,6 +7,7 @@
 | 文件 | 给谁 | 一句话 |
 |---|---|---|
 | `data-access-we-ask-for.en.md` | 上游维护者 | **运行程序**要的：按「名字 + 时间 + 时效」取一个场；场自带坐标和单位；**没数据要报错不要返回空**；**同一个起报时刻只读一次盘** |
+| `interfaces-we-consume.md` | 上游维护者 | **我们的位置变了**：不再产生配置，只消费。四个接口 —— `list_groups` / `get_group`（字典）/ `read_truth` / `read_forecast`（xarray）|
 | `what-the-creator-asks-for.en.md` | 上游维护者 | **创建程序**要的：声明必须完整机读可枚举（缺**范围与分辨率**、缺**运行产出布局**、`open` 源的变量单位缺失） |
 
 中文原件（`*-we-ask-for.md` / `what-the-creator-asks-for.md`）保留 —— 那是推理时用的语言。
