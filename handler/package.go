@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -283,8 +284,8 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 				return request, err
 			}
 			request.Metrics = groups
-		case "vil-visualization", "cref-visualization":
-			if item.Category != "visualization" || request.Visualization || len(item.Config) != 0 {
+		case "vil-visualization", "cref-visualization", "time-leadtime-animation":
+			if item.Category != "visualization" || len(item.Config) != 0 {
 				return request, fmt.Errorf("invalid visualization configuration")
 			}
 			request.Visualization = true
@@ -324,6 +325,8 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 				if binding.Input == "forecast" && binding.Output == "forecast" && model != "" && !seen[model] {
 					seen[model] = true
 					forecastModels = append(forecastModels, model)
+				} else if item.Category == "visualization" && !observation && binding.Input == "reference_observation" && binding.Output == "observations" && binding.Producer == dataItem {
+					observation = true
 				} else if item.Category == "evaluation" && !observation && binding.Input == "observations" && binding.Output == "observations" && binding.Producer == dataItem {
 					observation = true
 				} else {
@@ -336,7 +339,11 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 			if item.Category == "evaluation" {
 				request.VerificationModels = forecastModels
 			} else {
-				request.VisualizationModels = forecastModels
+				for _, model := range forecastModels {
+					if !slices.Contains(request.VisualizationModels, model) {
+						request.VisualizationModels = append(request.VisualizationModels, model)
+					}
+				}
 			}
 		}
 	}
