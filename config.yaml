@@ -41,4 +41,4 @@ runtime:
   # Add the exact authorized HTTPS Hub origin; never use '*'.
   allowed_origins: []
   # Shared declarations including the CMA demo; matches the atlas submodule.
-  atlas_revision: "6ef5c5920fe57b430ed1e72c1aaf770590afacf1"
+  atlas_revision: "1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8"
