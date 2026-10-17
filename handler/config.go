@@ -44,6 +44,7 @@ type Diagnostics struct {
 
 // Runtime configures controlled container execution; browser requests cannot set these values.
 type Runtime struct {
+	Dataset        string            `yaml:"dataset,omitempty" json:"dataset,omitempty"`
 	DockerContext  string            `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
 	DataFile       string            `yaml:"data_file" json:"data_file"`
 	CatalogFile    string            `yaml:"catalog_file" json:"catalog_file"`
@@ -73,7 +74,7 @@ func DefaultConfig() Config {
 		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
 		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns},
 		Diagnostics: Diagnostics{Image: defaultDiagnosticsImage},
-		Runtime: Runtime{DataFile: "SEVIR/processed/sevir_vil.h5", CatalogFile: "source/CATALOG.csv",
+		Runtime: Runtime{Dataset: "sevir", DataFile: "SEVIR/processed/sevir_vil.h5", CatalogFile: "source/CATALOG.csv",
 			IngestionImage: "nib-ingestion:dev", ModelImages: map[string]string{
 				"nowcastnet": "nib-nowcastnet:dev", "exprecast": "nib-exprecast:dev", "wadepre": "nib-wadepre:dev"}},
 	}
@@ -135,6 +136,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Diagnostics.Image == "" {
 		c.Diagnostics.Image = d.Diagnostics.Image
+	}
+	if c.Runtime.Dataset == "" {
+		c.Runtime.Dataset = d.Runtime.Dataset
 	}
 	if c.Runtime.DataFile == "" {
 		c.Runtime.DataFile = d.Runtime.DataFile

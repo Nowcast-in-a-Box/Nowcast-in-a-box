@@ -1,0 +1,149 @@
+"""CMA demo contract: July-only windows, honest masks and a metric grid."""
+
+import datetime as dt
+from dataclasses import replace
+
+import numpy as np
+import pytest
+import xarray as xr
+
+from ingestion import cma_radar as cma
+from adapters.cma_radar.nowcastnet.adapter import ADAPTER
+from adapters.sevir.nowcastnet.adapter import NowcastNetAdapter as SEVIR
+from interfaces.model import Forecast, PreparedInput
+from utils.stored_fields import create_run, StoredFields
+
+
+def test_july_index_latest_generation_and_nested_files(tmp_path):
+    nested = tmp_path / "20260701" / "CREF"
+    nested.mkdir(parents=True)
+    for generation, date in [
+        ("20260701000600", "20260701"),
+        ("20260701001000", "20260701"),
+        ("20260801000600", "20260801"),
+    ]:
+        (
+            nested / f"Z_RADA_C_BABJ_{generation}_P_DOR_ACHN_CREF_{date}_000000.bin"
+        ).touch()
+    index = cma.file_index(tmp_path)
+    assert len(index) == 1
+    assert next(iter(index.values())).generation_time.minute == 10
+
+
+def test_grid_is_128_square_at_three_km():
+    grid = cma.grid_for(118, 32)
+    assert len(grid["x"]) == len(grid["y"]) == 128
+    assert np.all(np.diff(grid["x"]) == 3000)
+    assert grid["axis_units"] == "m"
+    assert grid["x"][-1] - grid["x"][0] + 3000 == 384000
+    with pytest.raises(ValueError):
+        cma.grid_for(200, 32)
+
+
+def test_missing_window_is_not_padded():
+    start = "2026-07-31T23:30:00Z"
+    times = cma.window_times(start)
+    index = {t.replace(tzinfo=None): object() for t in times if t.month == 7}
+    with pytest.raises(FileNotFoundError, match="missing July"):
+        cma._check(index, "20260731", start)
+
+
+def test_no_echo_and_no_coverage_are_distinct(monkeypatch):
+    class Identity:
+        def transform(self, x, y):
+            return x, y
+
+    monkeypatch.setattr(cma.Transformer, "from_crs", lambda *a, **kw: Identity())
+    values = np.array([[0, -128], [-3276.8, -5]], dtype=np.float32)
+    data = xr.DataArray(
+        values,
+        dims=("latitude", "longitude"),
+        coords={"longitude": [0, 1], "latitude": [0, 1]},
+    )
+    out = cma.regrid(data, {"x": [0, 1], "y": [0, 1], "crs": "unused"})
+    assert out[0, 1] == 0
+    assert np.isnan(out[1, 0])
+    assert out[1, 1] == 0
+
+
+def test_mapping_roundtrip_and_real_cadence(monkeypatch):
+    def predict(self, prepared, *, weights_path):
+        assert np.allclose(prepared.values, 127.5)
+        values = np.full((1, 20, 128, 128), 127.5, dtype=np.float32)
+        return Forecast(self.output_spec(), values.shape, values, {})
+
+    monkeypatch.setattr(SEVIR, "predict", predict)
+    values = np.full((1, 5, 128, 128), 37.5, dtype=np.float32)
+    result = ADAPTER.predict(
+        PreparedInput("CREF", "dBZ", "float32", values.shape, values, {}),
+        weights_path="unused",
+    )
+    assert np.allclose(result.values, 37.5)
+    assert result.coords["lead_minutes"] == list(range(6, 121, 6))
+    assert result.spec.units == "dBZ"
+
+
+def test_nonfinite_model_output_is_not_hidden_by_clipping(monkeypatch):
+    from interfaces.errors import ConstraintError
+
+    values = np.zeros((1, 5, 128, 128), dtype=np.float32)
+
+    def predict(self, prepared, *, weights_path):
+        output = np.full((1, 20, 128, 128), np.inf, dtype=np.float32)
+        return Forecast(self.output_spec(), output.shape, output, {})
+
+    monkeypatch.setattr(SEVIR, "predict", predict)
+    with pytest.raises(ConstraintError, match="non-finite"):
+        ADAPTER.predict(
+            PreparedInput("CREF", "dBZ", "float32", values.shape, values, {}),
+            weights_path="unused",
+        )
+
+
+def test_stored_cma_roundtrip(tmp_path):
+    times = [cma.stamp(t) for t in cma.window_times("2026-07-01T00:00:00Z")]
+    window = {
+        "data_id": "cma_radar",
+        "variable": "CREF",
+        "unit": "dBZ",
+        "cadence_minutes": 6,
+        "context": np.zeros((6, 128, 128), np.float32),
+        "target": np.zeros((20, 128, 128), np.float32),
+        "context_times": times[:6],
+        "target_times": times[6:],
+        "sample_id": "demo",
+        "event_id": "20260701",
+        "row": 0,
+        "context_start_time": times[0],
+        "init_time": times[5],
+    }
+    window["provenance"] = {"notice": "Cross-domain demo; skill unvalidated"}
+    directory = create_run(
+        tmp_path, "cma", window, cma.grid_for(), atlas_revision="dev"
+    )
+    source = StoredFields(directory)
+    assert source.capabilities()["cadence_minutes"] == 6
+    assert (
+        source.get_observation(
+            "cma_radar", dt.datetime.fromisoformat(times[6].replace("Z", "+00:00"))
+        )["unit"]
+        == "dBZ"
+    )
+    from utils.stored_fields import add_forecast
+    from diagnostics.cma_visualization import visualization
+    from PIL import Image
+
+    add_forecast(
+        directory,
+        "nowcastnet",
+        "test",
+        "a" * 64,
+        np.zeros((20, 128, 128), np.float32),
+        list(range(6, 121, 6)),
+    )
+    attempt = visualization(directory, "nowcastnet")
+    report = directory / attempt["entry"]
+    assert "skill unvalidated" in report.read_text()
+    with Image.open(report.parent / "animation.gif") as animation:
+        assert animation.n_frames == 20
+    assert (report.parent / "comparison.png").is_file()

@@ -55,11 +55,20 @@ func selectionPackage(t *testing.T, event string, models []string, diagnostics s
 			}),
 		})
 	}
-	if diagnostics == "visualization" || diagnostics == "both" {
+	if diagnostics == "visualization" || diagnostics == "both" || diagnostics == "both-visualizations" {
 		items = append(items, map[string]any{
 			"order_item_id": "maps", "product_id": "vil-visualization", "version_id": "v1", "category": "visualization",
 			"resolved_configuration": map[string]any{},
 			"input_bindings":         forecastBindings("maps"),
+		})
+	}
+	if diagnostics == "animation" || diagnostics == "both-visualizations" {
+		items = append(items, map[string]any{
+			"order_item_id": "animation", "product_id": "time-leadtime-animation", "version_id": "v1", "category": "visualization",
+			"resolved_configuration": map[string]any{},
+			"input_bindings": append(forecastBindings("animation"), map[string]any{
+				"consumer_order_item_id": "animation", "producer_order_item_id": "data", "input_name": "reference_observation", "output_name": "observations", "compatibility": "compatible",
+			}),
 		})
 	}
 	files := map[string][]byte{}
@@ -95,6 +104,21 @@ func selectionPackage(t *testing.T, event string, models []string, diagnostics s
 	}
 	sum := sha256.Sum256(raw.Bytes())
 	return raw.Bytes(), hex.EncodeToString(sum[:])
+}
+
+func TestGenericAnimationAndCombinedVisualizationPackages(t *testing.T) {
+	for _, diagnostic := range []string{"animation", "both-visualizations"} {
+		t.Run(diagnostic, func(t *testing.T) {
+			raw, hash := selectionPackage(t, "S710140", []string{"nowcastnet", "wadepre"}, diagnostic)
+			request, err := handler.ParseRuntimePackage(raw, hash)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !request.Visualization || strings.Join(request.VisualizationModels, ",") != "nowcastnet,wadepre" {
+				t.Fatalf("lost or duplicated visualization models: %+v", request)
+			}
+		})
+	}
 }
 
 func TestThreeModelPackageBindsEveryDiagnosticModel(t *testing.T) {

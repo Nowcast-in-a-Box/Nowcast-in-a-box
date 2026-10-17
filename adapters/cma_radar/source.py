@@ -89,7 +89,7 @@ def _requested_times(
 
 def _discover_cref_files(data_dir: Path) -> list[CREFFile]:
     files = []
-    for path in data_dir.glob("*.bin"):
+    for path in data_dir.rglob("*.bin"):
         try:
             files.append(CREFFile(path))
         except ValueError:
@@ -459,7 +459,7 @@ class Source(DeclaredDataAdapter):
             from adapters.cma_radar.npz_io import load_cma_npz
 
             raw = load_cma_npz(config, VARIABLE_ID)
-        elif any(data_dir.glob("*.bin")):
+        elif next(data_dir.rglob("*.bin"), None) is not None:
             raw = load_cma_radar(config)
         else:
             raise FileNotFoundError(

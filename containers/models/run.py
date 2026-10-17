@@ -1,4 +1,4 @@
-"""One model image consumes stored context and publishes a checked Forecast."""
+"""Run one declared model against one stored observation bundle."""
 
 import argparse
 import importlib
@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from interfaces.model import PreparedInput
-from utils.stored_fields import StoredFields, add_forecast, sha256, save_manifest
+from utils.stored_fields import StoredFields, add_forecast, save_manifest, sha256
 
 MODELS = ("nowcastnet", "exprecast", "wadepre")
 
@@ -20,23 +20,31 @@ def main():
     args = parser.parse_args()
     model_id = os.environ.get("NIB_MODEL")
     if model_id not in MODELS:
-        raise ValueError("image must select one supported SEVIR algorithm")
-    adapter = importlib.import_module(f"adapters.sevir.{model_id}.adapter").ADAPTER
+        raise ValueError("image must select one supported algorithm")
+    access = StoredFields(args.run)
+    data_id = access.manifest["data"]["id"]
+    if data_id == "cma_radar" and model_id != "nowcastnet":
+        raise ValueError("CMA Radar demo currently supports NowcastNet only")
+    module = (
+        f"adapters.{data_id}.nowcastnet.adapter"
+        if data_id == "cma_radar"
+        else f"adapters.sevir.{model_id}.adapter"
+    )
+    adapter = importlib.import_module(module).ADAPTER
     weights = Path(args.weights)
     spec = adapter.weights()
     if not weights.is_file() or sha256(weights) != spec.sha256:
         raise ValueError(
             "offline weight checksum mismatch; prepare pinned weights first"
         )
-    access = StoredFields(args.run)
     context = access.cube(access.manifest["observations"]["context"])
-    if context["values"].shape != (6, 128, 128) or context["mask"].any():
+    context_values = context["values"]
+    if context_values.shape != (6, 128, 128) or context["mask"].any():
         raise ValueError("model requires six unmasked 128x128 context frames")
-    # Each paired model declares five latest context frames; preserve its native ONNX call.
-    values = np.ascontiguousarray(context["values"][-5:][None], dtype=np.float32)
+    values = np.ascontiguousarray(context_values[-5:][None], dtype=np.float32)
     prepared = PreparedInput(
-        "vil",
-        "raw",
+        access.manifest["observations"]["context"]["variable"],
+        access.manifest["observations"]["context"]["unit"],
         "float32",
         tuple(values.shape),
         values,

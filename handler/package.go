@@ -10,12 +10,16 @@ import (
 	"io"
 	"os"
 	"path"
+	"slices"
 	"strings"
 )
 
 const maxPackageBytes = 8 << 20
 
 type RuntimeRequest struct {
+	DataID              string            `json:"data_id,omitempty"`
+	CenterLon           float64           `json:"center_lon,omitempty"`
+	CenterLat           float64           `json:"center_lat,omitempty"`
 	OrderID             string            `json:"order_id"`
 	PackageID           string            `json:"package_id"`
 	PackageSHA256       string            `json:"package_sha256"`
@@ -221,6 +225,7 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 	itemCategories := map[string]string{}
 	modelItems := map[string]bool{}
 	modelIDs := map[string]string{}
+	modelData := map[string]string{}
 	dataItem := ""
 	for _, item := range manifest.Items {
 		if item.Version != "v1" || item.ID == "" || itemCategories[item.ID] != "" {
@@ -228,19 +233,34 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 		}
 		itemCategories[item.ID] = item.Category
 		switch item.Product {
-		case "sevir-vil":
+		case "sevir-vil", "cma-radar":
 			if item.Category != "data" || dataItem != "" {
-				return request, fmt.Errorf("one SEVIR data product required")
+				return request, fmt.Errorf("one data product required")
 			}
 			dataItem = item.ID
-			if len(item.Config) != 2 || json.Unmarshal(item.Config["event_id"], &request.EventID) != nil || json.Unmarshal(item.Config["context_start_time"], &request.StartTime) != nil {
+			request.DataID = "sevir"
+			if item.Product == "cma-radar" {
+				request.DataID = "cma_radar"
+			}
+			if json.Unmarshal(item.Config["event_id"], &request.EventID) != nil || json.Unmarshal(item.Config["context_start_time"], &request.StartTime) != nil {
+				return request, fmt.Errorf("invalid data window configuration")
+			}
+			if request.DataID == "cma_radar" {
+				if len(item.Config) != 4 || json.Unmarshal(item.Config["center_lon"], &request.CenterLon) != nil || json.Unmarshal(item.Config["center_lat"], &request.CenterLat) != nil || request.CenterLon < 76 || request.CenterLon > 132 || request.CenterLat < 15 || request.CenterLat > 51 {
+					return request, fmt.Errorf("CMA requires a regional center inside 76..132 E, 15..51 N")
+				}
+			} else if len(item.Config) != 2 {
 				return request, fmt.Errorf("invalid SEVIR configuration")
 			}
-		case "nowcastnet-sevir", "exprecast-sevir", "wadepre-sevir":
+		case "nowcastnet-sevir", "exprecast-sevir", "wadepre-sevir", "nowcastnet-cma":
 			if item.Category != "model" || len(item.Config) != 0 {
 				return request, fmt.Errorf("invalid model configuration")
 			}
-			model := strings.TrimSuffix(item.Product, "-sevir")
+			model := strings.TrimSuffix(strings.TrimSuffix(item.Product, "-sevir"), "-cma")
+			modelData[item.ID] = "sevir"
+			if item.Product == "nowcastnet-cma" {
+				modelData[item.ID] = "cma_radar"
+			}
 			for _, existing := range request.Models {
 				if existing == model {
 					return request, fmt.Errorf("duplicate model")
@@ -255,7 +275,7 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 			}
 			modelItems[item.ID] = true
 			modelIDs[item.ID] = model
-		case "vil-verification":
+		case "vil-verification", "cref-verification":
 			if item.Category != "evaluation" || request.Metrics != nil {
 				return request, fmt.Errorf("invalid evaluation product")
 			}
@@ -264,8 +284,8 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 				return request, err
 			}
 			request.Metrics = groups
-		case "vil-visualization":
-			if item.Category != "visualization" || request.Visualization || len(item.Config) != 0 {
+		case "vil-visualization", "cref-visualization", "time-leadtime-animation":
+			if item.Category != "visualization" || len(item.Config) != 0 {
 				return request, fmt.Errorf("invalid visualization configuration")
 			}
 			request.Visualization = true
@@ -286,11 +306,17 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 			}
 		}
 		if modelItems[item.ID] {
+			if modelData[item.ID] != request.DataID {
+				return request, fmt.Errorf("model and data pairing disagree")
+			}
 			if len(item.Bindings) != 1 || item.Bindings[0].Producer != dataItem || item.Bindings[0].Input != "observations" || item.Bindings[0].Output != "observations" {
-				return request, fmt.Errorf("model is not bound to selected SEVIR observations")
+				return request, fmt.Errorf("model is not bound to selected observations")
 			}
 		}
 		if item.Category == "evaluation" || item.Category == "visualization" {
+			if (strings.HasPrefix(item.Product, "cref-") && request.DataID != "cma_radar") || (strings.HasPrefix(item.Product, "vil-") && request.DataID != "sevir") {
+				return request, fmt.Errorf("diagnostic and data variable disagree")
+			}
 			forecastModels := []string{}
 			seen := map[string]bool{}
 			observation := false
@@ -299,6 +325,8 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 				if binding.Input == "forecast" && binding.Output == "forecast" && model != "" && !seen[model] {
 					seen[model] = true
 					forecastModels = append(forecastModels, model)
+				} else if item.Category == "visualization" && !observation && binding.Input == "reference_observation" && binding.Output == "observations" && binding.Producer == dataItem {
+					observation = true
 				} else if item.Category == "evaluation" && !observation && binding.Input == "observations" && binding.Output == "observations" && binding.Producer == dataItem {
 					observation = true
 				} else {
@@ -311,7 +339,11 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 			if item.Category == "evaluation" {
 				request.VerificationModels = forecastModels
 			} else {
-				request.VisualizationModels = forecastModels
+				for _, model := range forecastModels {
+					if !slices.Contains(request.VisualizationModels, model) {
+						request.VisualizationModels = append(request.VisualizationModels, model)
+					}
+				}
 			}
 		}
 	}

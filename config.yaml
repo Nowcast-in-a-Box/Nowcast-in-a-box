@@ -26,6 +26,8 @@ diagnostics:
   image: nib-diagnostics:dev
 
 runtime:
+  # Use cma_radar with data_file: . when data_root points at cma-radar/.
+  dataset: sevir
   # Optional explicit local Docker context; omitted uses Docker's current context.
   # docker_context: desktop-linux
   data_file: SEVIR/processed/sevir_vil.h5
@@ -33,9 +35,10 @@ runtime:
   ingestion_image: nib-ingestion:dev
   model_images:
     nowcastnet: nib-nowcastnet:dev
+    cma_radar/nowcastnet: nib-nowcastnet:cma-demo
     exprecast: nib-exprecast:dev
     wadepre: nib-wadepre:dev
   # Add the exact authorized HTTPS Hub origin; never use '*'.
   allowed_origins: []
-  # Published atlas main after catalog PR #4. The run schema blob matches 43e2b306.
-  atlas_revision: "e9ecd84f217eef9658d433133bc588a3128d05e0"
+  # Shared declarations including the CMA demo; matches the atlas submodule.
+  atlas_revision: "1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8"

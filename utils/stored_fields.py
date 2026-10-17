@@ -42,7 +42,18 @@ def save_manifest(root, manifest):
     temporary.replace(path)
 
 
-def write_cube(root, name, values, times, grid, *, init_time=None, leads=None):
+def write_cube(
+    root,
+    name,
+    values,
+    times,
+    grid,
+    *,
+    init_time=None,
+    leads=None,
+    variable="vil",
+    unit="raw",
+):
     path = relative_path(Path(root), name)
     values = np.asarray(values, dtype=np.float32)
     if values.ndim != 3 or values.shape[0] != len(times):
@@ -81,8 +92,8 @@ def write_cube(root, name, values, times, grid, *, init_time=None, leads=None):
         "sha256": sha256(path),
         "shape": list(values.shape),
         "dtype": "float32",
-        "variable": "vil",
-        "unit": "raw",
+        "variable": variable,
+        "unit": unit,
         "times": times,
         "grid": {k: v for k, v in grid.items() if k not in ("x", "y")},
     }
@@ -101,7 +112,7 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
         "id": run_id,
         "atlas_revision": atlas_revision,
         "status": "ingested",
-        "data": {"id": "sevir", "version": "1.0.0"},
+        "data": {"id": window.get("data_id", "sevir"), "version": "1.0.0"},
         "sample": {
             k: window[k]
             for k in ("sample_id", "event_id", "row", "context_start_time", "init_time")
@@ -110,6 +121,13 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
         "forecasts": {},
         "diagnostics": [],
     }
+    if "provenance" in window:
+        manifest["sample"]["provenance"] = window["provenance"]
+    manifest["data"]["cadence_minutes"] = window.get("cadence_minutes", 5)
+    field_options = {
+        "variable": window.get("variable", "vil"),
+        "unit": window.get("unit", "raw"),
+    }
     try:
         manifest["observations"]["context"] = write_cube(
             directory,
@@ -117,6 +135,7 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
             window["context"],
             window["context_times"],
             grid,
+            **field_options,
         )
         manifest["observations"]["target"] = write_cube(
             directory,
@@ -124,6 +143,7 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
             window["target"],
             window["target_times"],
             grid,
+            **field_options,
         )
     except Exception as exc:
         manifest.update(status="failed", error=str(exc))
@@ -162,6 +182,8 @@ def add_forecast(directory, model_id, version, weight_sha256, values, leads):
         grid,
         init_time=access.manifest["sample"]["init_time"],
         leads=leads,
+        variable=access.manifest["observations"]["target"]["variable"],
+        unit=access.manifest["observations"]["target"]["unit"],
     )
     descriptor.update(
         model_id=model_id, model_version=version, weight_sha256=weight_sha256
@@ -176,6 +198,11 @@ class StoredFields:
         self.manifest = json.loads((self.root / "manifest.json").read_text())
         if self.manifest.get("schema") != "nib.run.v1":
             raise ValueError("unsupported run schema")
+        if self.manifest["data"]["id"] not in ("sevir", "cma_radar"):
+            raise ValueError("unsupported stored dataset")
+        self.cadence = 6 if self.manifest["data"]["id"] == "cma_radar" else 5
+        if self.manifest["data"].get("cadence_minutes", self.cadence) != self.cadence:
+            raise ValueError("stored cadence disagrees with dataset")
         self.cache = {}
         self.file_reads = 0
 
@@ -200,11 +227,15 @@ class StoredFields:
                     or not np.all(np.diff(axis) > 0)
                 ):
                     raise ValueError("stored grid axes must increase strictly")
+            expected_pair = (
+                ("CREF", "dBZ")
+                if self.manifest["data"]["id"] == "cma_radar"
+                else ("vil", "raw")
+            )
             if (
-                descriptor["unit"] != "raw"
-                or descriptor["variable"] != "vil"
-                or not descriptor["grid"].get("crs")
-            ):
+                descriptor["variable"],
+                descriptor["unit"],
+            ) != expected_pair or not descriptor["grid"].get("crs"):
                 raise ValueError("unsupported stored variable/unit/grid")
             times = [
                 datetime.fromisoformat(t.replace("Z", "+00:00"))
@@ -213,10 +244,11 @@ class StoredFields:
             if any(
                 t.tzinfo is None or t.utcoffset().total_seconds() != 0 for t in times
             ) or any(
-                (b - a).total_seconds() <= 0 or (b - a).total_seconds() % 300 != 0
+                (b - a).total_seconds() <= 0
+                or (b - a).total_seconds() % (60 * self.cadence) != 0
                 for a, b in zip(times, times[1:])
             ):
-                raise ValueError("stored fields require exact five-minute UTC cadence")
+                raise ValueError("stored fields require their declared UTC cadence")
             if "init_time" in descriptor:
                 initial = datetime.fromisoformat(
                     descriptor["init_time"].replace("Z", "+00:00")
@@ -243,15 +275,15 @@ class StoredFields:
 
     def capabilities(self):
         return {
-            "cadence_minutes": 5,
-            "observation_names": ["sevir"],
+            "cadence_minutes": self.cadence,
+            "observation_names": [self.manifest["data"]["id"]],
             "model_ids": list(self.manifest["forecasts"]),
             "retrospective": True,
-            "unit": "raw",
+            "unit": self.manifest["observations"]["target"]["unit"],
         }
 
     def list_observations(self, name, t0, t1):
-        if name != "sevir":
+        if name != self.manifest["data"]["id"]:
             raise FieldUnavailable("unknown observation")
         times = [
             datetime.fromisoformat(t.replace("Z", "+00:00"))
@@ -261,7 +293,7 @@ class StoredFields:
         return sorted(t for t in times if t0 <= t <= t1)
 
     def get_observation(self, name, valid_time):
-        if name != "sevir":
+        if name != self.manifest["data"]["id"]:
             raise FieldUnavailable("unknown observation")
         for descriptor in self.manifest["observations"].values():
             for index, time in enumerate(descriptor["times"]):

@@ -8,6 +8,9 @@
 
 ## Usage
 
+The [CMA Radar / NowcastNet reference demo](docs/cma-demo.md) describes the July
+2026 dataset, 3 km regional grid, local weights and complete Hub workflow.
+
 Follow the step-by-step guidance down below:
 
 

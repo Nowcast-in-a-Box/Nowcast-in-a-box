@@ -37,7 +37,7 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/runs/{id}/diagnostics", s.authorize(s.handleRetryDiagnostics))
 	mux.HandleFunc("GET /v1/capabilities", s.authorize(s.handleCapabilities))
 	mux.HandleFunc("POST /v1/preflight", s.authorize(s.handlePreflight))
-	mux.HandleFunc("GET /v1/datasets/sevir/samples", s.authorize(s.handleSamples))
+	mux.HandleFunc("GET /v1/datasets/{dataset}/samples", s.authorize(s.handleSamples))
 	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))
 	mux.HandleFunc("GET /v1/jobs/{id}", s.authorize(s.handleJob))
 	mux.HandleFunc("GET /v1/jobs/{id}/log", s.authorize(s.handleJobLog))
@@ -83,7 +83,7 @@ func (s *Server) dataPaths() (string, string, error) {
 			return "", fmt.Errorf("input escapes data root")
 		}
 		info, err := os.Stat(real)
-		if err != nil || !info.Mode().IsRegular() {
+		if err != nil || (!info.Mode().IsRegular() && !(s.dataID() == "cma_radar" && info.IsDir())) {
 			return "", fmt.Errorf("input must be a regular file")
 		}
 		return real, nil
@@ -91,6 +91,12 @@ func (s *Server) dataPaths() (string, string, error) {
 	data, err := resolve(s.Config.Runtime.DataFile)
 	if err != nil {
 		return "", "", err
+	}
+	if s.dataID() == "cma_radar" {
+		return data, "", nil
+	}
+	if s.dataID() != "sevir" {
+		return "", "", fmt.Errorf("unsupported configured dataset")
 	}
 	catalog, err := resolve(s.Config.Runtime.CatalogFile)
 	return data, catalog, err
@@ -104,9 +110,9 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	dockerReady := err == nil && code == 0
 	readyModels := []map[string]any{}
 	for _, model := range []string{"nowcastnet", "exprecast", "wadepre"} {
-		image := s.Config.Runtime.ModelImages[model]
+		image := s.modelImage(model)
 		imageCode, _, imageErr := s.docker(ctx, "image", "inspect", image)
-		weightErr := verifyModelWeights(filepath.Join(s.Config.Paths.Artifacts, "sevir", model, modelWeightName(model)), model)
+		weightErr := verifyModelWeights(s.weightPath(model), model)
 		readyModels = append(readyModels, map[string]any{"id": model, "ready": dockerReady && dataErr == nil && image != "" && imageErr == nil && imageCode == 0 && weightErr == nil})
 	}
 	reason := ""
@@ -115,9 +121,9 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 	diagnosticCode, _, diagnosticErr := s.docker(ctx, "image", "inspect", s.Config.Diagnostics.Image)
 	diagnosticsReady := dockerReady && diagnosticErr == nil && diagnosticCode == 0
-	writeJSON(w, 200, map[string]any{"data": map[string]any{"id": "sevir", "ready": dataErr == nil, "reason": reason}, "models": readyModels,
+	writeJSON(w, 200, map[string]any{"data": map[string]any{"id": s.dataID(), "product_id": map[string]string{"sevir": "sevir-vil", "cma_radar": "cma-radar"}[s.dataID()], "name": map[string]string{"sevir": "SEVIR VIL", "cma_radar": "CMA Radar · July 2026"}[s.dataID()], "ready": dataErr == nil, "reason": reason}, "models": readyModels,
 		"docker": map[string]any{"ready": dockerReady, "detail": strings.TrimSpace(string(out))}, "atlas_revision": s.Config.Runtime.AtlasRevision,
-		"diagnostics": map[string]any{"verification": diagnosticsReady, "visualization": diagnosticsReady && s.basemapReady()}})
+		"diagnostics": map[string]any{"verification": diagnosticsReady, "visualization": diagnosticsReady && (s.dataID() == "cma_radar" || s.basemapReady())}})
 }
 
 func verifyModelWeights(path, model string) error {
@@ -154,6 +160,10 @@ func (s *Server) basemapReady() bool {
 }
 
 func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
+	if dataset := r.PathValue("dataset"); dataset != "" && dataset != s.dataID() {
+		runtimeError(w, 409, fmt.Errorf("dataset is not configured on this handler"))
+		return
+	}
 	offset, limit, err := pagination(r)
 	if err != nil {
 		runtimeError(w, 400, err)
@@ -166,9 +176,9 @@ func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	code, out, err := s.docker(ctx, "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
-		"-v", volumeSpec(data, "/inputs/data.h5", true), "-v", volumeSpec(catalog, "/inputs/CATALOG.csv", true), s.Config.Runtime.IngestionImage,
-		"--data", "/inputs/data.h5", "--catalog", "/inputs/CATALOG.csv", "--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit))
+	args := []string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}
+	args = append(args, s.ingestionArgs(data, catalog, "--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit))...)
+	code, out, err := s.docker(ctx, args...)
 	if err != nil || code != 0 {
 		runtimeError(w, 502, fmt.Errorf("sample reader failed: %v %s", err, out))
 		return
@@ -223,6 +233,10 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 422, err)
 		return
 	}
+	if err := s.requireDataset(request.DataID); err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
 	initial, parseErr := time.Parse(time.RFC3339, request.StartTime)
 	_, zoneOffset := initial.Zone()
 	if parseErr != nil || zoneOffset != 0 {
@@ -233,7 +247,7 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 409, err)
 		return
 	}
-	if request.Visualization && !s.basemapReady() {
+	if request.Visualization && request.DataID != "cma_radar" && !s.basemapReady() {
 		runtimeError(w, 409, fmt.Errorf("prepare the WMO basemap cache first"))
 		return
 	}
@@ -332,7 +346,7 @@ func sameRunConfig(stored, next RuntimeRequest) bool {
 	right := append([]string(nil), next.Models...)
 	sort.Strings(left)
 	sort.Strings(right)
-	return stored.EventID == next.EventID && stored.StartTime == next.StartTime && strings.Join(left, "\x00") == strings.Join(right, "\x00")
+	return stored.DataID == next.DataID && stored.CenterLon == next.CenterLon && stored.CenterLat == next.CenterLat && stored.EventID == next.EventID && stored.StartTime == next.StartTime && strings.Join(left, "\x00") == strings.Join(right, "\x00")
 }
 
 // matchingRunID reuses one run when the sample and selected models are unchanged.
@@ -474,9 +488,12 @@ func (s *Server) executeJob(id string) {
 		return
 	}
 	// Ingestion creates a child run inside the job workspace, then publishes its contents.
-	err = run("ingestion", "-v", volumeSpec(data, "/inputs/data.h5", true), "-v", volumeSpec(catalog, "/inputs/CATALOG.csv", true),
-		"-v", volumeSpec(directory, "/workspace", false), s.Config.Runtime.IngestionImage, "--data", "/inputs/data.h5", "--catalog", "/inputs/CATALOG.csv",
-		"--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+	args := s.ingestionArgs(data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+	if request.DataID == "cma_radar" {
+		args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
+	}
+	args = append([]string{"-v", volumeSpec(directory, "/workspace", false)}, args...)
+	err = run("ingestion", args...)
 	if err == nil {
 		child := filepath.Join(directory, id)
 		entries, readErr := os.ReadDir(child)
@@ -529,12 +546,12 @@ func (s *Server) executeJob(id string) {
 	for _, model := range request.Models {
 		// Rerunning this configuration replaces only this model's previous forecast.
 		_ = os.RemoveAll(filepath.Join(directory, "forecasts", model))
-		image := s.Config.Runtime.ModelImages[model]
+		image := s.modelImage(model)
 		if image == "" {
 			s.updateJob(id, "failed", "model", fmt.Errorf("model image not configured"))
 			return
 		}
-		weights := filepath.Join(s.Config.Paths.Artifacts, "sevir", model, modelWeightName(model))
+		weights := s.weightPath(model)
 		err = run(model, "-v", volumeSpec(directory, "/run", false), "-v", volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true), "-v", volumeSpec(weights, "/weights/model.onnx", true), image, "--run", "/run", "--weights", "/weights/model.onnx")
 		if err != nil {
 			s.note(id + " model failed: " + err.Error())
