@@ -105,6 +105,7 @@ still there, unaggregated.
 
 | Path | What lives there |
 |---|---|
+| `spec/interfaces-we-consume.md` | **the four interfaces we consume** — `list_groups` / `get_group` / `read_truth` / `read_forecast` |
 | `spec/field-access.md` | the contract we build against, and its five guarantees |
 | `spec/field-access-http.md` | the wire binding, and the simulated data interface |
 | `spec/verification-config.md` | the config format and its mutability rules |
