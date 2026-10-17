@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -78,6 +79,26 @@ def test_tampered_cube_and_path_rejected(run):
     descriptor["path"] = "../outside.npz"
     with pytest.raises(ValueError, match="contained"):
         StoredFields(run).cube(descriptor)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda spec: spec.update(sha256="0" * 64),
+        lambda spec: spec["times"].__setitem__(0, "2030-01-01T00:00:00Z"),
+        lambda spec: spec["shape"].__setitem__(0, 99),
+    ],
+)
+def test_cached_artifact_rejects_conflicting_descriptors(run, change):
+    access = StoredFields(run)
+    descriptor = access.manifest["observations"]["target"]
+    access.cube(descriptor)
+    assert access.cube(deepcopy(descriptor)) is access.cube(descriptor)
+    # Mutate the original declaration too: caching its reference is insufficient.
+    change(descriptor)
+    with pytest.raises(ValueError, match="conflicting.*descriptor"):
+        access.cube(descriptor)
+    assert access.file_reads == 1
 
 
 def test_unique_run_and_time_alignment(run):

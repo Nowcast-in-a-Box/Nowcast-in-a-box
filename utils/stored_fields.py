@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime
 import hashlib
 import json
@@ -204,10 +205,13 @@ class StoredFields:
         if self.manifest["data"].get("cadence_minutes", self.cadence) != self.cadence:
             raise ValueError("stored cadence disagrees with dataset")
         self.cache = {}
+        self._descriptors = {}
         self.file_reads = 0
 
     def cube(self, descriptor):
         path = relative_path(self.root, descriptor["path"])
+        if path in self.cache and self._descriptors[path] != descriptor:
+            raise ValueError("conflicting stored descriptor for cached artifact")
         if path not in self.cache:
             if sha256(path) != descriptor["sha256"]:
                 raise ValueError("artifact checksum mismatch")
@@ -270,6 +274,7 @@ class StoredFields:
             for array in cube.values():
                 array.setflags(write=False)
             self.cache[path] = cube
+            self._descriptors[path] = deepcopy(descriptor)
             self.file_reads += 1
         return self.cache[path]
 

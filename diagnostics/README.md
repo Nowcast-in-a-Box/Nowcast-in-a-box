@@ -20,6 +20,31 @@ Build from the repository root with
 `docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .`. A successful
 build does not establish real model or basemap acceptance.
 
+## CMA xarray data handoff
+
+The platform's four-method provider is `diagnostics.run_source.RunSource`.
+It opens one saved CMA Radar run and an explicit, versioned metric configuration;
+returns eager xarray fields with native axes, true units, valid times, CRS and
+auxiliary geographic coordinates; and never resamples or starts inference.
+SEVIR support for this new interface is deferred; existing providers stay intact.
+See the [interface contract](../docs/interfaces-we-consume.md) for exact metadata,
+version responsibilities, errors and consumer/storage boundaries.
+
+From the diagnostics environment (both delivered modules installed), run:
+
+```sh
+python -m diagnostics.examples.run_source_example --run /path/to/saved-run \
+  --metrics /path/to/metric-groups.json --version 1
+```
+
+The metrics JSON is a list such as
+`[{"family":"continuous","items":["mae","rmse"]}]`. The example prints the
+group and matching observation/forecast fields without writing outputs. Each
+selected cube is checksum-verified and loaded once per source object. Projected
+fields keep their native x/y values; 2-D lon/lat are auxiliary locations, not a
+new scoring grid. Changing semantics of an existing group requires the caller
+to increase its version. The source is not a persistent group registry.
+
 ## Existing handler CLI
 
 The legacy CLI below prepares an inspectable directory under `paths.runs`,
