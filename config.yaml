@@ -38,7 +38,11 @@ runtime:
     cma_radar/nowcastnet: nib-nowcastnet:cma-demo
     exprecast: nib-exprecast:dev
     wadepre: nib-wadepre:dev
-  # Add the exact authorized HTTPS Hub origin; never use '*'.
-  allowed_origins: []
+  # Exact trusted Hub origins, including scheme and port; never use '*'.
+  # These are the documented local Hub entry points. For a remote deployment,
+  # the maintainer adds its actual origin here before distributing the config.
+  allowed_origins:
+    - http://127.0.0.1:8000
+    - http://127.0.0.1:5173
   # Shared declarations including the CMA demo; matches the atlas submodule.
   atlas_revision: "1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8"

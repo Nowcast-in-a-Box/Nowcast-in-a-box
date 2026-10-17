@@ -1,16 +1,18 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -18,118 +20,220 @@ const exitUsage = 2
 
 var errUsage = errors.New("usage")
 
-// Prepare loads config, applies flags, and checks loopback binds.
-// It does not listen.
-func Prepare(args []string) (*Server, string, error) {
+func commandConfig(args []string) (Config, []string, error) {
 	fs := flag.NewFlagSet("nib-handler", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "", "path to config.yaml")
 	host := fs.String("host", "", "bind address (overrides config; loopback only)")
 	port := fs.String("port", "", "listen port (overrides config)")
-	fs.SetOutput(os.Stderr)
 	if err := fs.Parse(args); err != nil {
-		return nil, "", errUsage
+		return Config{}, nil, errUsage
 	}
-
 	cfg, err := Load(*configPath)
 	if err != nil {
-		return nil, "", err
+		return Config{}, nil, err
 	}
 	cfg, err = ApplyOverrides(cfg, *host, *port)
 	if err != nil {
-		return nil, "", err
+		return Config{}, nil, err
 	}
 	if err := RequireLoopbackHost(cfg.Handler.Host); err != nil {
-		return nil, "", err
+		return Config{}, nil, err
 	}
 	if err := RequireLoopbackHost(cfg.Review.Host); err != nil {
-		return nil, "", fmt.Errorf("review host: %w", err)
+		return Config{}, nil, fmt.Errorf("review host: %w", err)
 	}
-
-	addr := net.JoinHostPort(cfg.Handler.Host, strconv.Itoa(cfg.Handler.Port))
-	return NewServer(cfg), addr, nil
+	if cfg.Handler.Port < 1 || cfg.Handler.Port > 65535 || cfg.Review.Port < 1 || cfg.Review.Port > 65535 {
+		return Config{}, nil, fmt.Errorf("handler and review ports must be in 1..65535")
+	}
+	return cfg, fs.Args(), nil
 }
 
-// Main is the process entry used by cmd/nib-handler.
-func SetHandlerRunningForTest(check func() bool) {
-	if check == nil {
-		handlerRunning = defaultHandlerRunning
-		return
-	}
-	handlerRunning = check
-}
-
-func defaultHandlerRunning() bool {
-	response, err := http.Get("http://127.0.0.1:8765/health")
+// Prepare loads config, applies flags, and checks loopback binds without listening.
+func Prepare(args []string) (*Server, string, error) {
+	cfg, remaining, err := commandConfig(args)
 	if err != nil {
-		return false
+		return nil, "", err
 	}
-	io.Copy(io.Discard, response.Body)
-	response.Body.Close()
-	return response.StatusCode == http.StatusOK
+	if len(remaining) != 0 {
+		return nil, "", fmt.Errorf("unexpected arguments: %v", remaining)
+	}
+	return NewServer(cfg), net.JoinHostPort(cfg.Handler.Host, strconv.Itoa(cfg.Handler.Port)), nil
 }
 
-var handlerRunning = defaultHandlerRunning
-
-func connectURI(raw string) int {
-	origin, err := ParseConnectURI(raw)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitUsage
+func sourceName(cfg Config) string {
+	if cfg.Source == "" {
+		return "defaults"
 	}
-	if !handlerRunning() {
-		fmt.Fprintf(os.Stderr, "error: start the local handler once before connecting Hub\n")
-		return 1
-	}
-	cfg, err := Load("")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
-	}
-	server := NewServer(cfg)
-	if err := server.rememberOrigin(origin); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
-	}
-	return 0
+	return cfg.Source
 }
 
+func prepareStart(cfg Config) (bool, error) {
+	if session, err := readSession(cfg); err == nil {
+		identity, probeErr := probeAddress(context.Background(), session.URL)
+		if probeErr == nil && (identity.InstanceID != session.InstanceID || identity.ConfigID != session.ConfigID) {
+			return false, fmt.Errorf("local control session is stale; inspect the running Handler before starting another")
+		}
+		if probeErr == nil && identity.ConfigID != configID(cfg) {
+			return false, fmt.Errorf("this config file changed while its Handler is running; use restart -config %s after its jobs finish", sourceName(cfg))
+		}
+		if probeErr != nil && !errors.Is(probeErr, errNotRunning) {
+			return false, probeErr
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	identity, err := probeInstance(context.Background(), cfg)
+	if err == nil {
+		if identity.State != "running" {
+			return false, fmt.Errorf("Handler is stopping; wait before starting it again")
+		}
+		return false, nil
+	}
+	if !errors.Is(err, errNotRunning) {
+		return false, err
+	}
+	return true, nil
+}
+
+// Main is the process entry used by cmd/nib-handler. macOS launchers invoke start;
+// serve remains the explicit foreground entry and the Linux/Windows default.
 func Main(args []string) int {
 	if len(args) > 0 && args[0] == "diagnostics" {
 		return DiagnosticsCLI(args[1:])
 	}
-	if len(args) > 0 && strings.HasPrefix(args[0], "nib://") {
-		return connectURI(args[0])
+	command, uri := "serve", ""
+	if len(args) > 0 {
+		switch args[0] {
+		case "serve", "start", "status", "stop", "restart", "connect":
+			command, args = args[0], args[1:]
+		default:
+			if strings.HasPrefix(args[0], "nib://") {
+				command, uri, args = "connect", args[0], args[1:]
+			}
+		}
 	}
-	srv, addr, err := Prepare(args)
+	cfg, remaining, err := commandConfig(args)
 	if err != nil {
 		if !errors.Is(err, errUsage) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		}
 		return exitUsage
 	}
-	source := srv.Config.Source
-	if source == "" {
-		source = "defaults"
+	if len(remaining) == 1 && strings.HasPrefix(remaining[0], "nib://") && uri == "" && (command == "serve" || command == "connect") {
+		command, uri, remaining = "connect", remaining[0], nil
 	}
-	reviewAddress := net.JoinHostPort(srv.Config.Review.Host, strconv.Itoa(srv.Config.Review.Port))
-	review, err := net.Listen("tcp", reviewAddress)
-	if err != nil {
-		log.Print(err)
-		return 1
+	if len(remaining) != 0 || (command == "connect" && uri == "") {
+		fmt.Fprintln(os.Stderr, "use: nib-handler [start|serve|status|stop|restart|connect] -config config.yaml [nib://connect?origin=...]")
+		return exitUsage
 	}
-	defer review.Close()
-	go func() {
-		if err := http.Serve(review, srv.ReviewRoutes()); err != nil {
-			log.Print(err)
+	if command == "serve" {
+		return serve(cfg)
+	}
+	if command == "connect" {
+		origin, parseErr := ParseConnectURI(uri)
+		if parseErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", parseErr)
+			return exitUsage
 		}
-	}()
-	srv.note("handler started")
-	fmt.Fprintf(os.Stderr, "Local connection token: %s\n", srv.Token)
-	fmt.Fprintf(os.Stderr, "nib-handler %s on http://%s (config %s); results http://%s\n", Version, addr, source, reviewAddress)
-	server := &http.Server{Addr: addr, Handler: srv.Routes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
-	if err := server.ListenAndServe(); err != nil {
-		log.Print(err)
+		if !originAllowed(cfg, origin) {
+			fmt.Fprintf(os.Stderr, "error: Hub %s is not listed in runtime.allowed_origins in %s; use the configured Hub or update the deployment configuration\n", origin, sourceName(cfg))
+			return 1
+		}
+	}
+	if command == "stop" || command == "restart" {
+		if err = stopInstance(cfg); err == nil && command == "stop" {
+			fmt.Fprintf(os.Stdout, "Handler stopped (config %s)\n", sourceName(cfg))
+			return 0
+		}
+	}
+	if err == nil && (command == "start" || command == "restart" || command == "connect") {
+		var needsStart bool
+		needsStart, err = prepareStart(cfg)
+		if err == nil && needsStart {
+			if runtime.GOOS != "darwin" {
+				return serve(cfg)
+			}
+			err = startBackground(cfg)
+		}
+	}
+	if err == nil {
+		var identity identityResponse
+		identity, err = probeInstance(context.Background(), cfg)
+		if err == nil {
+			fmt.Fprintf(os.Stdout, "Handler %s: %s; results %s; config %s\n", identity.State, identity.URL, identity.ReviewURL, sourceName(cfg))
+			if directory, dirErr := sessionDirectory(cfg); dirErr == nil {
+				fmt.Fprintf(os.Stdout, "Local service files: %s\n", directory)
+			}
+			return 0
+		}
+	}
+	fmt.Fprintf(os.Stderr, "error: %v\n", err)
+	return 1
+}
+
+func serve(cfg Config) int {
+	needsStart, err := prepareStart(cfg)
+	if err == nil && !needsStart {
+		fmt.Fprintf(os.Stdout, "Using running Handler at %s (config %s)\n", addressURL(cfg.Handler), sourceName(cfg))
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
-	return 0
+	address := net.JoinHostPort(cfg.Handler.Host, strconv.Itoa(cfg.Handler.Port))
+	reviewAddress := net.JoinHostPort(cfg.Review.Host, strconv.Itoa(cfg.Review.Port))
+	apiListener, err := net.Listen("tcp", address)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: handler listener %s: %v\n", address, err)
+		return 1
+	}
+	defer apiListener.Close()
+	reviewListener, err := net.Listen("tcp", reviewAddress)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: review listener %s: %v\n", reviewAddress, err)
+		return 1
+	}
+	defer reviewListener.Close()
+
+	srv := NewServer(cfg)
+	if err := saveSession(cfg, localSession{ConfigID: configID(cfg), InstanceID: srv.instanceID, URL: addressURL(cfg.Handler), ReviewURL: addressURL(cfg.Review), PID: os.Getpid(), Token: srv.Token}); err != nil {
+		fmt.Fprintf(os.Stderr, "error: cannot create private local control session: %v\n", err)
+		return 1
+	}
+	defer removeSession(cfg, srv.instanceID)
+	apiServer := &http.Server{Handler: srv.Routes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
+	reviewServer := &http.Server{Handler: srv.ReviewRoutes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
+	defer apiServer.Close()
+	defer reviewServer.Close()
+	errs := make(chan error, 2)
+	go func() { errs <- apiServer.Serve(apiListener) }()
+	go func() { errs <- reviewServer.Serve(reviewListener) }()
+	srv.note("handler ready at " + addressURL(cfg.Handler))
+	fmt.Fprintf(os.Stderr, "nib-handler %s ready on %s (config %s); results %s\n", Version, addressURL(cfg.Handler), sourceName(cfg), addressURL(cfg.Review))
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(signals)
+	for {
+		select {
+		case sig := <-signals:
+			if err := srv.requestShutdown(); err != nil {
+				fmt.Fprintf(os.Stderr, "refusing shutdown on %s: %v\n", sig, err)
+			}
+		case <-srv.shutdown:
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_ = apiServer.Shutdown(ctx)
+			_ = reviewServer.Shutdown(ctx)
+			cancel()
+			srv.note("handler stopped")
+			return 0
+		case err := <-errs:
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fmt.Fprintf(os.Stderr, "handler stopped: %v\n", err)
+				return 1
+			}
+		}
+	}
 }

@@ -31,6 +31,7 @@ type Job struct {
 
 func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/pair", s.handlePair)
+	mux.HandleFunc("OPTIONS /v1/pair", s.handlePair)
 	mux.HandleFunc("GET /v1/settings", s.authorize(s.handleSettings))
 	mux.HandleFunc("PATCH /v1/settings", s.authorize(s.handleSettings))
 	mux.HandleFunc("POST /v1/settings/pick", s.authorize(s.handlePickDataRoot))
@@ -256,6 +257,11 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.jobsMu.Lock()
+	if s.stopping {
+		s.jobsMu.Unlock()
+		runtimeError(w, http.StatusServiceUnavailable, fmt.Errorf("Handler is stopping; reconnect after starting it again"))
+		return
+	}
 	// A frozen package is idempotent; explicit rerun is a separate request identity.
 	if key != "" {
 		for _, job := range s.jobs {
@@ -289,6 +295,11 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 				runtimeError(w, 409, fmt.Errorf("idempotency key belongs to another package"))
 				return
 			}
+			if live := s.jobs[recorded.ID]; live != nil && (live.Status == "queued" || live.Status == "running") {
+				s.jobsMu.Unlock()
+				runtimeError(w, http.StatusConflict, fmt.Errorf("this run has a newer active request; observe it in Runs before retrying an older request"))
+				return
+			}
 			if recorded.Status == "running" || recorded.Status == "queued" {
 				recorded.Status = "interrupted"
 				recorded.Error = "handler restarted before this job completed"
@@ -302,6 +313,11 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 	id := s.matchingRunID(request)
 	reuse := id != ""
+	if live := s.jobs[id]; reuse && live != nil && (live.Status == "queued" || live.Status == "running") {
+		s.jobsMu.Unlock()
+		runtimeError(w, http.StatusConflict, fmt.Errorf("this run is already queued or running; observe it in Runs and wait before rerunning"))
+		return
+	}
 	if !reuse {
 		id, err = newRunID(time.Now())
 		if err != nil {
@@ -576,14 +592,16 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, copy)
 		return
 	}
-	s.jobsMu.Unlock()
+	// Reconcile history under the same lock as new admissions and job writes.
 	raw, err := os.ReadFile(filepath.Join(s.Config.Paths.Runs, id, "job.json"))
 	if err != nil {
+		s.jobsMu.Unlock()
 		runtimeError(w, 404, fmt.Errorf("job not found"))
 		return
 	}
 	var recorded Job
 	if json.Unmarshal(raw, &recorded) != nil {
+		s.jobsMu.Unlock()
 		runtimeError(w, 500, fmt.Errorf("invalid recorded job"))
 		return
 	}
@@ -593,6 +611,7 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 		recorded.UpdatedAt = time.Now().UTC()
 		_ = writeJob(filepath.Join(s.Config.Paths.Runs, id), &recorded)
 	}
+	s.jobsMu.Unlock()
 	writeJSON(w, 200, recorded)
 }
 
