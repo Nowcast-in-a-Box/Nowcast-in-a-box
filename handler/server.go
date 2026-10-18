@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -28,7 +29,10 @@ type Server struct {
 	currentResources   resourceSnapshot
 	preparingResources bool
 	resourcesLoaded    bool
+	executionDataID    string
 	executionModels    []string
+	Resources          *Resources
+	ResourceError      error
 	stopping           bool // guarded by jobsMu
 	shutdown           chan struct{}
 	instanceID         string
@@ -40,11 +44,27 @@ func NewServer(cfg Config) *Server {
 	if token == "" {
 		token = randomToken()
 	}
-	return &Server{
+	server := &Server{
 		Config: cfg, Runner: execRunner{}, Token: token, jobs: make(map[string]*Job),
 		Preflight: []func() Check{DockerCheck},
 		shutdown:  make(chan struct{}), instanceID: randomToken()[:32],
 	}
+	server.Resources, server.ResourceError = LoadResources(cfg.Paths.Resources)
+	return server
+}
+
+func (s *Server) resources() *Resources {
+	return s.Resources
+}
+
+func (s *Server) resourceFailure() error {
+	if s.ResourceError != nil {
+		return s.ResourceError
+	}
+	if s.Resources == nil {
+		return fmt.Errorf("runtime resources are not loaded")
+	}
+	return nil
 }
 
 func randomToken() string {
@@ -105,15 +125,16 @@ func (s *Server) handleIdentity(w http.ResponseWriter, r *http.Request) {
 }
 
 type statusResponse struct {
-	Service    string  `json:"service"`
-	Version    string  `json:"version"`
-	Host       string  `json:"host"`
-	Port       string  `json:"port"`
-	ConfigFile string  `json:"config_file"`
-	Review     Addr    `json:"review"`
-	Paths      Paths   `json:"paths"`
-	Docker     Check   `json:"docker"`
-	Preflight  []Check `json:"preflight"`
+	Service        string  `json:"service"`
+	Version        string  `json:"version"`
+	Host           string  `json:"host"`
+	Port           string  `json:"port"`
+	ConfigFile     string  `json:"config_file"`
+	Review         Addr    `json:"review"`
+	Paths          Paths   `json:"paths"`
+	Docker         Check   `json:"docker"`
+	Preflight      []Check `json:"preflight"`
+	ResourcesError string  `json:"resources_error,omitempty"`
 }
 
 func (s *Server) currentConfig() Config {
@@ -152,6 +173,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Paths:      cfg.Paths,
 		Docker:     docker,
 		Preflight:  checks,
+		ResourcesError: func() string {
+			if s.ResourceError != nil {
+				return s.ResourceError.Error()
+			}
+			return ""
+		}(),
 	})
 }
 

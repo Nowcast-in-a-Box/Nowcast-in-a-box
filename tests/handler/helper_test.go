@@ -21,11 +21,66 @@ func repoConfigPath(t *testing.T) string {
 	return abs
 }
 
+func testResourcesPath(t *testing.T) string {
+	t.Helper()
+	path, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func testResources(t *testing.T) *handler.Resources {
+	t.Helper()
+	resources, err := handler.LoadResources(testResourcesPath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resources
+}
+
+func testConfig(t *testing.T) handler.Config {
+	t.Helper()
+	cfg := handler.DefaultConfig()
+	cfg.Paths.Resources = testResourcesPath(t)
+	cfg.DataRoots = map[string]string{}
+	return cfg
+}
+
+func writeSevirData(t *testing.T, cfg *handler.Config) string {
+	t.Helper()
+	root := t.TempDir()
+	if cfg.DataRoots == nil {
+		cfg.DataRoots = map[string]string{}
+	}
+	cfg.DataRoots["sevir"] = root
+	for _, name := range []string{"SEVIR/processed/sevir_vil.h5", "source/CATALOG.csv"} {
+		target := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, []byte("fixture"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func writeCmaData(t *testing.T, cfg *handler.Config) string {
+	t.Helper()
+	root := t.TempDir()
+	if cfg.DataRoots == nil {
+		cfg.DataRoots = map[string]string{}
+	}
+	cfg.DataRoots["cma_radar"] = root
+	return root
+}
+
 func testServer() *handler.Server {
 	srv := handler.NewServer(handler.Config{
 		Handler: handler.Addr{Host: "127.0.0.1", Port: 8765},
 		Review:  handler.Addr{Host: "127.0.0.1", Port: 8766},
-		Paths:   handler.Paths{Artifacts: "/tmp/artifacts"},
+		Paths:   handler.Paths{Artifacts: "/tmp/artifacts", Resources: "../.."},
 		Source:  "/tmp/config.yaml",
 	})
 	srv.Preflight = []func() handler.Check{

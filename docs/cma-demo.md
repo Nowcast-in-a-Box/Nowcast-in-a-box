@@ -55,16 +55,18 @@ repository root when preparing the development demo:
 
 ```sh
 git submodule update --init --recursive
-docker build -f ingestion/Dockerfile -t nib-ingestion:cma-demo .
-docker build -f containers/models/Dockerfile --build-arg MODEL=nowcastnet -t nib-nowcastnet:cma-demo .
-docker build -f diagnostics/Dockerfile -t nib-diagnostics:cma-demo .
+docker build -f adapters/cma_radar/Dockerfile -t nib-ingestion:cma-demo .
+docker build -f adapters/cma_radar/nowcastnet/Dockerfile -t nib-nowcastnet:cma-demo .
+docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow .
 ```
 
-Use [the example configuration](../tests/runtime/cma-demo.config.yaml), setting
-`paths.data_root` explicitly or setting `NIB_DATA_ROOT` to the existing
-`cma-radar` directory. The configured data file is `.` because ingestion mounts
-the directory, not a SEVIR HDF5 file. `runtime.dataset` selects the host's active
-data source. Change back to `sevir` with its data/catalog paths to use SEVIR.
+Use [the example configuration](../tests/runtime/cma-demo.config.yaml). The
+runtime tree comes from `paths.resources` (`runtime.yaml` in each data/model
+directory); the configured `cma_radar` manifest mounts the whole data folder.
+Choose the existing `cma-radar` directory for the CMA data source in Checkout,
+or set `NIB_DATA_ROOT` for a one-off run. Do not add `runtime.dataset`,
+`data_file`, or image names to `config.yaml`: selecting a different data product
+in the Hub switches the runtime without editing the host configuration.
 
 Authorize the exact HTTP Hub origin in `runtime.allowed_origins`. Handler and
 result listeners remain loopback. Weights and inputs mount read-only, containers

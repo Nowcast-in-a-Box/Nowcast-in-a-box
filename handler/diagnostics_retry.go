@@ -47,13 +47,20 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		}
 		seen[model] = true
 	}
+	data, _ := manifest["data"].(map[string]any)
+	dataID, _ := data["id"].(string)
+	dataResource, err := s.dataResource(dataID)
+	if err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
 	config := map[string]any{"version": 2, "run": "/run"}
 	if len(selection.Methods) > 0 {
 		mapping := map[string]json.RawMessage{}
 		mapping["methods"], _ = json.Marshal(selection.Methods)
 		mapping["levels"], _ = json.Marshal(selection.Levels)
 		mapping["half_windows"], _ = json.Marshal(selection.Windows)
-		groups, err := metricGroups(mapping)
+		groups, err := metricGroups(mapping, dataResource)
 		if err != nil {
 			runtimeError(w, 422, err)
 			return
@@ -61,8 +68,7 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		config["metrics"] = groups
 		config["verification_models"] = selection.Models
 	}
-	data, _ := manifest["data"].(map[string]any)
-	needsBasemap := data["id"] != "cma_radar"
+	needsBasemap := dataResource.VisualizationBasemap
 	if selection.Visualization {
 		if needsBasemap && !s.basemapReady() {
 			runtimeError(w, 409, fmt.Errorf("prepare offline WMO basemap"))
@@ -158,11 +164,24 @@ func (s *Server) prepareDiagnostics(id string, config map[string]any, basemap bo
 	if err := os.WriteFile(filepath.Join(operation, "request.json"), raw, 0o600); err != nil {
 		return state, err
 	}
-	volumes := []string{volumeSpec(directory, "/run", false), volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true), volumeSpec(filepath.Join(directory, "forecasts"), "/run/forecasts", true)}
-	if basemap {
-		volumes = append(volumes, volumeSpec(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo"), "/basemap", true))
+	if s.Resources == nil || s.Resources.Diagnostics == nil {
+		return state, fmt.Errorf("diagnostics resources are not loaded")
 	}
-	service := map[string]any{"image": s.Config.Diagnostics.Image, "command": []string{"--config", "/run/logs/diagnostics-" + attempt + "/request.json"}, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
+	diagnostics := s.Resources.Diagnostics
+	requestPath := "/run/logs/diagnostics-" + attempt + "/request.json"
+	volumes := []string{}
+	for _, mount := range diagnostics.Container.Mounts {
+		if mount.Name == "basemap" && !basemap {
+			continue
+		}
+		host, err := s.mountHost(mount.Name, "", "", directory, "", "")
+		if err != nil {
+			return state, err
+		}
+		volumes = append(volumes, volumeSpec(host, mount.Target, !mount.Write))
+	}
+	command := expandCommand(diagnostics.Container.Command, map[string]string{"request": requestPath})
+	service := map[string]any{"image": diagnostics.Container.Image, "command": command, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
 	if user := containerUser(); user != "" {
 		service["user"] = user
 	}

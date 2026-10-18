@@ -43,6 +43,7 @@ def test_model_entry_rejects_wrong_grid_and_weights_before_inference(
 
     entry = model_entry()
     monkeypatch.setenv("NIB_MODEL", "wadepre")
+    monkeypatch.setenv("NIB_ADAPTER_MODULE", "test_adapter")
     monkeypatch.setattr(
         sys, "argv", ["model_run", "--run", str(run), "--weights", str(weights)]
     )

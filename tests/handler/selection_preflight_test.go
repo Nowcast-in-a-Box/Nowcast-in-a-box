@@ -48,36 +48,28 @@ func TestMetricFamiliesMatchAtlasCatalog(t *testing.T) {
 
 func TestUnknownMetricStillRejected(t *testing.T) {
 	raw, hash := verificationPackage(t, []string{"nope"})
-	_, err := handler.ParseRuntimePackage(raw, hash)
+	_, err := handler.ParseRuntimePackage(raw, hash, testResources(t))
 	if err == nil || !strings.Contains(err.Error(), "unsupported or repeated metric") {
 		t.Fatal(err)
 	}
 }
 
 func TestSelectionPreflightReportsMissingDataAndWeights(t *testing.T) {
-	cfg := handler.DefaultConfig()
-	cfg.Paths.DataRoot = t.TempDir()
+	cfg := testConfig(t)
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Runtime.Token = "token"
 	server := handler.NewServer(cfg)
-	body := `{"event_id":"S710140","context_start_time":"2017-06-16T21:15:00Z","models":["wadepre"]}`
+	body := `{"data_id":"sevir","event_id":"S710140","context_start_time":"2017-06-16T21:15:00Z","models":["wadepre"]}`
 	response := postPreflight(t, server, body)
 	if response["ok"] != false || response["checks"].([]any)[0].(map[string]any)["id"] != "data" {
 		t.Fatal(response)
 	}
 
-	for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-		target := filepath.Join(cfg.Paths.DataRoot, name)
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(target, []byte("fixture"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSevirData(t, &cfg)
+	server.Config = cfg
 	server.Runner = readyRunner{}
 	joined := mustJSON(t, postPreflight(t, server, body))
-	if !strings.Contains(joined, "Validate copies it from runtime.weight_source") {
+	if !strings.Contains(joined, "Validate copies it from paths.weight_source") {
 		t.Fatal(joined)
 	}
 	if result := postPreflight(t, server, body); result["ok"] != true {

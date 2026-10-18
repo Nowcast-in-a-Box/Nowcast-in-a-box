@@ -1,0 +1,22 @@
+schema: nib.resource.v1
+kind: model
+id: wadepre
+product_ids: [wadepre-sevir]
+name: WADEPre
+weights:
+  file: WADEPre.onnx
+  sha256: "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b"
+container:
+  image: nib-wadepre:dev
+  build:
+    context: "."
+    dockerfile: adapters/sevir/wadepre/Dockerfile
+  command: ["--run", "/run", "--weights", "/weights/model.onnx"]
+  mounts:
+    - name: run
+      target: /run
+      write: true
+    - name: inputs
+      target: /run/inputs
+    - name: weights
+      target: /weights/model.onnx

@@ -15,7 +15,10 @@ import (
 // next to config.yaml so the download folder stays self-contained and never
 // needs a privileged per-user directory. The file is gitignored.
 type localSettings struct {
-	DataRoot string `json:"data_root,omitempty"`
+	// DataRoot is the pre-multi-dataset shape. It becomes a fallback for any
+	// data source without an explicit entry; the next save writes DataRoots.
+	DataRoot  string            `json:"data_root,omitempty"`
+	DataRoots map[string]string `json:"data_roots,omitempty"`
 }
 
 func settingsPath(cfg Config) (string, error) {
@@ -46,7 +49,7 @@ func readSettings(cfg Config) (localSettings, error) {
 		return settings, fmt.Errorf("read %s: %w", settingsFileName, err)
 	}
 	if err := json.Unmarshal(raw, &settings); err != nil {
-		return settings, fmt.Errorf("%s is not valid JSON: %w; remove it or restore a data_root", settingsFileName, err)
+		return settings, fmt.Errorf("%s is not valid JSON: %w; remove it or restore a data_roots entry", settingsFileName, err)
 	}
 	return settings, nil
 }
@@ -83,33 +86,70 @@ func writeSettings(cfg Config, settings localSettings) error {
 	return os.Rename(name, path)
 }
 
-// applySettings merges the saved local settings over config.yaml. A saved
-// data root is relative to the settings file when it is not absolute.
+// applySettings merges saved local settings over config.yaml. Relative roots
+// are resolved against the settings file.
 func (c *Config) applySettings() error {
 	settings, err := readSettings(*c)
 	if err != nil {
 		return err
 	}
-	if settings.DataRoot == "" {
-		return nil
+	path, err := settingsPath(*c)
+	if err != nil {
+		return err
 	}
-	if !filepath.IsAbs(settings.DataRoot) {
-		path, err := settingsPath(*c)
-		if err != nil {
-			return err
+	resolve := func(value string) string {
+		if value == "" || filepath.IsAbs(value) {
+			return filepath.Clean(value)
 		}
-		settings.DataRoot = filepath.Join(filepath.Dir(path), settings.DataRoot)
+		return filepath.Join(filepath.Dir(path), value)
 	}
-	c.Paths.DataRoot = filepath.Clean(settings.DataRoot)
+	if len(settings.DataRoots) > 0 {
+		c.DataRoots = map[string]string{}
+		for id, value := range settings.DataRoots {
+			c.DataRoots[id] = resolve(value)
+		}
+	}
+	if settings.DataRoot != "" {
+		c.DataRootFallback = resolve(settings.DataRoot)
+	}
 	return nil
+}
+
+func (s *Server) dataRoot(id string) string {
+	if root := s.currentConfig().DataRoots[id]; root != "" {
+		return root
+	}
+	return s.currentConfig().DataRootFallback
+}
+
+func (s *Server) effectiveDataRoots() map[string]string {
+	roots := map[string]string{}
+	if resources := s.resources(); resources != nil {
+		for _, data := range resources.DataSources() {
+			if root := s.dataRoot(data.ID); root != "" {
+				roots[data.ID] = root
+			}
+		}
+		return roots
+	}
+	for id, root := range s.currentConfig().DataRoots {
+		roots[id] = root
+	}
+	if s.currentConfig().DataRootFallback != "" && len(roots) == 0 {
+		// Without resources the fallback still applies to the single legacy
+		// data source shape.
+		roots[""] = s.currentConfig().DataRootFallback
+	}
+	return roots
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		writeJSON(w, 200, map[string]any{"data_root": s.currentConfig().Paths.DataRoot})
+		writeJSON(w, 200, map[string]any{"data_roots": s.effectiveDataRoots()})
 		return
 	}
 	var update struct {
+		DataID   string `json:"data_id"`
 		DataRoot string `json:"data_root"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
@@ -118,17 +158,39 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, err)
 		return
 	}
-	if decoder.Decode(&struct{}{}) != io.EOF || update.DataRoot == "" {
-		runtimeError(w, 400, fmt.Errorf("one data_root setting is required"))
+	if decoder.Decode(&struct{}{}) != io.EOF || update.DataID == "" || update.DataRoot == "" {
+		runtimeError(w, 400, fmt.Errorf("data_id and data_root are required"))
 		return
 	}
-	s.saveDataRoot(w, update.DataRoot)
+	s.saveDataRoot(w, update.DataID, update.DataRoot)
 }
 
 func (s *Server) handlePickDataRoot(w http.ResponseWriter, r *http.Request) {
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8))
-	if err != nil || strings.TrimSpace(string(raw)) != "" {
-		runtimeError(w, 400, fmt.Errorf("folder selection does not accept a path"))
+	var update struct {
+		DataID string `json:"data_id"`
+	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+	if err != nil {
+		runtimeError(w, 400, err)
+		return
+	}
+	if text := strings.TrimSpace(string(raw)); text != "" {
+		decoder := json.NewDecoder(strings.NewReader(text))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&update); err != nil {
+			runtimeError(w, 400, err)
+			return
+		}
+		if decoder.Decode(&struct{}{}) != io.EOF {
+			runtimeError(w, 400, fmt.Errorf("one request object required"))
+			return
+		}
+	}
+	if update.DataID == "" {
+		update.DataID = r.URL.Query().Get("data_id")
+	}
+	if update.DataID == "" {
+		runtimeError(w, 400, fmt.Errorf("data_id is required"))
 		return
 	}
 	pick := s.PickFolder
@@ -140,12 +202,21 @@ func (s *Server) handlePickDataRoot(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 409, err)
 		return
 	}
-	s.saveDataRoot(w, chosen)
+	s.saveDataRoot(w, update.DataID, chosen)
 }
 
-func (s *Server) saveDataRoot(w http.ResponseWriter, requested string) {
+func (s *Server) saveDataRoot(w http.ResponseWriter, dataID, requested string) {
 	if os.Getenv("NIB_DATA_ROOT") != "" {
 		runtimeError(w, 409, fmt.Errorf("NIB_DATA_ROOT overrides this setting; unset it before changing config"))
+		return
+	}
+	resources := s.resources()
+	if resources == nil {
+		runtimeError(w, 503, s.resourceFailure())
+		return
+	}
+	if _, ok := resources.DataByID(dataID); !ok {
+		runtimeError(w, 422, fmt.Errorf("data source %q is not packaged by this Handler; update its resources", dataID))
 		return
 	}
 	root, err := filepath.Abs(requested)
@@ -162,23 +233,37 @@ func (s *Server) saveDataRoot(w http.ResponseWriter, requested string) {
 	defer s.jobsMu.Unlock()
 	for _, job := range s.jobs {
 		if job.Status == "running" || job.Status == "queued" {
-			runtimeError(w, 409, fmt.Errorf("wait for active jobs before changing data root"))
+			runtimeError(w, 409, fmt.Errorf("wait for active jobs before changing a data root"))
 			return
 		}
 	}
-	s.configMu.Lock()
-	defer s.configMu.Unlock()
-	// Keep every saved field: only data_root is browser-editable today.
-	settings, err := readSettings(s.Config)
-	if err != nil {
-		runtimeError(w, 500, err)
+	var saveErr error
+	func() {
+		s.configMu.Lock()
+		defer s.configMu.Unlock()
+		settings, err := readSettings(s.Config)
+		if err != nil {
+			saveErr = err
+			return
+		}
+		if settings.DataRoots == nil {
+			settings.DataRoots = map[string]string{}
+		}
+		settings.DataRoots[dataID] = root
+		// The legacy single-root field is superseded by the map.
+		settings.DataRoot = ""
+		if err := writeSettings(s.Config, settings); err != nil {
+			saveErr = fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err)
+			return
+		}
+		if s.Config.DataRoots == nil {
+			s.Config.DataRoots = map[string]string{}
+		}
+		s.Config.DataRoots[dataID] = root
+	}()
+	if saveErr != nil {
+		runtimeError(w, 500, saveErr)
 		return
 	}
-	settings.DataRoot = root
-	if err := writeSettings(s.Config, settings); err != nil {
-		runtimeError(w, 500, fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err))
-		return
-	}
-	s.Config.Paths.DataRoot = root
-	writeJSON(w, 200, map[string]string{"data_root": root})
+	writeJSON(w, 200, map[string]any{"data_roots": s.effectiveDataRoots()})
 }

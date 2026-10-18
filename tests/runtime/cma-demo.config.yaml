@@ -1,4 +1,4 @@
-# Set NIB_DATA_ROOT to the existing cma-radar directory before starting.
+# Set the CMA folder in Checkout (saved next to this file), or NIB_DATA_ROOT.
 handler:
   host: 127.0.0.1
   port: 8765
@@ -8,14 +8,8 @@ review:
 paths:
   artifacts: ../../artifacts
   runs: ../../runs
-diagnostics:
-  image: nib-diagnostics:cma-demo
+  resources: ../..
 runtime:
-  dataset: cma_radar
-  data_file: .
-  ingestion_image: nib-ingestion:cma-demo
-  model_images:
-    cma_radar/nowcastnet: nib-nowcastnet:cma-demo
   allowed_origins:
     - http://127.0.0.1:5173
   atlas_revision: 1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8

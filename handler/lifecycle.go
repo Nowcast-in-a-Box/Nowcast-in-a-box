@@ -84,11 +84,17 @@ func profileID(cfg Config) string {
 }
 
 func configID(cfg Config) string {
-	// Only the data root and trusted origins are reloaded. Tokens stay private.
+	// Data roots and trusted origins are reloaded without changing identity.
+	// Tokens stay private. Resource manifests are loaded at start; editing one
+	// requires an explicit restart.
 	handlerURL, reviewURL := addressURL(cfg.Handler), addressURL(cfg.Review)
 	cfg.Handler, cfg.Review = Addr{}, Addr{}
-	cfg.Paths.DataRoot = ""
-	cfg.Paths.Runs, cfg.Paths.Artifacts = canonicalPath(cfg.Paths.Runs), canonicalPath(cfg.Paths.Artifacts)
+	cfg.DataRoots = nil
+	cfg.DataRootFallback = ""
+	cfg.Paths.Runs = canonicalPath(cfg.Paths.Runs)
+	cfg.Paths.Artifacts = canonicalPath(cfg.Paths.Artifacts)
+	cfg.Paths.Resources = canonicalPath(cfg.Paths.Resources)
+	cfg.Paths.WeightSource = canonicalPath(cfg.Paths.WeightSource)
 	cfg.Runtime.AllowedOrigins = nil
 	body, _ := json.Marshal(struct {
 		Source, Handler, Review string

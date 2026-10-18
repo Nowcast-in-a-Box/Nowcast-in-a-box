@@ -1,0 +1,25 @@
+schema: nib.resource.v1
+kind: data
+id: sevir
+product_id: sevir-vil
+name: SEVIR VIL
+data:
+  path: SEVIR/processed/sevir_vil.h5
+  kind: file
+  catalog: source/CATALOG.csv
+verification:
+  level_min: 0
+  level_max: 255
+  unit: raw
+visualization_basemap: true
+container:
+  image: nib-ingestion:dev
+  build:
+    context: "."
+    dockerfile: adapters/sevir/Dockerfile
+  entrypoint: ["--dataset", "sevir", "--data", "/inputs/data.h5", "--catalog", "/inputs/CATALOG.csv"]
+  mounts:
+    - name: data
+      target: /inputs/data.h5
+    - name: catalog
+      target: /inputs/CATALOG.csv

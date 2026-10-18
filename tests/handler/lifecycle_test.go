@@ -106,13 +106,9 @@ func TestStatusUsesConfiguredPortAndRejectsDifferentConfiguration(t *testing.T) 
 
 func TestStatusRejectsChangedExecutionSettings(t *testing.T) {
 	for name, change := range map[string]func(*handler.Config){
-		"model image":       func(c *handler.Config) { c.Runtime.ModelImages["nowcastnet"] = "other:image" },
-		"ingestion image":   func(c *handler.Config) { c.Runtime.IngestionImage = "other:image" },
-		"diagnostics image": func(c *handler.Config) { c.Diagnostics.Image = "other:image" },
-		"Docker context":    func(c *handler.Config) { c.Runtime.DockerContext = "other" },
-		"data file":         func(c *handler.Config) { c.Runtime.DataFile = "other.h5" },
-		"catalog":           func(c *handler.Config) { c.Runtime.CatalogFile = "other.csv" },
-		"Atlas revision":    func(c *handler.Config) { c.Runtime.AtlasRevision = strings.Repeat("b", 40) },
+		"resources root": func(c *handler.Config) { c.Paths.Resources = t.TempDir() },
+		"Docker context": func(c *handler.Config) { c.Runtime.DockerContext = "other" },
+		"Atlas revision": func(c *handler.Config) { c.Runtime.AtlasRevision = strings.Repeat("b", 40) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, cfg, _ := liveHandler(t)
@@ -134,7 +130,6 @@ func TestStatusRejectsChangedExecutionSettings(t *testing.T) {
 
 func TestStatusAllowsMutableOriginAndDataRootSettings(t *testing.T) {
 	_, cfg, _ := liveHandler(t)
-	cfg.Paths.DataRoot = t.TempDir()
 	cfg.Runtime.AllowedOrigins = []string{"http://other.example:8123"}
 	raw, _ := yaml.Marshal(cfg)
 	if err := os.WriteFile(cfg.Source, raw, 0o600); err != nil {
@@ -261,17 +256,8 @@ func TestStopBlocksActiveDiagnosticAttempt(t *testing.T) {
 
 func TestLiveRunCannotBeReplacedByAnotherIdempotencyKey(t *testing.T) {
 	server, cfg, _ := liveHandler(t)
-	cfg.Paths.DataRoot = t.TempDir()
 	cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
-	for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-		file := filepath.Join(cfg.Paths.DataRoot, name)
-		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSevirData(t, &cfg)
 	server.Config = cfg
 	runner := &blockedLifecycleRunner{entered: make(chan struct{}), release: make(chan struct{})}
 	server.Runner = runner
@@ -326,22 +312,13 @@ func TestHistoricalPollingCannotOverwriteConcurrentAdmission(t *testing.T) {
 	for attempt := 0; attempt < 30; attempt++ {
 		t.Run(fmt.Sprint(attempt), func(t *testing.T) {
 			server, cfg, _ := liveHandler(t)
-			cfg.Paths.DataRoot = t.TempDir()
 			cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
-			for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-				file := filepath.Join(cfg.Paths.DataRoot, name)
-				if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}
+			writeSevirData(t, &cfg)
 			server.Config = cfg
 			runner := &blockedLifecycleRunner{entered: make(chan struct{}), release: make(chan struct{})}
 			server.Runner = runner
 			raw, digest := packageFixture(t, "wadepre-sevir", nil)
-			request, err := handler.ParseRuntimePackage(raw, digest)
+			request, err := handler.ParseRuntimePackage(raw, digest, server.Resources)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -389,17 +366,8 @@ func TestHistoricalPollingCannotOverwriteConcurrentAdmission(t *testing.T) {
 func TestJobAdmissionCannotRaceSuccessfulStop(t *testing.T) {
 	for attempt := 0; attempt < 12; attempt++ {
 		server, cfg, _ := liveHandler(t)
-		cfg.Paths.DataRoot = t.TempDir()
 		cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
-		for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-			file := filepath.Join(cfg.Paths.DataRoot, name)
-			if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}
+		writeSevirData(t, &cfg)
 		server.Config = cfg
 		runner := &blockedLifecycleRunner{entered: make(chan struct{}), release: make(chan struct{})}
 		server.Runner = runner

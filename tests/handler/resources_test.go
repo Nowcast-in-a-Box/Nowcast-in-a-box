@@ -111,8 +111,9 @@ func waitForExecution(t *testing.T, server *handler.Server, status string) map[s
 }
 
 func TestResourcesReportMissingImagesWithoutPulling(t *testing.T) {
-	server := resourceServer(t, handler.DefaultConfig())
+	server := resourceServer(t, testConfig(t))
 	server.Runner = &resourceRunner{}
+	server.RefreshResources()
 	snapshot := resourceGet(t, server, "/v1/resources")
 	diagnostics := snapshot["diagnostics"].(map[string]any)
 	if diagnostics["status"] != "missing" {
@@ -131,16 +132,14 @@ func TestResourcesPrepareCopiesMissingWeightFromLocalSource(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(source, "cma_radar", "nowcastnet", "NowcastNet.onnx")); err != nil {
 		t.Skipf("real pinned weight is not available: %v", err)
 	}
-	cfg := handler.DefaultConfig()
-	cfg.Runtime.Dataset = "cma_radar"
-	cfg.Runtime.ModelImages = map[string]string{"cma_radar/nowcastnet": "nib-nowcastnet:test"}
-	cfg.Diagnostics.Image = "nib-diagnostics:test"
+	cfg := testConfig(t)
+	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = t.TempDir()
-	cfg.Runtime.WeightSource, _ = filepath.Abs(source)
+	cfg.Paths.WeightSource, _ = filepath.Abs(source)
 	server := resourceServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:test": true, "nib-ingestion:dev": true, "nib-nowcastnet:test": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
-	resourcePrepare(t, server, `{"models":["nowcastnet"]}`)
+	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "ready")
 	group := executionGroup(snapshot)
 	if group["status"] != "ready" {
@@ -166,16 +165,14 @@ func TestResourcesSkipWeightCopyWhenSHAAlreadyMatches(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(artifacts, "cma_radar", "nowcastnet", "NowcastNet.onnx")); err != nil {
 		t.Skipf("real pinned weight is not available: %v", err)
 	}
-	cfg := handler.DefaultConfig()
-	cfg.Runtime.Dataset = "cma_radar"
-	cfg.Runtime.ModelImages = map[string]string{"cma_radar/nowcastnet": "nib-nowcastnet:test"}
-	cfg.Diagnostics.Image = "nib-diagnostics:test"
+	cfg := testConfig(t)
+	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = artifacts
-	cfg.Runtime.WeightSource = t.TempDir()
+	cfg.Paths.WeightSource = t.TempDir()
 	server := resourceServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:test": true, "nib-ingestion:dev": true, "nib-nowcastnet:test": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
-	resourcePrepare(t, server, `{"models":["nowcastnet"]}`)
+	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "ready")
 	items := executionGroup(snapshot)["items"].([]any)
 	for _, raw := range items {
@@ -187,13 +184,11 @@ func TestResourcesSkipWeightCopyWhenSHAAlreadyMatches(t *testing.T) {
 }
 
 func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
-	cfg := handler.DefaultConfig()
-	cfg.Runtime.Dataset = "cma_radar"
-	cfg.Runtime.ModelImages = map[string]string{"cma_radar/nowcastnet": "nib-nowcastnet:test"}
-	cfg.Diagnostics.Image = "nib-diagnostics:test"
+	cfg := testConfig(t)
+	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = t.TempDir()
-	cfg.Runtime.WeightSource = t.TempDir()
-	source := filepath.Join(cfg.Runtime.WeightSource, "cma_radar", "nowcastnet")
+	cfg.Paths.WeightSource = t.TempDir()
+	source := filepath.Join(cfg.Paths.WeightSource, "cma_radar", "nowcastnet")
 	if err := os.MkdirAll(source, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -201,9 +196,9 @@ func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := resourceServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:test": true, "nib-ingestion:dev": true, "nib-nowcastnet:test": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
-	resourcePrepare(t, server, `{"models":["nowcastnet"]}`)
+	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "failed")
 	group := executionGroup(snapshot)
 	if !strings.Contains(group["message"].(string), "does not match the pinned SHA-256") {
@@ -219,24 +214,22 @@ func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
 }
 
 func TestResourcesExplainMissingWeightSource(t *testing.T) {
-	cfg := handler.DefaultConfig()
-	cfg.Runtime.Dataset = "cma_radar"
-	cfg.Runtime.ModelImages = map[string]string{"cma_radar/nowcastnet": "nib-nowcastnet:test"}
-	cfg.Diagnostics.Image = "nib-diagnostics:test"
+	cfg := testConfig(t)
+	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = t.TempDir()
 	server := resourceServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:test": true, "nib-ingestion:dev": true, "nib-nowcastnet:test": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
-	resourcePrepare(t, server, `{"models":["nowcastnet"]}`)
+	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "failed")
-	if !strings.Contains(mustJSON(t, snapshot), "runtime.weight_source") {
+	if !strings.Contains(mustJSON(t, snapshot), "paths.weight_source") {
 		t.Fatalf("snapshot = %s", mustJSON(t, snapshot))
 	}
 }
 
 func TestResourcesRejectUnconfiguredModel(t *testing.T) {
-	server := resourceServer(t, handler.DefaultConfig())
-	request := httptest.NewRequest("POST", "http://127.0.0.1/v1/resources/prepare", strings.NewReader(`{"models":["unknown"]}`))
+	server := resourceServer(t, testConfig(t))
+	request := httptest.NewRequest("POST", "http://127.0.0.1/v1/resources/prepare", strings.NewReader(`{"data_id":"cma_radar","models":["unknown"]}`))
 	request.Header.Set("Authorization", "Bearer token")
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)

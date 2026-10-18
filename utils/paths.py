@@ -43,7 +43,7 @@ def resolve_data_dir(data_dir: str, data_root: str | None) -> Path:
     if not root:
         raise ConstraintError(
             "relative data_dir requires a data root "
-            "(NIB_DATA_ROOT or config.yaml paths.data_root)"
+            "(NIB_DATA_ROOT or the data folder saved in nib-settings.json)"
         )
 
     root_path = Path(root)

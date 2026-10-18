@@ -26,19 +26,11 @@ func (f *failingDiagnosticRunner) Run(ctx context.Context, args ...string) (int,
 
 func automaticServer(t *testing.T) (*handler.Server, handler.Config) {
 	t.Helper()
-	cfg := handler.DefaultConfig()
-	cfg.Paths.Runs, cfg.Paths.Artifacts, cfg.Paths.DataRoot = t.TempDir(), t.TempDir(), t.TempDir()
+	cfg := testConfig(t)
+	cfg.Paths.Runs, cfg.Paths.Artifacts = t.TempDir(), t.TempDir()
 	cfg.Runtime.Token = "token"
 	cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
-	for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-		p := filepath.Join(cfg.Paths.DataRoot, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte("fixture"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSevirData(t, &cfg)
 	return handler.NewServer(cfg), cfg
 }
 

@@ -14,9 +14,8 @@ import (
 )
 
 // Docker image layers are treated as already cached: this build checks that
-// the configured images exist and never pulls them. Weights are prepared by
-// copying from runtime.weight_source (a folder laid out like artifacts/),
-// which is the local equivalent of a download.
+// the packaged images exist and never pulls them. Missing weights are copied
+// from paths.weight_source, laid out like artifacts/<data>/<model>/<file>.
 type resourceItem struct {
 	Kind            string `json:"kind"`
 	ID              string `json:"id"`
@@ -38,7 +37,11 @@ type resourceSnapshot struct {
 }
 
 func (s *Server) handleResources(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.resourcesSnapshot())
+	dataID := r.URL.Query().Get("data_id")
+	if dataID == "" {
+		dataID = s.executionDataID
+	}
+	writeJSON(w, http.StatusOK, s.resourcesSnapshot(dataID))
 }
 
 func cloneResources(snapshot resourceSnapshot) resourceSnapshot {
@@ -51,6 +54,7 @@ func cloneResources(snapshot resourceSnapshot) resourceSnapshot {
 
 func (s *Server) handlePrepareResources(w http.ResponseWriter, r *http.Request) {
 	var request struct {
+		DataID string   `json:"data_id"`
 		Models []string `json:"models"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
@@ -63,9 +67,13 @@ func (s *Server) handlePrepareResources(w http.ResponseWriter, r *http.Request) 
 		runtimeError(w, 400, fmt.Errorf("one request object required"))
 		return
 	}
+	if _, err := s.dataResource(request.DataID); err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
 	for _, model := range request.Models {
-		if s.modelImage(model) == "" || modelWeightName(model) == "" {
-			runtimeError(w, 422, fmt.Errorf("model %q is not configured for dataset %s", model, s.dataID()))
+		if _, err := s.modelResource(request.DataID, model); err != nil {
+			runtimeError(w, 422, err)
 			return
 		}
 	}
@@ -78,10 +86,11 @@ func (s *Server) handlePrepareResources(w http.ResponseWriter, r *http.Request) 
 	}
 	s.preparingResources = true
 	s.resourcesLoaded = true
+	s.executionDataID = request.DataID
 	s.executionModels = append([]string(nil), request.Models...)
 	s.currentResources = resourceSnapshot{
 		Diagnostics: s.checkDiagnosticsLocked(),
-		Execution:   s.executionGroupLocked(request.Models),
+		Execution:   s.executionGroupLocked(request.DataID, request.Models),
 	}
 	if len(request.Models) > 0 && s.currentResources.Execution.Status != "failed" {
 		s.currentResources.Execution.Status = "preparing"
@@ -89,7 +98,7 @@ func (s *Server) handlePrepareResources(w http.ResponseWriter, r *http.Request) 
 	}
 	snapshot := cloneResources(s.currentResources)
 	s.resourcesMu.Unlock()
-	go s.prepareExecution(request.Models)
+	go s.prepareExecution(request.DataID, request.Models)
 	writeJSON(w, http.StatusOK, snapshot)
 }
 
@@ -103,12 +112,12 @@ func (s *Server) RefreshResources() {
 	}
 	s.currentResources = resourceSnapshot{
 		Diagnostics: s.checkDiagnosticsLocked(),
-		Execution:   s.executionGroupLocked(s.executionModels),
+		Execution:   s.executionGroupLocked(s.executionDataID, s.executionModels),
 	}
 	s.resourcesLoaded = true
 }
 
-func (s *Server) resourcesSnapshot() resourceSnapshot {
+func (s *Server) resourcesSnapshot(dataID string) resourceSnapshot {
 	s.resourcesMu.Lock()
 	defer s.resourcesMu.Unlock()
 	if s.preparingResources || s.resourcesLoaded {
@@ -116,17 +125,17 @@ func (s *Server) resourcesSnapshot() resourceSnapshot {
 	}
 	s.currentResources = resourceSnapshot{
 		Diagnostics: s.checkDiagnosticsLocked(),
-		Execution:   s.executionGroupLocked(s.executionModels),
+		Execution:   s.executionGroupLocked(dataID, nil),
 	}
 	s.resourcesLoaded = true
 	return cloneResources(s.currentResources)
 }
 
 func (s *Server) checkDiagnosticsLocked() resourceGroup {
-	image := s.Config.Diagnostics.Image
-	if image == "" {
-		return resourceGroup{Status: "failed", Message: "diagnostics image is not configured"}
+	if s.Resources == nil || s.Resources.Diagnostics == nil {
+		return resourceGroup{Status: "failed", Message: s.resourceErrorText("diagnostics resources are not loaded")}
 	}
+	image := s.Resources.Diagnostics.Container.Image
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	code, _, err := s.docker(ctx, "image", "inspect", image)
@@ -142,20 +151,28 @@ func (s *Server) checkDiagnosticsLocked() resourceGroup {
 		return resourceGroup{Status: "failed", Message: err.Error(), Items: []resourceItem{item}}
 	}
 	item.Status = "missing"
-	item.Message = fmt.Sprintf("image %s is not present locally; build it with docker build -f diagnostics/Dockerfile -t %s .", image, image)
+	item.Message = fmt.Sprintf("image %s is not present locally; build it with docker build -f %s .", image, buildHint(s.Resources.Diagnostics.Container.Build, "diagnostics/Dockerfile"))
 	return resourceGroup{Status: "missing", Message: item.Message, Items: []resourceItem{item}}
 }
 
-func (s *Server) executionGroupLocked(models []string) resourceGroup {
-	if len(models) == 0 {
-		return resourceGroup{Status: "missing", Message: "select a model before preparing execution resources", Items: []resourceItem{}}
+func (s *Server) executionGroupLocked(dataID string, models []string) resourceGroup {
+	if dataID == "" || len(models) == 0 {
+		return resourceGroup{Status: "missing", Message: "select a data source and model before preparing execution resources", Items: []resourceItem{}}
+	}
+	data, err := s.dataResource(dataID)
+	if err != nil {
+		return resourceGroup{Status: "failed", Message: err.Error(), Items: []resourceItem{}}
 	}
 	items := make([]resourceItem, 0, 1+2*len(models))
-	ingestion := s.Config.Runtime.IngestionImage
-	items = append(items, s.imageItem(ingestion))
+	items = append(items, s.imageItem(data.Container.Image))
 	for _, model := range models {
-		items = append(items, s.imageItem(s.modelImage(model)))
-		items = append(items, s.weightItem(model))
+		resource, err := s.modelResource(dataID, model)
+		if err != nil {
+			items = append(items, resourceItem{Kind: "weight", ID: model, Status: "failed", Message: err.Error()})
+			continue
+		}
+		items = append(items, s.imageItem(resource.Container.Image))
+		items = append(items, s.weightItem(dataID, model, resource))
 	}
 	return groupFromItems(items)
 }
@@ -185,19 +202,24 @@ func (s *Server) imageItem(image string) resourceItem {
 	return item
 }
 
-func (s *Server) weightItem(model string) resourceItem {
-	item := resourceItem{Kind: "weight", ID: model}
-	path := s.weightPath(model)
-	if err := verifyModelWeights(path, model); err == nil {
+func (s *Server) weightItem(dataID, modelID string, resource *ModelResource) resourceItem {
+	item := resourceItem{Kind: "weight", ID: modelID}
+	path, err := s.weightPath(dataID, modelID)
+	if err != nil {
+		item.Status = "failed"
+		item.Message = err.Error()
+		return item
+	}
+	if err := verifyWeight(path, resource.Weights.SHA256); err == nil {
 		item.Status = "ready"
 		item.Message = "weight matches the pinned SHA-256"
 		return item
 	}
 	item.Status = "missing"
-	if s.Config.Runtime.WeightSource == "" {
-		item.Message = fmt.Sprintf("weight is missing at %s; place it there or set runtime.weight_source to a folder laid out like artifacts/", path)
+	if s.Config.Paths.WeightSource == "" {
+		item.Message = fmt.Sprintf("weight is missing at %s; place it there or set paths.weight_source to a folder laid out like artifacts/", path)
 	} else {
-		item.Message = "weight is missing and will be copied from runtime.weight_source"
+		item.Message = "weight is missing and will be copied from paths.weight_source"
 	}
 	return item
 }
@@ -227,10 +249,21 @@ func groupFromItems(items []resourceItem) resourceGroup {
 	return group
 }
 
-func (s *Server) prepareExecution(models []string) {
+func (s *Server) prepareExecution(dataID string, models []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
-	for _, image := range append([]string{s.Config.Runtime.IngestionImage}, modelImages(s, models)...) {
+	data, err := s.dataResource(dataID)
+	if err != nil {
+		s.finishPreparation()
+		return
+	}
+	images := []string{data.Container.Image}
+	for _, model := range models {
+		if resource, err := s.modelResource(dataID, model); err == nil {
+			images = append(images, resource.Container.Image)
+		}
+	}
+	for _, image := range images {
 		item := s.imageItem(image)
 		s.updateResourceItem(item)
 		if item.Status != "ready" {
@@ -239,38 +272,39 @@ func (s *Server) prepareExecution(models []string) {
 		}
 	}
 	for _, model := range models {
-		s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "preparing", Message: "checking local weight"})
-		if err := verifyModelWeights(s.weightPath(model), model); err == nil {
-			s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "ready", Message: "weight matches the pinned SHA-256"})
-			continue
-		}
-		if err := s.copyWeight(ctx, model); err != nil {
+		resource, err := s.modelResource(dataID, model)
+		if err != nil {
 			s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "failed", Message: err.Error()})
 			s.finishPreparation()
 			return
 		}
-		s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "ready", Message: "weight copied from runtime.weight_source and verified"})
+		s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "preparing", Message: "checking local weight"})
+		weight, err := s.weightPath(dataID, model)
+		if err == nil {
+			err = verifyWeight(weight, resource.Weights.SHA256)
+		}
+		if err == nil {
+			s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "ready", Message: "weight matches the pinned SHA-256"})
+			continue
+		}
+		if err := s.copyWeight(ctx, dataID, model, resource, weight); err != nil {
+			s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "failed", Message: err.Error()})
+			s.finishPreparation()
+			return
+		}
+		s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "ready", Message: "weight copied from paths.weight_source and verified"})
 	}
 	s.finishPreparation()
 }
 
-func modelImages(s *Server, models []string) []string {
-	images := make([]string, 0, len(models))
-	for _, model := range models {
-		images = append(images, s.modelImage(model))
+func (s *Server) copyWeight(ctx context.Context, dataID, modelID string, resource *ModelResource, target string) error {
+	if s.Config.Paths.WeightSource == "" {
+		return fmt.Errorf("weight %s is missing; set paths.weight_source to a folder laid out like artifacts/", modelID)
 	}
-	return images
-}
-
-func (s *Server) copyWeight(ctx context.Context, model string) error {
-	source := filepath.Join(s.Config.Runtime.WeightSource, s.dataID(), model, modelWeightName(model))
-	if s.Config.Runtime.WeightSource == "" {
-		return fmt.Errorf("weight %s is missing; set runtime.weight_source to a folder laid out like artifacts/", model)
-	}
-	target := s.weightPath(model)
+	source := filepath.Join(s.Config.Paths.WeightSource, dataID, modelID, resource.Weights.File)
 	info, err := os.Stat(source)
 	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("weight %s is missing; place it at %s or configure runtime.weight_source", model, target)
+		return fmt.Errorf("weight %s is missing; place it at %s or configure paths.weight_source", modelID, target)
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
@@ -311,7 +345,7 @@ func (s *Server) copyWeight(ctx context.Context, model string) error {
 			done += int64(n)
 			if time.Since(last) > 100*time.Millisecond || done == total {
 				last = time.Now()
-				s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "preparing", Message: "copying weight from runtime.weight_source", DownloadedBytes: done, TotalBytes: total})
+				s.updateResourceItem(resourceItem{Kind: "weight", ID: modelID, Status: "preparing", Message: "copying weight from paths.weight_source", DownloadedBytes: done, TotalBytes: total})
 			}
 		}
 		if readErr == io.EOF {
@@ -324,9 +358,8 @@ func (s *Server) copyWeight(ctx context.Context, model string) error {
 	if err := output.Close(); err != nil {
 		return err
 	}
-	expected, ok := weightPins[model]
-	if !ok || hex.EncodeToString(hash.Sum(nil)) != expected {
-		return fmt.Errorf("weight %s in runtime.weight_source does not match the pinned SHA-256; the local file was not replaced", model)
+	if hex.EncodeToString(hash.Sum(nil)) != resource.Weights.SHA256 {
+		return fmt.Errorf("weight %s in paths.weight_source does not match the pinned SHA-256; the local file was not replaced", modelID)
 	}
 	if err := os.Rename(partial, target); err != nil {
 		return err
@@ -357,4 +390,18 @@ func (s *Server) finishPreparation() {
 	defer s.resourcesMu.Unlock()
 	s.currentResources.Execution = groupFromItems(s.currentResources.Execution.Items)
 	s.preparingResources = false
+}
+
+func buildHint(build *ResourceBuild, fallback string) string {
+	if build == nil || build.Dockerfile == "" {
+		return fallback
+	}
+	return build.Dockerfile
+}
+
+func (s *Server) resourceErrorText(fallback string) string {
+	if s.ResourceError != nil {
+		return s.ResourceError.Error()
+	}
+	return fallback
 }

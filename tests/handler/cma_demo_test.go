@@ -17,11 +17,9 @@ func (runner cmaSampleRunner) Run(_ context.Context, args ...string) (int, []byt
 }
 
 func TestCMASamplesUseControlledReadOnlyDirectory(t *testing.T) {
-	cfg := handler.DefaultConfig()
-	cfg.Runtime.Dataset = "cma_radar"
-	cfg.Runtime.DataFile = "."
+	cfg := testConfig(t)
 	cfg.Runtime.Token = "test-token"
-	cfg.Paths.DataRoot = t.TempDir()
+	writeCmaData(t, &cfg)
 	server := handler.NewServer(cfg)
 	calls := [][]string{}
 	server.Runner = cmaSampleRunner{&calls}

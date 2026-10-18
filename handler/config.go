@@ -12,15 +12,15 @@ import (
 )
 
 const (
-	defaultHandlerHost      = "127.0.0.1"
-	defaultHandlerPort      = 8765
-	defaultReviewHost       = "127.0.0.1"
-	defaultReviewPort       = 8766
-	defaultArtifacts        = "artifacts"
-	defaultRuns             = "runs"
-	defaultDiagnosticsImage = "nib-diagnostics:dev"
-	configFileName          = "config.yaml"
-	settingsFileName        = "nib-settings.json"
+	defaultHandlerHost = "127.0.0.1"
+	defaultHandlerPort = 8765
+	defaultReviewHost  = "127.0.0.1"
+	defaultReviewPort  = 8766
+	defaultArtifacts   = "artifacts"
+	defaultRuns        = "runs"
+	defaultResources   = "."
+	configFileName     = "config.yaml"
+	settingsFileName   = "nib-settings.json"
 )
 
 // Addr is a loopback bind address from config.yaml.
@@ -32,29 +32,15 @@ type Addr struct {
 // Paths are host filesystem locations from config.yaml.
 // Relative values resolve against the directory that contains the file.
 type Paths struct {
-	Artifacts string `yaml:"artifacts" json:"artifacts"`
-	DataRoot  string `yaml:"data_root,omitempty" json:"data_root,omitempty"`
-	Runs      string `yaml:"runs,omitempty" json:"runs,omitempty"`
+	Artifacts    string `yaml:"artifacts" json:"artifacts"`
+	Runs         string `yaml:"runs,omitempty" json:"runs,omitempty"`
+	Resources    string `yaml:"resources,omitempty" json:"resources,omitempty"`
+	WeightSource string `yaml:"weight_source,omitempty" json:"weight_source,omitempty"`
 }
 
-// Diagnostics is the metrics and visualization image. The request YAML
-// cannot override it.
-type Diagnostics struct {
-	Image string `yaml:"image,omitempty" json:"image,omitempty"`
-}
-
-// Runtime configures controlled container execution; browser requests cannot set these values.
+// Runtime configures host-side container control; browser requests cannot set these values.
 type Runtime struct {
-	Dataset        string            `yaml:"dataset,omitempty" json:"dataset,omitempty"`
-	DockerContext  string            `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
-	DataFile       string            `yaml:"data_file" json:"data_file"`
-	CatalogFile    string            `yaml:"catalog_file" json:"catalog_file"`
-	IngestionImage string            `yaml:"ingestion_image" json:"ingestion_image"`
-	ModelImages    map[string]string `yaml:"model_images" json:"model_images"`
-	// WeightSource is an optional local folder mirrored like artifacts/
-	// (dataset/model/file). Missing weights are copied from it instead of
-	// downloaded over the network.
-	WeightSource   string   `yaml:"weight_source,omitempty" json:"weight_source,omitempty"`
+	DockerContext  string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
 	AllowedOrigins []string `yaml:"allowed_origins" json:"allowed_origins"`
 	Token          string   `yaml:"token,omitempty" json:"-"`
 	AtlasRevision  string   `yaml:"atlas_revision" json:"atlas_revision"`
@@ -63,25 +49,22 @@ type Runtime struct {
 // Config is the host runtime settings loaded from config.yaml.
 // Source is the file that was read; it is not a YAML field.
 type Config struct {
-	Source      string      `yaml:"-" json:"-"`
-	Handler     Addr        `yaml:"handler"`
-	Review      Addr        `yaml:"review"`
-	Paths       Paths       `yaml:"paths"`
-	Diagnostics Diagnostics `yaml:"diagnostics"`
-	Runtime     Runtime     `yaml:"runtime"`
+	Source           string            `yaml:"-" json:"-"`
+	Handler          Addr              `yaml:"handler"`
+	Review           Addr              `yaml:"review"`
+	Paths            Paths             `yaml:"paths"`
+	Runtime          Runtime           `yaml:"runtime"`
+	DataRoots        map[string]string `yaml:"-" json:"-"`
+	DataRootFallback string            `yaml:"-" json:"-"`
 }
 
 // DefaultConfig is used when a key is missing from config.yaml, or when
 // no config file is found.
 func DefaultConfig() Config {
 	return Config{
-		Handler:     Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
-		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
-		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns},
-		Diagnostics: Diagnostics{Image: defaultDiagnosticsImage},
-		Runtime: Runtime{Dataset: "sevir", DataFile: "SEVIR/processed/sevir_vil.h5", CatalogFile: "source/CATALOG.csv",
-			IngestionImage: "nib-ingestion:dev", ModelImages: map[string]string{
-				"nowcastnet": "nib-nowcastnet:dev", "exprecast": "nib-exprecast:dev", "wadepre": "nib-wadepre:dev"}},
+		Handler: Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
+		Review:  Addr{Host: defaultReviewHost, Port: defaultReviewPort},
+		Paths:   Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Resources: defaultResources},
 	}
 }
 
@@ -149,38 +132,21 @@ func (c *Config) applyDefaults() {
 	if c.Paths.Runs == "" {
 		c.Paths.Runs = d.Paths.Runs
 	}
-	if c.Diagnostics.Image == "" {
-		c.Diagnostics.Image = d.Diagnostics.Image
-	}
-	if c.Runtime.Dataset == "" {
-		c.Runtime.Dataset = d.Runtime.Dataset
-	}
-	if c.Runtime.DataFile == "" {
-		c.Runtime.DataFile = d.Runtime.DataFile
-	}
-	if c.Runtime.CatalogFile == "" {
-		c.Runtime.CatalogFile = d.Runtime.CatalogFile
-	}
-	if c.Runtime.IngestionImage == "" {
-		c.Runtime.IngestionImage = d.Runtime.IngestionImage
-	}
-	if c.Runtime.ModelImages == nil {
-		c.Runtime.ModelImages = d.Runtime.ModelImages
+	if c.Paths.Resources == "" {
+		c.Paths.Resources = d.Paths.Resources
 	}
 }
 
 func (c *Config) resolvePaths(baseDir string) {
 	c.Paths.Artifacts = resolveAgainst(baseDir, c.Paths.Artifacts)
 	c.Paths.Runs = resolveAgainst(baseDir, c.Paths.Runs)
-	c.Runtime.WeightSource = resolveAgainst(baseDir, c.Runtime.WeightSource)
-	if c.Paths.DataRoot != "" {
-		c.Paths.DataRoot = resolveAgainst(baseDir, c.Paths.DataRoot)
-	}
+	c.Paths.Resources = resolveAgainst(baseDir, c.Paths.Resources)
+	c.Paths.WeightSource = resolveAgainst(baseDir, c.Paths.WeightSource)
 }
 
 func (c *Config) applyDataRootEnv() {
 	if env := os.Getenv("NIB_DATA_ROOT"); env != "" {
-		c.Paths.DataRoot = env
+		c.DataRootFallback = env
 	}
 }
 
@@ -199,7 +165,7 @@ func ResolveDataDir(dataRoot, dataDir string) (string, error) {
 		return filepath.Clean(dataDir), nil
 	}
 	if strings.TrimSpace(dataRoot) == "" {
-		return "", fmt.Errorf("relative data_dir requires a data root (NIB_DATA_ROOT or config.yaml paths.data_root)")
+		return "", fmt.Errorf("relative data_dir requires the selected local data folder")
 	}
 	cleaned := filepath.Clean(dataDir)
 	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {

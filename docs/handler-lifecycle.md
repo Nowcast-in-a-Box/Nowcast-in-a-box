@@ -42,15 +42,18 @@ not silent adoption.
 ## Configuration changes and local control
 
 Compatibility checks include the canonical config source, API/results addresses,
-run/artifact locations and immutable execution settings (images, Docker context,
-dataset files and Atlas revision). Data-root and trusted-origin updates do not
-change that compatibility identity. Credentials are not part of the public
-identity response.
+run/artifact locations, the runtime resources root, Docker context and Atlas
+revision. Images, data files, catalogs and mounts live in the resources
+manifests, so changing one of those manifests requires a Handler restart; the
+compatibility identity covers the resources root, not the manifest contents.
+Data-root and trusted-origin updates do not change that identity. Credentials
+are not part of the public identity response.
 
-The Hub saves the selected data folder in `nib-settings.json` next to
-`config.yaml`. The file is gitignored, contains only `data_root`, is written
-atomically with mode `0600`, and is read after `config.yaml` and before
-`NIB_DATA_ROOT`. Deleting it returns the Handler to the config-file value.
+The Hub saves the selected folder per data source in `nib-settings.json` next to
+`config.yaml`. The file is gitignored, contains `data_roots` (and accepts the old
+single `data_root`), is written atomically with mode `0600`, and is read after
+`config.yaml` and before the `NIB_DATA_ROOT` fallback. Deleting it returns the
+Handler to the fallback.
 
 Local control ownership follows the config file's canonical path, separately
 from compatibility. After editing execution settings or a port, use `restart`

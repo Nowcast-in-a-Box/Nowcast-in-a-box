@@ -101,21 +101,12 @@ func (f *runtimeRunner) Run(ctx context.Context, args ...string) (int, []byte, e
 }
 
 func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
-	cfg := handler.DefaultConfig()
+	cfg := testConfig(t)
 	cfg.Paths.Runs = t.TempDir()
-	cfg.Paths.DataRoot = t.TempDir()
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Runtime.Token = "token"
 	cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
-	for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-		target := filepath.Join(cfg.Paths.DataRoot, name)
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(target, []byte("fixture"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSevirData(t, &cfg)
 	server := handler.NewServer(cfg)
 	runner := &runtimeRunner{root: cfg.Paths.Runs}
 	server.Runner = runner

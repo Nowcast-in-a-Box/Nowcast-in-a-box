@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -25,31 +24,31 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, err)
 		return
 	}
-	if request.ProductID != "" && request.ProductID != map[string]string{"sevir": "sevir-vil", "cma_radar": "cma-radar"}[s.dataID()] {
-		runtimeError(w, 409, fmt.Errorf("selected data product differs from configured local dataset"))
-		return
+	dataID := request.DataID
+	if dataID == "" && request.ProductID != "" {
+		if resource, ok := s.Resources.DataByProductID(request.ProductID); ok {
+			dataID = resource.ID
+		}
 	}
-	if request.DataID != "" && request.DataID != s.dataID() {
-		runtimeError(w, 409, fmt.Errorf("selected data differs from handler configuration"))
+	if _, err := s.dataResource(dataID); err != nil {
+		runtimeError(w, 409, err)
 		return
 	}
 	checks := []Check{}
-	data, catalog, err := s.dataPaths()
+	data, catalog, err := s.dataPaths(dataID)
 	if err != nil {
 		checks = append(checks, Check{ID: "data", OK: false, Message: err.Error()})
 	} else {
-		checks = append(checks, Check{ID: "data", OK: true, Message: "data file and catalog are present"})
+		checks = append(checks, Check{ID: "data", OK: true, Message: "selected data files are present"})
 		if request.EventID != "" || request.StartTime != "" {
-			checks = append(checks, s.windowCheck(r.Context(), data, catalog, request.EventID, request.StartTime))
+			checks = append(checks, s.windowCheck(r.Context(), dataID, data, catalog, request.EventID, request.StartTime))
 		}
 	}
 	if len(request.Models) == 0 {
 		checks = append(checks, Check{ID: "weights", OK: false, Message: "select a model before checking weights"})
 	}
 	for _, model := range request.Models {
-		cfg := s.Config
-		cfg.Runtime.Dataset = s.dataID()
-		checks = append(checks, weightCheck(cfg, model))
+		checks = append(checks, s.weightCheck(dataID, model))
 	}
 	ok := true
 	for _, check := range checks {
@@ -58,14 +57,17 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": ok, "checks": checks})
 }
 
-func (s *Server) windowCheck(parent context.Context, data, catalog, eventID, start string) Check {
+func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, eventID, start string) Check {
 	if eventID == "" || !strings.HasSuffix(start, "Z") {
 		return Check{ID: "window", OK: false, Message: "event id and a UTC window ending in Z are required"}
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Minute)
 	defer cancel()
-	args := []string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}
-	args = append(args, s.ingestionArgs(data, catalog, "--check-window", "--event", eventID, "--start", start)...)
+	args, err := s.dataCommandArgs(dataID, data, catalog, "--check-window", "--event", eventID, "--start", start)
+	if err != nil {
+		return Check{ID: "window", OK: false, Message: err.Error()}
+	}
+	args = append([]string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}, args...)
 	code, out, err := s.docker(ctx, args...)
 	if err != nil || code != 0 {
 		return Check{ID: "window", OK: false, Message: fmt.Sprintf("metadata check failed: %v %s", err, strings.TrimSpace(string(out)))}
@@ -79,25 +81,21 @@ func (s *Server) windowCheck(parent context.Context, data, catalog, eventID, sta
 	return Check{ID: "window", OK: true, Message: "selected window exists and catalog integrity passed"}
 }
 
-func weightCheck(cfg Config, model string) Check {
-	name := modelWeightName(model)
-	if name == "" {
-		return Check{ID: "weight:" + model, OK: false, Message: "unknown model"}
+func (s *Server) weightCheck(dataID, modelID string) Check {
+	resource, err := s.modelResource(dataID, modelID)
+	if err != nil {
+		return Check{ID: "weight:" + modelID, OK: false, Message: err.Error()}
 	}
-	dataset := cfg.Runtime.Dataset
-	if dataset == "" {
-		dataset = "sevir"
+	path, err := s.weightPath(dataID, modelID)
+	if err != nil {
+		return Check{ID: "weight:" + modelID, OK: false, Message: err.Error()}
 	}
-	if dataset == "cma_radar" && model != "nowcastnet" {
-		return Check{ID: "weight:" + model, OK: false, Message: "Choose a model paired with CMA Radar"}
-	}
-	path := filepath.Join(cfg.Paths.Artifacts, dataset, model, name)
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {
-		return Check{ID: "weight:" + model, OK: true, Message: "weight is not present yet; Validate copies it from runtime.weight_source"}
+		return Check{ID: "weight:" + modelID, OK: true, Message: "weight is not present yet; Validate copies it from paths.weight_source"}
 	}
-	if err := verifyModelWeights(path, model); err != nil {
-		return Check{ID: "weight:" + model, OK: true, Message: "local weight does not match the pinned SHA-256; Validate replaces it from runtime.weight_source"}
+	if err := verifyWeight(path, resource.Weights.SHA256); err != nil {
+		return Check{ID: "weight:" + modelID, OK: true, Message: "local weight does not match the pinned SHA-256; Validate replaces it from paths.weight_source"}
 	}
-	return Check{ID: "weight:" + model, OK: true, Message: "local weight matches the pinned SHA-256"}
+	return Check{ID: "weight:" + modelID, OK: true, Message: "local weight matches the pinned SHA-256"}
 }

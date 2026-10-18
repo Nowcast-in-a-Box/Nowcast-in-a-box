@@ -1,5 +1,6 @@
 # Local runtime settings. The handler reads this at startup.
-# Override order: config.yaml < NIB_DATA_ROOT (paths.data_root) < flags (-host, -port, -config).
+# Override order: config.yaml < NIB_CONFIG < flags (-host, -port, -config).
+# Dataset and model containers come from paths.resources, not this file.
 # Unknown keys are ignored so a newer Hub can write extra fields.
 
 handler:
@@ -16,28 +17,15 @@ paths:
   artifacts: artifacts
   # One unique directory per inference run; diagnostic attempts stay below it.
   runs: runs
-  # Required before a job starts. Set here or with NIB_DATA_ROOT.
-  # The handler never invents this path; omit it until the machine has one.
-  # data_root:
-
-# Metrics and visualization image, started by the handler with controlled Compose.
-# Build from repository root: docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .
-diagnostics:
-  image: nib-diagnostics:dev
+  # Root containing adapters/<data>/runtime.yaml and diagnostics/runtime.yaml.
+  # In a release bundle this is the shipped resources/ directory.
+  resources: .
+  # Optional artifacts-like folder used to copy missing weights.
+  # weight_source: ""
 
 runtime:
-  # Use cma_radar with data_file: . when data_root points at cma-radar/.
-  dataset: sevir
   # Optional explicit local Docker context; omitted uses Docker's current context.
   # docker_context: desktop-linux
-  data_file: SEVIR/processed/sevir_vil.h5
-  catalog_file: source/CATALOG.csv
-  ingestion_image: nib-ingestion:dev
-  model_images:
-    nowcastnet: nib-nowcastnet:dev
-    cma_radar/nowcastnet: nib-nowcastnet:cma-demo
-    exprecast: nib-exprecast:dev
-    wadepre: nib-wadepre:dev
   # Exact trusted Hub origins, including scheme and port; never use '*'.
   # These are the documented local Hub entry points. For a remote deployment,
   # the maintainer adds its actual origin here before distributing the config.

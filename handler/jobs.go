@@ -59,86 +59,45 @@ func (s *Server) docker(ctx context.Context, args ...string) (int, []byte, error
 	return s.Runner.Run(ctx, args...)
 }
 
-func (s *Server) dataPaths() (string, string, error) {
-	root := s.currentConfig().Paths.DataRoot
-	if root == "" {
-		return "", "", fmt.Errorf("configure paths.data_root before execution")
-	}
-	info, err := os.Stat(root)
-	if err != nil || !info.IsDir() {
-		return "", "", fmt.Errorf("configured data root is unavailable")
-	}
-	resolve := func(relative string) (string, error) {
-		if filepath.IsAbs(relative) {
-			return "", fmt.Errorf("input files must be relative to configured data root")
-		}
-		path, err := ResolveDataDir(root, relative)
-		if err != nil {
-			return "", err
-		}
-		real, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			return "", err
-		}
-		realRoot, err := filepath.EvalSymlinks(root)
-		if err != nil {
-			return "", err
-		}
-		rel, err := filepath.Rel(realRoot, real)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("input escapes data root")
-		}
-		info, err := os.Stat(real)
-		if err != nil || (!info.Mode().IsRegular() && !(s.dataID() == "cma_radar" && info.IsDir())) {
-			return "", fmt.Errorf("input must be a regular file")
-		}
-		return real, nil
-	}
-	data, err := resolve(s.Config.Runtime.DataFile)
-	if err != nil {
-		return "", "", err
-	}
-	if s.dataID() == "cma_radar" {
-		return data, "", nil
-	}
-	if s.dataID() != "sevir" {
-		return "", "", fmt.Errorf("unsupported configured dataset")
-	}
-	catalog, err := resolve(s.Config.Runtime.CatalogFile)
-	return data, catalog, err
-}
-
 func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
-	_, _, dataErr := s.dataPaths()
+	if err := s.resourceFailure(); err != nil {
+		runtimeError(w, 503, err)
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 	code, out, err := s.docker(ctx, "info", "--format", "{{.ServerVersion}}")
 	dockerReady := err == nil && code == 0
+	dataSources := []map[string]any{}
 	readyModels := []map[string]any{}
-	for _, model := range []string{"nowcastnet", "exprecast", "wadepre"} {
-		image := s.modelImage(model)
-		imageCode, _, imageErr := s.docker(ctx, "image", "inspect", image)
-		weightErr := verifyModelWeights(s.weightPath(model), model)
-		readyModels = append(readyModels, map[string]any{"id": model, "ready": dockerReady && dataErr == nil && image != "" && imageErr == nil && imageCode == 0 && weightErr == nil})
+	for _, data := range s.Resources.DataSources() {
+		_, _, dataErr := s.dataPaths(data.ID)
+		source := map[string]any{"id": data.ID, "product_id": data.ProductID, "name": data.Name, "data_root": s.dataRoot(data.ID), "ready": dataErr == nil, "reason": ""}
+		if dataErr != nil {
+			source["reason"] = dataErr.Error()
+		}
+		dataSources = append(dataSources, source)
+		for _, modelID := range s.Resources.ModelIDs(data.ID) {
+			model, _ := s.modelResource(data.ID, modelID)
+			imageCode, _, imageErr := s.docker(ctx, "image", "inspect", model.Container.Image)
+			weight, weightErr := s.weightPath(data.ID, modelID)
+			if weightErr == nil {
+				weightErr = verifyWeight(weight, model.Weights.SHA256)
+			}
+			readyModels = append(readyModels, map[string]any{"data_id": data.ID, "id": modelID, "ready": dockerReady && dataErr == nil && imageErr == nil && imageCode == 0 && weightErr == nil})
+		}
 	}
-	reason := ""
-	if dataErr != nil {
-		reason = dataErr.Error()
+	diagnosticsReady := false
+	if s.Resources.Diagnostics != nil {
+		diagnosticCode, _, diagnosticErr := s.docker(ctx, "image", "inspect", s.Resources.Diagnostics.Container.Image)
+		diagnosticsReady = dockerReady && diagnosticErr == nil && diagnosticCode == 0
 	}
-	diagnosticCode, _, diagnosticErr := s.docker(ctx, "image", "inspect", s.Config.Diagnostics.Image)
-	diagnosticsReady := dockerReady && diagnosticErr == nil && diagnosticCode == 0
-	writeJSON(w, 200, map[string]any{"data": map[string]any{"id": s.dataID(), "product_id": map[string]string{"sevir": "sevir-vil", "cma_radar": "cma-radar"}[s.dataID()], "name": map[string]string{"sevir": "SEVIR VIL", "cma_radar": "CMA Radar · July 2026"}[s.dataID()], "ready": dataErr == nil, "reason": reason}, "models": readyModels,
+	writeJSON(w, 200, map[string]any{"data_sources": dataSources, "models": readyModels,
 		"docker": map[string]any{"ready": dockerReady, "detail": strings.TrimSpace(string(out))}, "atlas_revision": s.Config.Runtime.AtlasRevision,
-		"diagnostics": map[string]any{"verification": diagnosticsReady, "visualization": diagnosticsReady && (s.dataID() == "cma_radar" || s.basemapReady())}})
+		"diagnostics": map[string]any{"verification": diagnosticsReady, "visualization": diagnosticsReady}})
 }
 
-var weightPins = map[string]string{
-	"nowcastnet": "773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d",
-	"exprecast":  "534b91b63524f775c460334385f0f0b0b92759fa1596a053d1cac489c84cd00d",
-	"wadepre":    "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b",
-}
-
-func verifyModelWeights(path, model string) error {
+func verifyWeight(path, expected string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -148,31 +107,16 @@ func verifyModelWeights(path, model string) error {
 	if _, err := io.Copy(hash, file); err != nil {
 		return err
 	}
-	if expected, ok := weightPins[model]; !ok || hex.EncodeToString(hash.Sum(nil)) != expected {
+	if expected == "" || hex.EncodeToString(hash.Sum(nil)) != expected {
 		return fmt.Errorf("weight checksum mismatch")
 	}
 	return nil
 }
 
-func modelWeightName(model string) string {
-	switch model {
-	case "nowcastnet":
-		return "NowcastNet.onnx"
-	case "exprecast":
-		return "exPreCast.onnx"
-	case "wadepre":
-		return "WADEPre.onnx"
-	}
-	return ""
-}
-func (s *Server) basemapReady() bool {
-	info, err := os.Stat(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo", "acquisition.json"))
-	return err == nil && info.Mode().IsRegular()
-}
-
 func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
-	if dataset := r.PathValue("dataset"); dataset != "" && dataset != s.dataID() {
-		runtimeError(w, 409, fmt.Errorf("dataset is not configured on this handler"))
+	dataset := r.PathValue("dataset")
+	if _, err := s.dataResource(dataset); err != nil {
+		runtimeError(w, 409, err)
 		return
 	}
 	offset, limit, err := pagination(r)
@@ -180,15 +124,19 @@ func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, err)
 		return
 	}
-	data, catalog, err := s.dataPaths()
+	data, catalog, err := s.dataPaths(dataset)
 	if err != nil {
 		runtimeError(w, 409, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	args := []string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}
-	args = append(args, s.ingestionArgs(data, catalog, "--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit))...)
+	args, err := s.dataCommandArgs(dataset, data, catalog, "--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit))
+	if err != nil {
+		runtimeError(w, 500, err)
+		return
+	}
+	args = append([]string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}, args...)
 	code, out, err := s.docker(ctx, args...)
 	if err != nil || code != 0 {
 		runtimeError(w, 502, fmt.Errorf("sample reader failed: %v %s", err, out))
@@ -239,12 +187,12 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, fmt.Errorf("idempotency key is too long"))
 		return
 	}
-	request, err := ParseRuntimePackage(upload.Package, upload.SHA256)
+	request, err := ParseRuntimePackage(upload.Package, upload.SHA256, s.Resources)
 	if err != nil {
 		runtimeError(w, 422, err)
 		return
 	}
-	if err := s.requireDataset(request.DataID); err != nil {
+	if err := s.requireDataSupported(request.DataID); err != nil {
 		runtimeError(w, 422, err)
 		return
 	}
@@ -254,11 +202,16 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 422, fmt.Errorf("sample context time must be explicit UTC"))
 		return
 	}
-	if _, _, err := s.dataPaths(); err != nil {
+	if _, _, err := s.dataPaths(request.DataID); err != nil {
 		runtimeError(w, 409, err)
 		return
 	}
-	if request.Visualization && request.DataID != "cma_radar" && !s.basemapReady() {
+	dataResource, err := s.dataResource(request.DataID)
+	if err != nil {
+		runtimeError(w, 409, err)
+		return
+	}
+	if request.Visualization && dataResource.VisualizationBasemap && !s.basemapReady() {
 		runtimeError(w, 409, fmt.Errorf("prepare the WMO basemap cache first"))
 		return
 	}
@@ -519,14 +472,23 @@ func (s *Server) executeJob(id string) {
 		}
 		return nil
 	}
-	data, catalog, err := s.dataPaths()
+	data, catalog, err := s.dataPaths(request.DataID)
+	if err != nil {
+		s.updateJob(id, "failed", "preflight", err)
+		return
+	}
+	dataResource, err := s.dataResource(request.DataID)
 	if err != nil {
 		s.updateJob(id, "failed", "preflight", err)
 		return
 	}
 	// Ingestion creates a child run inside the job workspace, then publishes its contents.
-	args := s.ingestionArgs(data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
-	if request.DataID == "cma_radar" {
+	args, err := s.dataCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+	if err != nil {
+		s.updateJob(id, "failed", "preflight", err)
+		return
+	}
+	if request.CenterLon != 0 || request.CenterLat != 0 {
 		args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 	}
 	args = append([]string{"-v", volumeSpec(directory, "/workspace", false)}, args...)
@@ -614,13 +576,12 @@ func (s *Server) executeJob(id string) {
 	for _, model := range request.Models {
 		// Rerunning this configuration replaces only this model's previous forecast.
 		_ = os.RemoveAll(filepath.Join(directory, "forecasts", model))
-		image := s.modelImage(model)
-		if image == "" {
-			s.updateJob(id, "failed", "model", fmt.Errorf("model image not configured"))
+		args, specErr := s.modelCommandArgs(request.DataID, model, directory)
+		if specErr != nil {
+			s.updateJob(id, "failed", model, specErr)
 			return
 		}
-		weights := s.weightPath(model)
-		err = run(model, "-v", volumeSpec(directory, "/run", false), "-v", volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true), "-v", volumeSpec(weights, "/weights/model.onnx", true), image, "--run", "/run", "--weights", "/weights/model.onnx")
+		err = run(model, args...)
 		if err != nil {
 			s.note(id + " model failed: " + err.Error())
 			s.updateJob(id, "failed", model, err)
@@ -640,7 +601,7 @@ func (s *Server) executeJob(id string) {
 	if request.Visualization {
 		config["visualization"] = map[string]any{"models": request.VisualizationModels, "basemap": "/basemap"}
 	}
-	operation, err := s.prepareDiagnostics(id, config, request.Visualization && request.DataID != "cma_radar")
+	operation, err := s.prepareDiagnostics(id, config, request.Visualization && dataResource.VisualizationBasemap)
 	if err != nil {
 		s.updateJob(id, "partial", "diagnostics", err)
 		return

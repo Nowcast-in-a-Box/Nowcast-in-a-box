@@ -1,0 +1,22 @@
+schema: nib.resource.v1
+kind: data
+id: cma_radar
+product_id: cma-radar
+name: CMA Radar
+data:
+  path: "."
+  kind: directory
+verification:
+  level_min: 0
+  level_max: 75
+  unit: dBZ
+visualization_basemap: false
+container:
+  image: nib-ingestion:cma-demo
+  build:
+    context: "."
+    dockerfile: adapters/cma_radar/Dockerfile
+  entrypoint: ["--dataset", "cma_radar", "--data", "/inputs/data"]
+  mounts:
+    - name: data
+      target: /inputs/data

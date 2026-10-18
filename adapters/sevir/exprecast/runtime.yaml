@@ -1,0 +1,22 @@
+schema: nib.resource.v1
+kind: model
+id: exprecast
+product_ids: [exprecast-sevir]
+name: exPreCast
+weights:
+  file: exPreCast.onnx
+  sha256: "534b91b63524f775c460334385f0f0b0b92759fa1596a053d1cac489c84cd00d"
+container:
+  image: nib-exprecast:dev
+  build:
+    context: "."
+    dockerfile: adapters/sevir/exprecast/Dockerfile
+  command: ["--run", "/run", "--weights", "/weights/model.onnx"]
+  mounts:
+    - name: run
+      target: /run
+      write: true
+    - name: inputs
+      target: /run/inputs
+    - name: weights
+      target: /weights/model.onnx

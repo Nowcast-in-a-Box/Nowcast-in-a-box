@@ -10,10 +10,10 @@ check with Docker.
 
 - Docker is running and the three CMA images are present locally:
   `nib-ingestion:cma-demo`, `nib-nowcastnet:cma-demo`,
-  `nib-diagnostics:cma-demo`.
+  `nib-diagnostics:automatic-flow`.
 - A CMA Radar data folder, for example `/Users/you/data/cma-radar`.
 - `artifacts/cma_radar/nowcastnet/NowcastNet.onnx` exists (135 MB, pinned
-  SHA-256), or `runtime.weight_source` points at an artifacts-like folder
+  SHA-256), or `paths.weight_source` points at an artifacts-like folder
   that contains it.
 - A built Handler binary and the Hub checkout (or a published Hub) on this
   machine. No GitHub Release is required for this runbook.
@@ -33,12 +33,11 @@ For the CMA demo, start with the example without a flag:
 env NIB_CONFIG=tests/runtime/cma-demo.config.yaml .pi/local-e2e/nib-handler
 ```
 
-The example uses 8765/8766 and allows the Hub dev server on 5173. It has no
-`data_root`; enter the CMA folder in Checkout, or set `NIB_DATA_ROOT` first.
-The local `nib-diagnostics:cma-demo` image may predate the current request
-format; rebuild it with
-`docker build -f diagnostics/Dockerfile -t nib-diagnostics:cma-demo .`,
-or use the isolated `automatic-flow` image from the automated suite.
+The example uses 8765/8766 and allows the Hub dev server on 5173. Its
+`paths.resources: ../..` points at the repository tree that carries the data and
+model `runtime.yaml` manifests; `nib-diagnostics:automatic-flow` is the manifest
+image. It has no dataset or data-file setting: choose the CMA folder in Checkout,
+or set `NIB_DATA_ROOT` for a one-off run.
 
 Use the platform launcher instead when starting the installed bundle:
 
@@ -104,7 +103,7 @@ origin in `runtime.allowed_origins`.
 7. **Validate.** Enter a valid window (for example `20260701` and
    `2026-07-01T00:00:00Z`) and press `Validate Selection`. The local panel
    checks the window, reports each image as ready, and prepares a missing
-   weight by copying it from `runtime.weight_source` with byte progress and a
+   weight by copying it from `paths.weight_source` with byte progress and a
    SHA-256 check. Start becomes enabled only after those checks pass.
 8. **Run.** Press `Start`. The browser submits the frozen package once and
    navigates to Local runs. Closing the page does not stop inference or the

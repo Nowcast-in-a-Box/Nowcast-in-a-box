@@ -59,24 +59,24 @@ func packageFixture(t *testing.T, modelProduct string, extra map[string][]byte) 
 
 func TestRuntimePackageTrustBoundary(t *testing.T) {
 	raw, hash := packageFixture(t, "wadepre-sevir", nil)
-	request, err := handler.ParseRuntimePackage(raw, hash)
+	request, err := handler.ParseRuntimePackage(raw, hash, testResources(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if request.EventID != "S696651" || len(request.Models) != 1 || request.Models[0] != "wadepre" {
 		t.Fatal(request)
 	}
-	if _, err := handler.ParseRuntimePackage(raw, "bad"); err == nil {
+	if _, err := handler.ParseRuntimePackage(raw, "bad", testResources(t)); err == nil {
 		t.Fatal("bad package digest accepted")
 	}
 	for _, name := range []string{"../outside", "/absolute", "unregistered.txt"} {
 		raw, hash := packageFixture(t, "wadepre-sevir", map[string][]byte{name: []byte("bad")})
-		if _, err := handler.ParseRuntimePackage(raw, hash); err == nil {
+		if _, err := handler.ParseRuntimePackage(raw, hash, testResources(t)); err == nil {
 			t.Fatalf("unsafe package accepted: %s", name)
 		}
 	}
 	raw, hash = packageFixture(t, "arbitrary-shell", nil)
-	if _, err := handler.ParseRuntimePackage(raw, hash); err == nil {
+	if _, err := handler.ParseRuntimePackage(raw, hash, testResources(t)); err == nil {
 		t.Fatal("unknown runtime product accepted")
 	}
 }

@@ -7,6 +7,7 @@
 .claude/
 .pi/
 .vscode/
+.agents/
 
 __pycache__/
 *.py[cod]
@@ -33,11 +34,14 @@ bin/**/nib-handler-*
 artifacts/*
 !artifacts/.gitkeep
 
+# Generated release resources (manifest/Dockerfile copy).
+resources/
+
 # Diagnostics run outputs. Keep the directory.
 runs/*
 !runs/.gitkeep
 
-# Weights never belong in git. Extension list, not a blanket binary rule.
+# model weights
 # *.bin is intentionally omitted: CMA radar observations use that suffix.
 *.onnx
 *.onnx.data
