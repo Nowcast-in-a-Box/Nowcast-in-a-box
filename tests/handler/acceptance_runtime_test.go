@@ -162,7 +162,7 @@ func waitJob(t *testing.T, server *handler.Server, id, want string) handler.Job 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		req := httptest.NewRequest("GET", "http://127.0.0.1/v1/jobs/"+id, nil)
-		req.Header.Set("Authorization", "Bearer token")
+		req.Header.Set("Authorization", "Bearer "+server.Token)
 		response := httptest.NewRecorder()
 		server.Routes().ServeHTTP(response, req)
 		var job handler.Job

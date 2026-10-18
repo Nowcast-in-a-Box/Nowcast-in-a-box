@@ -125,46 +125,6 @@ func (s *Server) saveDataRoot(w http.ResponseWriter, requested string) {
 	writeJSON(w, 200, map[string]string{"data_root": root})
 }
 
-func appendYAMLList(path, section, key, value string) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var document yaml.Node
-	if yaml.Unmarshal(raw, &document) != nil || len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
-		return fmt.Errorf("invalid local config document")
-	}
-	parent := yamlMapping(document.Content[0], section)
-	var list *yaml.Node
-	for i := 0; i < len(parent.Content); i += 2 {
-		if parent.Content[i].Value == key {
-			list = parent.Content[i+1]
-		}
-	}
-	if list == nil {
-		list = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-		parent.Content = append(parent.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, list)
-	}
-	if list.Kind != yaml.SequenceNode {
-		return fmt.Errorf("%s must be a list", key)
-	}
-	for _, item := range list.Content {
-		if item.Value == value {
-			return nil
-		}
-	}
-	list.Content = append(list.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
-	body, err := yaml.Marshal(&document)
-	if err != nil {
-		return err
-	}
-	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, body, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(temporary, path)
-}
-
 func yamlMapping(parent *yaml.Node, key string) *yaml.Node {
 	for i := 0; i < len(parent.Content); i += 2 {
 		if parent.Content[i].Value == key {

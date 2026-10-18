@@ -38,18 +38,69 @@ if [[ ! -x "$bin" ]]; then
 	chmod +x "$bin"
 fi
 
-if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 ]]; then
+bin="$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")"
+config="${NIB_HANDLER_CONFIG:-$ROOT/config.yaml}"
+action=start
+case "${1:-}" in
+	start|serve|status|stop|restart|connect|diagnostics) action="$1"; shift ;;
+	nib://*) action=connect ;;
+esac
+
+if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 && ( "$action" == start || "$action" == connect || "$action" == restart ) ]]; then
+	# Register the configuration actually selected by this invocation.
+	arguments=("$@")
+	bind_host=""
+	bind_port=""
+	for ((i=0; i<${#arguments[@]}; i++)); do
+		case "${arguments[$i]}" in
+			-config) config="${arguments[$((i+1))]:-}" ;;
+			-config=*) config="${arguments[$i]#-config=}" ;;
+			-host) bind_host="${arguments[$((i+1))]:-}" ;;
+			-host=*) bind_host="${arguments[$i]#-host=}" ;;
+			-port) bind_port="${arguments[$((i+1))]:-}" ;;
+			-port=*) bind_port="${arguments[$i]#-port=}" ;;
+		esac
+	done
+	if [[ ! -f "$config" ]]; then
+		echo "ERROR: Handler configuration does not exist: $config" >&2
+		exit 1
+	fi
+	config="$(cd "$(dirname "$config")" && pwd)/$(basename "$config")"
 	app="$HOME/Applications/NiB Handler.app"
-	mkdir -p "$app/Contents/MacOS"
-	printf '#!/bin/bash\nexec "%s" "$1"\n' "$bin" > "$app/Contents/MacOS/nib-handler"
-	chmod +x "$app/Contents/MacOS/nib-handler"
-	printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>app.nowcast.nib-handler</string><key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>nib</string></array></dict></array></dict></plist>\n' > "$app/Contents/Info.plist"
+	stamp="$app/Contents/Resources/nib-connection-config"
+	registration="$(printf '%s\n' 'nib-handler-app-v3' "$bin" "$config" "$bind_host" "$bind_port")"
+	if [[ ! -f "$stamp" || "$(< "$stamp")" != "$registration" ]]; then
+		mkdir -p "$(dirname "$app")"
+		applescript="$(mktemp -t nib-handler-script)"
+		trap 'rm -f "$applescript"' EXIT
+		escape_applescript() {
+			local value="$1"
+			value="${value//\\/\\\\}"
+			value="${value//\"/\\\"}"
+			printf '%s' "$value"
+		}
+		program="$(escape_applescript "$bin")"
+		configuration="$(escape_applescript "$config")"
+		overrides=""
+		if [[ -n "$bind_host" ]]; then
+			overrides+=" & \" -host \" & (quoted form of \"$(escape_applescript "$bind_host")\")"
+		fi
+		if [[ -n "$bind_port" ]]; then
+			overrides+=" & \" -port \" & (quoted form of \"$(escape_applescript "$bind_port")\")"
+		fi
+		# URL schemes arrive as AppleEvents, not as a shell application's $1.
+		printf 'on run\n do shell script (quoted form of "%s") & " start -config " & (quoted form of "%s")%s\nend run\non open location theURL\n do shell script (quoted form of "%s") & " connect -config " & (quoted form of "%s")%s & " " & (quoted form of theURL)\nend open location\n' "$program" "$configuration" "$overrides" "$program" "$configuration" "$overrides" > "$applescript"
+		/usr/bin/osacompile -o "$app" "$applescript"
+		plist="$app/Contents/Info.plist"
+		/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier app.nowcast.nib-handler' "$plist" 2>/dev/null ||
+			/usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string app.nowcast.nib-handler' "$plist"
+		/usr/libexec/PlistBuddy -c 'Delete :CFBundleURLTypes' "$plist" >/dev/null 2>&1 || true
+		/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes array' -c 'Add :CFBundleURLTypes:0 dict' -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes array' -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string nib' "$plist"
+		printf '%s\n' "$registration" > "$stamp"
+		/usr/bin/codesign --force --sign - "$app"
+	fi
 	lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-	"$lsregister" -f "$app" >/dev/null 2>&1 || true
+	"$lsregister" -f "$app"
 fi
 
-if [[ "${1:-}" == diagnostics ]]; then
-	shift
-	exec "$bin" diagnostics -config "$ROOT/config.yaml" "$@"
-fi
-exec "$bin" -config "${NIB_HANDLER_CONFIG:-$ROOT/config.yaml}" "$@"
+exec "$bin" "$action" -config "$config" "$@"

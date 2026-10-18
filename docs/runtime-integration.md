@@ -33,9 +33,14 @@ need a basemap. Scientific VIL units are `raw`; they are not dBZ or rain rate.
 ## Connection and execution
 
 `config.yaml` controls loopback addresses, paths, images, optional Docker context
-and explicitly allowed Hub origins. The handler prints a local connection token;
-enter it in Hub's Local runs page. The token remains in browser memory. Browsers
-may also require local-network permission for an HTTPS site to access loopback.
+and explicitly allowed Hub origins. Register/start the platform launcher once,
+then use Hub's connection button and confirm its browser `nib://` application
+prompt if needed. The token is transferred over trusted loopback HTTP, remains
+in browser memory, and is never printed or manually copied. Browsers may also
+require local-network permission when a remote site accesses loopback.
+See [lifecycle and connection](handler-lifecycle.md) for background startup,
+stop/restart, configuration ownership, trusted deployments and limitations.
+
 A successful CORS preflight is not evidence that permission was granted.
 
 Choose an explicit SEVIR event/window, then models and optional evaluation or
@@ -52,7 +57,9 @@ remain in configured `runs/<unique-id>/`; no outputs live in Hub or atlas.
 Execution is serialized in this first integration. Jobs record queued/running/
 succeeded/failed/partial states with a stage, request identity and logs. A repeated
 idempotency key returns the same run, including after restart. A new explicit
-submission creates a new run. Restarted unfinished jobs are marked interrupted,
+submission may reuse the same sample/model run only after its current execution
+finishes; an active run cannot be replaced by another idempotency key.
+Restarted unfinished jobs are marked interrupted,
 not silently resumed. Successful Forecasts survive diagnostic failure.
 
 ## Results

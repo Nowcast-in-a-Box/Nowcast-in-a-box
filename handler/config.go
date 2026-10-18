@@ -100,6 +100,10 @@ func Load(explicit string) (Config, error) {
 		path = found
 	}
 
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("resolve config %s: %w", path, err)
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)

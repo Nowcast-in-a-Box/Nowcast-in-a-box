@@ -23,22 +23,30 @@ type Server struct {
 	jobsMu      sync.Mutex
 	jobs        map[string]*Job
 	executionMu sync.Mutex
+	stopping    bool // guarded by jobsMu
+	shutdown    chan struct{}
+	instanceID  string
 }
 
 // NewServer returns a server whose preflight list starts with DockerCheck.
 func NewServer(cfg Config) *Server {
 	token := cfg.Runtime.Token
 	if token == "" {
-		var value [32]byte
-		if _, err := rand.Read(value[:]); err != nil {
-			panic(err)
-		}
-		token = hex.EncodeToString(value[:])
+		token = randomToken()
 	}
 	return &Server{
 		Config: cfg, Runner: execRunner{}, Token: token, jobs: make(map[string]*Job),
 		Preflight: []func() Check{DockerCheck},
+		shutdown:  make(chan struct{}), instanceID: randomToken()[:32],
 	}
+}
+
+func randomToken() string {
+	var value [32]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(value[:])
 }
 
 // Routes returns the handler mux, wrapped so non-loopback Host values are
@@ -46,7 +54,9 @@ func NewServer(cfg Config) *Server {
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
+	mux.HandleFunc("GET /v1/identity", s.handleIdentity)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
+	mux.HandleFunc("POST /v1/control/stop", s.authorize(s.handleStop))
 	s.runtimeRoutes(mux)
 	return s.loopbackOnly(s.originControl(mux))
 }
@@ -70,6 +80,22 @@ func (s *Server) loopbackOnly(next http.Handler) http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleIdentity(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	cfg := s.currentConfig()
+	s.jobsMu.Lock()
+	state := "running"
+	if s.stopping {
+		state = "stopping"
+	}
+	s.jobsMu.Unlock()
+	writeJSON(w, http.StatusOK, identityResponse{
+		Service: "nib-handler", Version: Version, Protocol: identityProtocol,
+		ConfigID: configID(cfg), InstanceID: s.instanceID, State: state,
+		URL: addressURL(cfg.Handler), ReviewURL: addressURL(cfg.Review),
+	})
 }
 
 type statusResponse struct {

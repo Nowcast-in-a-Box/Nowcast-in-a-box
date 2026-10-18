@@ -50,6 +50,18 @@ func TestUnixLaunchersForwardPathsArgumentsAndExitCode(t *testing.T) {
 					[]string{"diagnostics", "-request", "request with spaces.yaml", "-config", "override.yaml"},
 					[]string{"diagnostics", "-config", filepath.Join(root, "config.yaml"), "-request", "request with spaces.yaml", "-config", "override.yaml", ""},
 				},
+				{
+					[]string{"status"},
+					[]string{"status", "-config", filepath.Join(root, "config.yaml"), ""},
+				},
+				{
+					[]string{"stop"},
+					[]string{"stop", "-config", filepath.Join(root, "config.yaml"), ""},
+				},
+				{
+					[]string{"nib://connect?origin=http://hub.example:8000"},
+					[]string{"-config", filepath.Join(root, "config.yaml"), "nib://connect?origin=http://hub.example:8000", ""},
+				},
 			} {
 				cmd := exec.Command(bash, append([]string{filepath.Join(root, filepath.FromSlash(tc.script))}, invocation.args...)...)
 				cmd.Dir = t.TempDir()
@@ -59,7 +71,15 @@ func TestUnixLaunchersForwardPathsArgumentsAndExitCode(t *testing.T) {
 				if !ok || exit.ExitCode() != 23 {
 					t.Fatalf("exit=%v output=%s", err, out)
 				}
-				want := strings.Join(invocation.want, "\n")
+				expected := invocation.want
+				if tc.os == "Darwin" {
+					if strings.HasPrefix(invocation.args[0], "-") {
+						expected = append([]string{"start"}, expected...)
+					} else if strings.HasPrefix(invocation.args[0], "nib://") {
+						expected = append([]string{"connect"}, expected...)
+					}
+				}
+				want := strings.Join(expected, "\n")
 				if string(out) != want {
 					t.Fatalf("output=%q want=%q", out, want)
 				}

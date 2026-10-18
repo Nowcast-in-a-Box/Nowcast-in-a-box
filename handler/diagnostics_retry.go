@@ -79,6 +79,12 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.jobsMu.Lock()
+	if s.stopping {
+		s.jobsMu.Unlock()
+		s.executionMu.Unlock()
+		runtimeError(w, http.StatusServiceUnavailable, fmt.Errorf("Handler is stopping; reconnect after starting it again"))
+		return
+	}
 	active := false
 	for _, job := range s.jobs {
 		if job.Status == "queued" || job.Status == "running" {
