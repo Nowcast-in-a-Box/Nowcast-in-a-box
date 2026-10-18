@@ -23,6 +23,9 @@ type runtimeRunner struct {
 }
 
 func (f *runtimeRunner) Run(ctx context.Context, args ...string) (int, []byte, error) {
+	if len(args) > 0 && args[0] == "ps" {
+		return 0, nil, nil
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, append([]string{}, args...))
@@ -40,6 +43,42 @@ func (f *runtimeRunner) Run(ctx context.Context, args ...string) (int, []byte, e
 			}
 			if err := yaml.Unmarshal(raw, &compose); err != nil {
 				return 1, nil, err
+			}
+			command := compose.Services["task"].Command
+			if len(command) == 2 && command[0] == "--config" {
+				operationDir := filepath.Dir(args[i+1])
+				requestRaw, err := os.ReadFile(filepath.Join(operationDir, "request.json"))
+				if err != nil {
+					return 1, nil, err
+				}
+				var request map[string]any
+				if err := json.Unmarshal(requestRaw, &request); err != nil {
+					return 1, nil, err
+				}
+				directory := filepath.Dir(filepath.Dir(operationDir))
+				manifestPath := filepath.Join(directory, "manifest.json")
+				manifestRaw, err := os.ReadFile(manifestPath)
+				if err != nil {
+					return 1, nil, err
+				}
+				var manifest map[string]any
+				if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+					return 1, nil, err
+				}
+				report := map[string]any{"kind": "report", "status": "succeeded", "id": request["operation_id"], "operation_id": request["operation_id"], "entry": "diagnostics/report/" + request["operation_id"].(string) + "/index.html", "path": "diagnostics/report/" + request["operation_id"].(string)}
+				reportDir := filepath.Join(directory, filepath.FromSlash(report["path"].(string)))
+				if err := os.MkdirAll(reportDir, 0o700); err != nil {
+					return 1, nil, err
+				}
+				if err := os.WriteFile(filepath.Join(reportDir, "index.html"), []byte("<h1>Report</h1>"), 0o600); err != nil {
+					return 1, nil, err
+				}
+				attempts, _ := manifest["diagnostics"].([]any)
+				manifest["diagnostics"] = append(attempts, report)
+				raw, _ := json.Marshal(manifest)
+				if err := os.WriteFile(manifestPath, raw, 0o644); err != nil {
+					return 1, nil, err
+				}
 			}
 			for index, value := range compose.Services["task"].Command {
 				if value == "--id" {
@@ -110,7 +149,7 @@ func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
 		server.Routes().ServeHTTP(response, req)
 		var job handler.Job
 		_ = json.Unmarshal(response.Body.Bytes(), &job)
-		if job.Status == "ready" {
+		if job.Status == "succeeded" {
 			break
 		}
 		if job.Status == "failed" || time.Now().After(deadline) {

@@ -23,6 +23,7 @@ type Server struct {
 	jobsMu      sync.Mutex
 	jobs        map[string]*Job
 	executionMu sync.Mutex
+	recoveryMu  sync.Mutex
 	stopping    bool // guarded by jobsMu
 	shutdown    chan struct{}
 	instanceID  string

@@ -73,14 +73,18 @@ run offline, and all output stays under `runs/<unique ID>/`.
 ## Hub flow
 
 1. Initialize Hub's pinned Atlas submodule and start its backend and frontend.
-2. Open Local runs and connect this computer. With the CMA configuration active,
-   load samples and choose the July reference window.
+2. Select **Local** and connect this computer before opening the Catalog. With
+   the CMA configuration active, the Handler connection does not depend on
+   whether Docker or the local data directory is ready yet.
 3. Choose **NowcastNet · CMA demo**. Optionally choose **CREF verification** and
    **CREF comparison and animation**. SEVIR products have their own pairings.
-4. In Checkout, confirm the sample date/time and region center. Thresholds use
-   dBZ (defaults 10, 20, 30, 40, 50). Check local data and weights, then Start.
-5. After ingestion and model execution finish, open results to run the selected
-   diagnostics from saved Forecasts. No model rerun is needed for new metrics.
+4. In Checkout, confirm the data directory, load/select a sample if needed, and
+   confirm its date/time and region center. Thresholds use dBZ (defaults 10, 20,
+   30, 40, 50). Validate, check local data and weights, then Start.
+5. Start freezes/submits once and moves observation to Runs. Handler executes
+   the selected diagnostics automatically after inference, even when the browser
+   closes. **Open result** only reads the local Visualization / Metrics page.
+   Explicit diagnostics retry uses saved Forecasts and never reruns the model.
 6. Runs retains the run and diagnostic attempts. The CREF comparison shows the
    latest input, the observation at each lead and the matching prediction. Its
    20-frame GIF uses a common 0..75 dBZ color scale and projected kilometre axes.

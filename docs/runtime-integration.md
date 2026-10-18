@@ -44,8 +44,11 @@ stop/restart, configuration ownership, trusted deployments and limitations.
 A successful CORS preflight is not evidence that permission was granted.
 
 Choose an explicit SEVIR event/window, then models and optional evaluation or
-visualization in the existing Hub catalog/Checkout. Run locally from the frozen
-order page: the browser uploads the actual ZIP and package checksum. The handler
+visualization in the existing Hub catalog/Checkout. Run locally from Checkout (or an existing frozen order): the browser uploads the
+actual ZIP and package checksum once, then observes the job in Runs. Handler
+executes the selected diagnostics automatically after inference, independently
+of the browser. See [automatic diagnostics](automatic-diagnostics.md) for exact
+operation/report identity, partial results and crash recovery. The handler
 checks bounded ZIP entries, paths, checksums, supported product versions and
 frozen data/model/diagnostic bindings. Template bytes are never executed.
 

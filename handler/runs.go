@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 func (s *Server) runManifest(id string) (map[string]any, error) {
@@ -53,6 +54,33 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 		manifest["status"] = job.Status
 	} else if manifest["schema"] == nil {
 		return nil, fmt.Errorf("run not found")
+	}
+	latest, _ := os.ReadFile(filepath.Join(directory, "logs", "latest-diagnostics.json"))
+	var reference DiagnosticOperation
+	if json.Unmarshal(latest, &reference) != nil {
+		// Older records had no pointer: use filesystem creation order, never random IDs.
+		files, _ := filepath.Glob(filepath.Join(directory, "logs", "diagnostics-*", "status.json"))
+		var newest time.Time
+		for _, file := range files {
+			if info, err := os.Stat(file); err == nil && info.ModTime().After(newest) {
+				newest = info.ModTime()
+				raw, _ := os.ReadFile(file)
+				_ = json.Unmarshal(raw, &reference)
+			}
+		}
+	}
+	if idPattern.MatchString(reference.ID) {
+		raw, err := os.ReadFile(filepath.Join(directory, "logs", "diagnostics-"+reference.ID, "status.json"))
+		var operation DiagnosticOperation
+		if err == nil && json.Unmarshal(raw, &operation) == nil && operation.RunID == id {
+			job, _ := manifest["job"].(Job)
+			if job.DiagnosticOperationID != "" || job.CreatedAt.IsZero() || !job.CreatedAt.After(operation.CreatedAt) {
+				if operation.Status == "running" && operation.InstanceID != s.instanceID {
+					operation.Status, operation.Error = "interrupted", "Handler restarted before diagnostics completed; verify stopped containers before retrying from saved Forecasts"
+				}
+				manifest["operation"] = operation
+			}
+		}
 	}
 	return manifest, nil
 }
@@ -105,23 +133,15 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, manifest)
 }
 
-func (s *Server) handleResultFile(w http.ResponseWriter, r *http.Request) {
-	id, name := r.PathValue("id"), r.PathValue("file")
-	manifest, err := s.runManifest(id)
-	if err != nil {
-		runtimeError(w, 404, err)
-		return
-	}
+func (s *Server) resultFilePath(id, name string, manifest map[string]any) (string, int, error) {
 	clean := filepath.FromSlash(name)
 	if filepath.IsAbs(clean) || filepath.Clean(clean) != clean || strings.Contains(name, "\\") {
-		runtimeError(w, 400, fmt.Errorf("invalid artifact path"))
-		return
+		return "", 400, fmt.Errorf("invalid artifact path")
 	}
 	switch strings.ToLower(filepath.Ext(clean)) {
 	case ".html", ".png", ".gif", ".svg":
 	default:
-		runtimeError(w, 403, fmt.Errorf("only registered result files are served"))
-		return
+		return "", 403, fmt.Errorf("only registered result files are served")
 	}
 	allowed := false
 	attempts, _ := manifest["diagnostics"].([]any)
@@ -137,27 +157,42 @@ func (s *Server) handleResultFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !allowed {
-		runtimeError(w, 403, fmt.Errorf("result is not registered"))
-		return
+		return "", 403, fmt.Errorf("result is not registered")
 	}
 	root, err := filepath.EvalSymlinks(filepath.Join(s.Config.Paths.Runs, id))
 	if err != nil {
-		runtimeError(w, 404, err)
-		return
+		return "", 404, err
 	}
 	target, err := filepath.EvalSymlinks(filepath.Join(root, clean))
+	if err != nil {
+		return "", 404, err
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", 403, fmt.Errorf("artifact escapes run")
+	}
+	info, err := os.Stat(target)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", 404, fmt.Errorf("result file unavailable")
+	}
+	return target, http.StatusOK, nil
+}
+
+func (s *Server) handleResultFile(w http.ResponseWriter, r *http.Request) {
+	id, name := r.PathValue("id"), r.PathValue("file")
+	manifest, err := s.runManifest(id)
 	if err != nil {
 		runtimeError(w, 404, err)
 		return
 	}
-	rel, err := filepath.Rel(root, target)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		runtimeError(w, 403, fmt.Errorf("artifact escapes run"))
+	target, status, err := s.resultFilePath(id, name, manifest)
+	if err != nil {
+		runtimeError(w, status, err)
 		return
 	}
 	info, err := os.Stat(target)
-	if err != nil || !info.Mode().IsRegular() {
-		runtimeError(w, 404, fmt.Errorf("result file unavailable"))
+	if err != nil {
+		runtimeError(w, 404, err)
 		return
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")

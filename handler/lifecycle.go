@@ -297,6 +297,11 @@ func (s *Server) requestShutdown() error {
 		return fmt.Errorf("wait for active inference or diagnostics before stopping Handler")
 	}
 	defer s.executionMu.Unlock()
+	// Reconcile after holding the lock: an execution that just failed cleanup has
+	// released it and must no longer be exempt from the container check.
+	if err := s.reconcileExecutions(); err != nil {
+		return err
+	}
 	s.jobsMu.Lock()
 	defer s.jobsMu.Unlock()
 	if s.stopping {

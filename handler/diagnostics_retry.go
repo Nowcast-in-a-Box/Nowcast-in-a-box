@@ -78,6 +78,11 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		runtimeError(w, 409, fmt.Errorf("wait for the current execution"))
 		return
 	}
+	if err := s.reconcileExecutions(); err != nil {
+		s.executionMu.Unlock()
+		runtimeError(w, http.StatusConflict, err)
+		return
+	}
 	s.jobsMu.Lock()
 	if s.stopping {
 		s.jobsMu.Unlock()
@@ -98,85 +103,138 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		runtimeError(w, 409, fmt.Errorf("wait for queued jobs"))
 		return
 	}
-	attempt, err := newRunID(time.Now())
+	operation, err := s.prepareDiagnostics(id, config, selection.Visualization && needsBasemap)
 	if err != nil {
-		s.executionMu.Unlock()
-		runtimeError(w, 500, err)
-		return
-	}
-	directory := filepath.Join(s.Config.Paths.Runs, id)
-	operation := filepath.Join(directory, "logs", "diagnostics-"+attempt)
-	if err := os.MkdirAll(operation, 0o755); err != nil {
-		s.executionMu.Unlock()
-		runtimeError(w, 500, err)
-		return
-	}
-	raw, err := json.Marshal(config)
-	if err != nil {
-		s.executionMu.Unlock()
-		runtimeError(w, 500, err)
-		return
-	}
-	if err := os.WriteFile(filepath.Join(operation, "request.json"), raw, 0o600); err != nil {
-		s.executionMu.Unlock()
-		runtimeError(w, 500, err)
-		return
-	}
-	volumes := []string{volumeSpec(directory, "/run", false),
-		volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true),
-		volumeSpec(filepath.Join(directory, "forecasts"), "/run/forecasts", true)}
-	if selection.Visualization && needsBasemap {
-		volumes = append(volumes, volumeSpec(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo"), "/basemap", true))
-	}
-	service := map[string]any{"image": s.Config.Diagnostics.Image, "command": []string{"--config", "/run/logs/diagnostics-" + attempt + "/request.json"}, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}}
-	if user := containerUser(); user != "" {
-		service["user"] = user
-	}
-	composition := map[string]any{"services": map[string]any{"task": service}}
-	raw, err = yaml.Marshal(composition)
-	if err != nil {
-		s.executionMu.Unlock()
-		runtimeError(w, 500, err)
-		return
-	}
-	composePath := filepath.Join(operation, "compose.yaml")
-	if err := os.WriteFile(composePath, raw, 0o600); err != nil {
-		s.executionMu.Unlock()
-		runtimeError(w, 500, err)
-		return
-	}
-	statusPath := filepath.Join(operation, "status.json")
-	state := map[string]any{"id": attempt, "status": "running"}
-	raw, _ = json.Marshal(state)
-	if err := os.WriteFile(statusPath, raw, 0o600); err != nil {
 		s.executionMu.Unlock()
 		runtimeError(w, 500, err)
 		return
 	}
 	go func() {
 		defer s.executionMu.Unlock()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
-		name := "nib-diag-" + strings.ToLower(attempt)
-		code, out, err := s.docker(ctx, "compose", "-f", composePath, "-p", name, "up", "--abort-on-container-exit", "--exit-code-from", "task")
-		_ = os.WriteFile(filepath.Join(operation, "container.log"), out, 0o600)
-		cleanup, c := context.WithTimeout(context.Background(), 15*time.Second)
-		_, _, cleanupErr := s.docker(cleanup, "compose", "-f", composePath, "-p", name, "down", "--remove-orphans")
-		c()
-		if ctx.Err() != nil {
-			err = ctx.Err()
-		}
-		if err == nil && cleanupErr != nil {
-			err = cleanupErr
-		}
-		if err != nil || code != 0 {
-			state["status"] = "failed"
-			state["error"] = fmt.Sprintf("diagnostics exited %d: %v", code, err)
-		} else {
-			state["status"] = "succeeded"
-		}
-		raw, _ := json.Marshal(state)
-		_ = os.WriteFile(statusPath, raw, 0o600)
+		s.executeDiagnostics(id, operation)
 	}()
-	writeJSON(w, http.StatusAccepted, map[string]any{"id": attempt, "run_id": id, "status": "running"})
+	writeJSON(w, http.StatusAccepted, operation)
+}
+
+// DiagnosticOperation binds a single execution and report, independently of old attempts.
+type DiagnosticOperation struct {
+	ID          string    `json:"id"`
+	RunID       string    `json:"run_id"`
+	Status      string    `json:"status"`
+	InstanceID  string    `json:"instance_id"`
+	ReportEntry string    `json:"report_entry,omitempty"`
+	Error       string    `json:"error,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+func saveOperation(path string, state DiagnosticOperation) error {
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path+".tmp", raw, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(path+".tmp", path)
+}
+
+// The caller owns executionMu, for both initial diagnostics and an explicit retry.
+func (s *Server) prepareDiagnostics(id string, config map[string]any, basemap bool) (DiagnosticOperation, error) {
+	attempt, err := newRunID(time.Now())
+	if err != nil {
+		return DiagnosticOperation{}, err
+	}
+	state := DiagnosticOperation{ID: attempt, RunID: id, Status: "running", InstanceID: s.instanceID, CreatedAt: time.Now().UTC()}
+	directory := filepath.Join(s.Config.Paths.Runs, id)
+	operation := filepath.Join(directory, "logs", "diagnostics-"+attempt)
+	if err := os.MkdirAll(operation, 0o755); err != nil {
+		return state, err
+	}
+	config["operation_id"] = attempt
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return state, err
+	}
+	if err := os.WriteFile(filepath.Join(operation, "request.json"), raw, 0o600); err != nil {
+		return state, err
+	}
+	volumes := []string{volumeSpec(directory, "/run", false), volumeSpec(filepath.Join(directory, "inputs"), "/run/inputs", true), volumeSpec(filepath.Join(directory, "forecasts"), "/run/forecasts", true)}
+	if basemap {
+		volumes = append(volumes, volumeSpec(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo"), "/basemap", true))
+	}
+	service := map[string]any{"image": s.Config.Diagnostics.Image, "command": []string{"--config", "/run/logs/diagnostics-" + attempt + "/request.json"}, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}}
+	if user := containerUser(); user != "" {
+		service["user"] = user
+	}
+	raw, err = yaml.Marshal(map[string]any{"services": map[string]any{"task": service}})
+	if err != nil {
+		return state, err
+	}
+	if err := os.WriteFile(filepath.Join(operation, "compose.yaml"), raw, 0o600); err != nil {
+		return state, err
+	}
+	if err := saveOperation(filepath.Join(operation, "status.json"), state); err != nil {
+		return state, err
+	}
+	return state, saveOperation(filepath.Join(directory, "logs", "latest-diagnostics.json"), state)
+}
+
+func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) DiagnosticOperation {
+	operation := filepath.Join(s.Config.Paths.Runs, id, "logs", "diagnostics-"+state.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	name := "nib-diag-" + strings.ToLower(state.ID)
+	composePath := filepath.Join(operation, "compose.yaml")
+	code, out, err := s.docker(ctx, "compose", "-f", composePath, "-p", name, "up", "--abort-on-container-exit", "--exit-code-from", "task")
+	logErr := os.WriteFile(filepath.Join(operation, "container.log"), out, 0o600)
+	cleanup, c := context.WithTimeout(context.Background(), 15*time.Second)
+	cleanupCode, _, cleanupErr := s.docker(cleanup, "compose", "-f", composePath, "-p", name, "down", "--remove-orphans")
+	if cleanupErr == nil && cleanupCode != 0 {
+		cleanupErr = fmt.Errorf("container cleanup exited %d; verify Docker project stopped before retrying", cleanupCode)
+	}
+	c()
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	if err == nil {
+		err = cleanupErr
+	}
+	if err == nil {
+		err = logErr
+	}
+	state.Status = "failed"
+	// A saved report must name this operation. A historical success is never adopted.
+	raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, id, "manifest.json"))
+	var manifest struct {
+		Diagnostics []struct {
+			Kind, Status, Entry string
+			OperationID         string `json:"operation_id"`
+		}
+	}
+	var identity struct{ Schema, ID string }
+	if readErr == nil && json.Unmarshal(raw, &manifest) == nil && json.Unmarshal(raw, &identity) == nil && identity.Schema == "nib.run.v1" && identity.ID == id {
+		for _, item := range manifest.Diagnostics {
+			if item.Kind == "report" && item.OperationID == state.ID && (item.Status == "succeeded" || item.Status == "partial") && item.Entry != "" {
+				var recorded map[string]any
+				if json.Unmarshal(raw, &recorded) == nil {
+					if _, _, artifactErr := s.resultFilePath(id, item.Entry, recorded); artifactErr == nil {
+						state.Status, state.ReportEntry = item.Status, item.Entry
+					}
+				}
+			}
+		}
+	}
+	if err != nil || code != 0 || state.ReportEntry == "" {
+		if state.ReportEntry != "" {
+			state.Status = "partial"
+		}
+		state.Error = fmt.Sprintf("diagnostics exited %d: %v; inspect this operation's container log", code, err)
+		if err == nil && code == 0 {
+			state.Error = "diagnostics did not register a report for this operation; rebuild the diagnostics image and inspect its log"
+		}
+	}
+	if err := saveOperation(filepath.Join(operation, "status.json"), state); err != nil {
+		state.Status, state.Error = "failed", "cannot save diagnostic operation status: "+err.Error()
+	}
+	return state
 }

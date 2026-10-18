@@ -20,6 +20,20 @@ Build from the repository root with
 `docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .`. A successful
 build does not establish real model or basemap acceptance.
 
+## Automatic execution and read-only results
+
+Handler runs the diagnostics selected in a frozen inference request automatically
+after its model outputs finish. Explicit retries use the same internal executor
+and saved Forecasts. Each internal request may include an `operation_id`; the
+combined report binds it and the exact attempt IDs.
+
+The local report has keyboard-accessible native Visualization / Metrics radio
+views, without scripts. It is generated even when one diagnostic fails, retaining
+the successful content and showing the failed product's error. Loading/switching
+views never starts computation. The shell displays existing artifacts; a future
+interactive metrics webpage remains separate work. See
+[execution and recovery](../docs/automatic-diagnostics.md).
+
 ## CMA xarray data handoff
 
 The platform's four-method provider is `diagnostics.run_source.RunSource`.

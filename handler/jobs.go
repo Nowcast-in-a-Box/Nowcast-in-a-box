@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,14 +20,16 @@ import (
 )
 
 type Job struct {
-	ID             string         `json:"id"`
-	Status         string         `json:"status"`
-	Stage          string         `json:"stage"`
-	Error          string         `json:"error,omitempty"`
-	Request        RuntimeRequest `json:"request"`
-	CreatedAt      time.Time      `json:"created_at"`
-	IdempotencyKey string         `json:"idempotency_key,omitempty"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID                    string         `json:"id"`
+	Status                string         `json:"status"`
+	Stage                 string         `json:"stage"`
+	Error                 string         `json:"error,omitempty"`
+	DiagnosticOperationID string         `json:"diagnostic_operation_id,omitempty"`
+	ReportEntry           string         `json:"report_entry,omitempty"`
+	Request               RuntimeRequest `json:"request"`
+	CreatedAt             time.Time      `json:"created_at"`
+	IdempotencyKey        string         `json:"idempotency_key,omitempty"`
+	UpdatedAt             time.Time      `json:"updated_at"`
 }
 
 func (s *Server) runtimeRoutes(mux *http.ServeMux) {
@@ -256,6 +259,10 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 409, fmt.Errorf("configure the pinned atlas revision first"))
 		return
 	}
+	if err := s.reconcileExecutions(); err != nil {
+		runtimeError(w, http.StatusConflict, err)
+		return
+	}
 	s.jobsMu.Lock()
 	if s.stopping {
 		s.jobsMu.Unlock()
@@ -447,6 +454,10 @@ func (s *Server) ExecutionAvailableForTest() bool {
 func (s *Server) executeJob(id string) {
 	s.executionMu.Lock()
 	defer s.executionMu.Unlock()
+	if err := s.reconcileExecutions(); err != nil {
+		s.updateJob(id, "failed", "preflight", err)
+		return
+	}
 	s.jobsMu.Lock()
 	request := s.jobs[id].Request
 	s.jobsMu.Unlock()
@@ -482,7 +493,10 @@ func (s *Server) executeJob(id string) {
 		_ = os.MkdirAll(logs, 0o755)
 		_ = os.WriteFile(filepath.Join(logs, stage+".log"), out, 0o644)
 		cleanup, c := context.WithTimeout(context.Background(), 15*time.Second)
-		_, _, cleanupErr := s.docker(cleanup, "compose", "-f", composePath, "-p", name, "down", "--remove-orphans")
+		cleanupCode, _, cleanupErr := s.docker(cleanup, "compose", "-f", composePath, "-p", name, "down", "--remove-orphans")
+		if cleanupErr == nil && cleanupCode != 0 {
+			cleanupErr = fmt.Errorf("container cleanup exited %d; inspect Docker before retrying", cleanupCode)
+		}
 		c()
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -521,6 +535,30 @@ func (s *Server) executeJob(id string) {
 					continue
 				}
 				target := filepath.Join(directory, entry.Name())
+				if entry.Name() == "manifest.json" {
+					oldRaw, _ := os.ReadFile(target)
+					newRaw, readErr := os.ReadFile(filepath.Join(child, entry.Name()))
+					var oldManifest, newManifest map[string]any
+					if json.Unmarshal(oldRaw, &oldManifest) == nil && readErr == nil && json.Unmarshal(newRaw, &newManifest) == nil {
+						if history, ok := oldManifest["diagnostics"].([]any); ok {
+							newManifest["diagnostics"] = history
+						}
+						forecasts, _ := oldManifest["forecasts"].(map[string]any)
+						kept := map[string]any{}
+						for model, descriptor := range forecasts {
+							if !slices.Contains(request.Models, model) {
+								kept[model] = descriptor
+							}
+						}
+						newManifest["forecasts"] = kept
+						newManifest["model_names"] = oldManifest["model_names"]
+						newRaw, _ = json.Marshal(newManifest)
+						if err := os.WriteFile(filepath.Join(child, entry.Name()), newRaw, 0o644); err != nil {
+							s.updateJob(id, "failed", "ingestion", err)
+							return
+						}
+					}
+				}
 				if entry.Name() == "inputs" || entry.Name() == "manifest.json" {
 					_ = os.RemoveAll(target)
 				}
@@ -548,7 +586,14 @@ func (s *Server) executeJob(id string) {
 			s.updateJob(id, "failed", "ingestion", readErr)
 			return
 		}
-		manifest["model_names"] = request.ModelNames
+		names, _ := manifest["model_names"].(map[string]any)
+		if names == nil {
+			names = map[string]any{}
+		}
+		for model, name := range request.ModelNames {
+			names[model] = name
+		}
+		manifest["model_names"] = names
 		raw, marshalErr := json.MarshalIndent(manifest, "", "  ")
 		if marshalErr != nil {
 			s.updateJob(id, "failed", "ingestion", marshalErr)
@@ -575,7 +620,45 @@ func (s *Server) executeJob(id string) {
 			return
 		}
 	}
-	s.updateJob(id, "ready", "model", nil)
+	if len(request.Metrics) == 0 && !request.Visualization {
+		s.updateJob(id, "succeeded", "finished", nil)
+		return
+	}
+	s.updateJob(id, "running", "diagnostics", nil)
+	config := map[string]any{"version": 2, "run": "/run"}
+	if len(request.Metrics) > 0 {
+		config["metrics"] = request.Metrics
+		config["verification_models"] = request.VerificationModels
+	}
+	if request.Visualization {
+		config["visualization"] = map[string]any{"models": request.VisualizationModels, "basemap": "/basemap"}
+	}
+	operation, err := s.prepareDiagnostics(id, config, request.Visualization && request.DataID != "cma_radar")
+	if err != nil {
+		s.updateJob(id, "partial", "diagnostics", err)
+		return
+	}
+	s.jobsMu.Lock()
+	s.jobs[id].DiagnosticOperationID = operation.ID
+	err = writeJob(directory, s.jobs[id])
+	s.jobsMu.Unlock()
+	if err != nil {
+		s.updateJob(id, "partial", "diagnostics", err)
+		return
+	}
+	operation = s.executeDiagnostics(id, operation)
+	s.jobsMu.Lock()
+	s.jobs[id].ReportEntry = operation.ReportEntry
+	s.jobsMu.Unlock()
+	var diagnosticError error
+	if operation.Error != "" {
+		diagnosticError = fmt.Errorf("%s", operation.Error)
+	}
+	status := operation.Status
+	if status == "failed" {
+		status = "partial"
+	} // Forecasts remain available.
+	s.updateJob(id, status, "finished", diagnosticError)
 }
 
 func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
@@ -629,7 +712,11 @@ func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
 	}
 	var tail strings.Builder
 	for _, entry := range entries {
-		raw, readErr := os.ReadFile(filepath.Join(logs, entry.Name()))
+		logPath := filepath.Join(logs, entry.Name())
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), "diagnostics-") {
+			logPath = filepath.Join(logPath, "container.log")
+		}
+		raw, readErr := os.ReadFile(logPath)
 		if readErr == nil {
 			tail.WriteString(entry.Name() + "\n" + string(raw))
 		}

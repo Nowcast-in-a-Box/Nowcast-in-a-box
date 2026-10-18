@@ -26,6 +26,9 @@ def test_combined_report_keeps_map_and_scores_in_one_directory(tmp_path):
     )
     page = (run / report["entry"]).read_text()
     assert 'src="0-map.png"' in page and 'src="1-mae.svg"' in page
+    assert 'name="view"' in page and "Visualization" in page and "Metrics" in page
+    assert "<script" not in page and 'role="tab"' not in page
+    assert 'type="radio"' in page and ":focus-visible" in page
     assert (run / report["path"] / "0-map.png").samefile(pictures / "map.png")
 
 
