@@ -24,8 +24,23 @@ can be built or pulled before the run.
 
 ## 2. Start the Handler
 
-Use the launcher for the operating system. The paths are fixed inside the
-downloaded Handler folder:
+The binary already discovers the active `config.yaml` from the working or
+program directory, or from `NIB_CONFIG`; `-config` is only needed for a file
+with another name. The repository `config.yaml` is the SEVIR default (8765/8766).
+For the CMA demo, start with the example without a flag:
+
+```sh
+env NIB_CONFIG=tests/runtime/cma-demo.config.yaml .pi/local-e2e/nib-handler
+```
+
+The example uses 8765/8766 and allows the Hub dev server on 5173. It has no
+`data_root`; enter the CMA folder in Checkout, or set `NIB_DATA_ROOT` first.
+The local `nib-diagnostics:cma-demo` image may predate the current request
+format; rebuild it with
+`docker build -f diagnostics/Dockerfile -t nib-diagnostics:cma-demo .`,
+or use the isolated `automatic-flow` image from the automated suite.
+
+Use the platform launcher instead when starting the installed bundle:
 
 - macOS: double-click `bin/macos/start.command`, or run it from Terminal.
 - Windows: in PowerShell, run `bin\windows\run.ps1`.
