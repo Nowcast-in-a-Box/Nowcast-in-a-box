@@ -2,14 +2,107 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// localSettings is the small state the Hub saves on this computer. It lives
+// next to config.yaml so the download folder stays self-contained and never
+// needs a privileged per-user directory. The file is gitignored.
+type localSettings struct {
+	DataRoot string `json:"data_root,omitempty"`
+}
+
+func settingsPath(cfg Config) (string, error) {
+	dir := ""
+	if cfg.Source != "" {
+		dir = filepath.Dir(cfg.Source)
+	} else {
+		executable, err := os.Executable()
+		if err != nil {
+			return "", fmt.Errorf("locate the Handler program directory: %w", err)
+		}
+		dir = filepath.Dir(executable)
+	}
+	return filepath.Join(dir, settingsFileName), nil
+}
+
+func readSettings(cfg Config) (localSettings, error) {
+	var settings localSettings
+	path, err := settingsPath(cfg)
+	if err != nil {
+		return settings, err
+	}
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return settings, nil
+	}
+	if err != nil {
+		return settings, fmt.Errorf("read %s: %w", settingsFileName, err)
+	}
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return settings, fmt.Errorf("%s is not valid JSON: %w; remove it or restore a data_root", settingsFileName, err)
+	}
+	return settings, nil
+}
+
+func writeSettings(cfg Config, settings localSettings) error {
+	path, err := settingsPath(cfg)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".nib-settings-*")
+	if err != nil {
+		return err
+	}
+	name := file.Name()
+	defer os.Remove(name)
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.Write(append(raw, '\n')); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, path)
+}
+
+// applySettings merges the saved local settings over config.yaml. A saved
+// data root is relative to the settings file when it is not absolute.
+func (c *Config) applySettings() error {
+	settings, err := readSettings(*c)
+	if err != nil {
+		return err
+	}
+	if settings.DataRoot == "" {
+		return nil
+	}
+	if !filepath.IsAbs(settings.DataRoot) {
+		path, err := settingsPath(*c)
+		if err != nil {
+			return err
+		}
+		settings.DataRoot = filepath.Join(filepath.Dir(path), settings.DataRoot)
+	}
+	c.Paths.DataRoot = filepath.Clean(settings.DataRoot)
+	return nil
+}
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
@@ -34,7 +127,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePickDataRoot(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8))
-	if err != nil || len(strings.TrimSpace(string(raw))) != 0 {
+	if err != nil || strings.TrimSpace(string(raw)) != "" {
 		runtimeError(w, 400, fmt.Errorf("folder selection does not accept a path"))
 		return
 	}
@@ -75,63 +168,17 @@ func (s *Server) saveDataRoot(w http.ResponseWriter, requested string) {
 	}
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
-	if s.Config.Source == "" {
-		runtimeError(w, 409, fmt.Errorf("start the handler with a config file to save settings"))
-		return
-	}
-	raw, err := os.ReadFile(s.Config.Source)
+	// Keep every saved field: only data_root is browser-editable today.
+	settings, err := readSettings(s.Config)
 	if err != nil {
 		runtimeError(w, 500, err)
 		return
 	}
-	var document yaml.Node
-	if yaml.Unmarshal(raw, &document) != nil || len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
-		runtimeError(w, 500, fmt.Errorf("invalid local config document"))
-		return
-	}
-	paths := yamlMapping(document.Content[0], "paths")
-	if paths.Kind != yaml.MappingNode {
-		runtimeError(w, 500, fmt.Errorf("config paths must be a mapping"))
-		return
-	}
-	var target *yaml.Node
-	for i := 0; i < len(paths.Content); i += 2 {
-		if paths.Content[i].Value == "data_root" {
-			target = paths.Content[i+1]
-		}
-	}
-	if target == nil {
-		target = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str"}
-		paths.Content = append(paths.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "data_root"}, target)
-	}
-	target.Kind = yaml.ScalarNode
-	target.Tag = "!!str"
-	target.Value = root
-	body, err := yaml.Marshal(&document)
-	if err != nil {
-		runtimeError(w, 500, err)
-		return
-	}
-	temporary := s.Config.Source + ".tmp"
-	if err := os.WriteFile(temporary, body, 0o600); err != nil {
-		runtimeError(w, 500, err)
-		return
-	}
-	if err := os.Rename(temporary, s.Config.Source); err != nil {
-		runtimeError(w, 500, err)
+	settings.DataRoot = root
+	if err := writeSettings(s.Config, settings); err != nil {
+		runtimeError(w, 500, fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err))
 		return
 	}
 	s.Config.Paths.DataRoot = root
 	writeJSON(w, 200, map[string]string{"data_root": root})
-}
-
-func yamlMapping(parent *yaml.Node, key string) *yaml.Node {
-	for i := 0; i < len(parent.Content); i += 2 {
-		if parent.Content[i].Value == key {
-			return parent.Content[i+1]
-		}
-	}
-	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	parent.Content = append(parent.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, node)
-	return node
 }

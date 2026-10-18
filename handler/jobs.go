@@ -41,6 +41,8 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/runs/{id}/diagnostics", s.authorize(s.handleRetryDiagnostics))
 	mux.HandleFunc("GET /v1/capabilities", s.authorize(s.handleCapabilities))
 	mux.HandleFunc("POST /v1/preflight", s.authorize(s.handlePreflight))
+	mux.HandleFunc("GET /v1/resources", s.authorize(s.handleResources))
+	mux.HandleFunc("POST /v1/resources/prepare", s.authorize(s.handlePrepareResources))
 	mux.HandleFunc("GET /v1/datasets/{dataset}/samples", s.authorize(s.handleSamples))
 	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))
 	mux.HandleFunc("GET /v1/jobs/{id}", s.authorize(s.handleJob))
@@ -130,8 +132,13 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		"diagnostics": map[string]any{"verification": diagnosticsReady, "visualization": diagnosticsReady && (s.dataID() == "cma_radar" || s.basemapReady())}})
 }
 
+var weightPins = map[string]string{
+	"nowcastnet": "773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d",
+	"exprecast":  "534b91b63524f775c460334385f0f0b0b92759fa1596a053d1cac489c84cd00d",
+	"wadepre":    "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b",
+}
+
 func verifyModelWeights(path, model string) error {
-	pins := map[string]string{"nowcastnet": "773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d", "exprecast": "534b91b63524f775c460334385f0f0b0b92759fa1596a053d1cac489c84cd00d", "wadepre": "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b"}
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -141,7 +148,7 @@ func verifyModelWeights(path, model string) error {
 	if _, err := io.Copy(hash, file); err != nil {
 		return err
 	}
-	if expected, ok := pins[model]; !ok || hex.EncodeToString(hash.Sum(nil)) != expected {
+	if expected, ok := weightPins[model]; !ok || hex.EncodeToString(hash.Sum(nil)) != expected {
 		return fmt.Errorf("weight checksum mismatch")
 	}
 	return nil
@@ -475,7 +482,7 @@ func (s *Server) executeJob(id string) {
 		if len(args) == 0 {
 			return fmt.Errorf("missing configured image")
 		}
-		service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}}
+		service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
 		if user := containerUser(); user != "" {
 			service["user"] = user
 		}

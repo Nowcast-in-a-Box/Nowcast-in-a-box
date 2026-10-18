@@ -20,6 +20,7 @@ const (
 	defaultRuns             = "runs"
 	defaultDiagnosticsImage = "nib-diagnostics:dev"
 	configFileName          = "config.yaml"
+	settingsFileName        = "nib-settings.json"
 )
 
 // Addr is a loopback bind address from config.yaml.
@@ -50,9 +51,13 @@ type Runtime struct {
 	CatalogFile    string            `yaml:"catalog_file" json:"catalog_file"`
 	IngestionImage string            `yaml:"ingestion_image" json:"ingestion_image"`
 	ModelImages    map[string]string `yaml:"model_images" json:"model_images"`
-	AllowedOrigins []string          `yaml:"allowed_origins" json:"allowed_origins"`
-	Token          string            `yaml:"token,omitempty" json:"-"`
-	AtlasRevision  string            `yaml:"atlas_revision" json:"atlas_revision"`
+	// WeightSource is an optional local folder mirrored like artifacts/
+	// (dataset/model/file). Missing weights are copied from it instead of
+	// downloaded over the network.
+	WeightSource   string   `yaml:"weight_source,omitempty" json:"weight_source,omitempty"`
+	AllowedOrigins []string `yaml:"allowed_origins" json:"allowed_origins"`
+	Token          string   `yaml:"token,omitempty" json:"-"`
+	AtlasRevision  string   `yaml:"atlas_revision" json:"atlas_revision"`
 }
 
 // Config is the host runtime settings loaded from config.yaml.
@@ -94,6 +99,9 @@ func Load(explicit string) (Config, error) {
 				cwd = "."
 			}
 			cfg.resolvePaths(cwd)
+			if err := cfg.applySettings(); err != nil {
+				return Config{}, err
+			}
 			cfg.applyDataRootEnv()
 			return cfg, nil
 		}
@@ -114,6 +122,9 @@ func Load(explicit string) (Config, error) {
 	cfg.applyDefaults()
 	cfg.Source = path
 	cfg.resolvePaths(filepath.Dir(path))
+	if err := cfg.applySettings(); err != nil {
+		return Config{}, err
+	}
 	cfg.applyDataRootEnv()
 	return cfg, nil
 }
@@ -161,6 +172,7 @@ func (c *Config) applyDefaults() {
 func (c *Config) resolvePaths(baseDir string) {
 	c.Paths.Artifacts = resolveAgainst(baseDir, c.Paths.Artifacts)
 	c.Paths.Runs = resolveAgainst(baseDir, c.Paths.Runs)
+	c.Runtime.WeightSource = resolveAgainst(baseDir, c.Runtime.WeightSource)
 	if c.Paths.DataRoot != "" {
 		c.Paths.DataRoot = resolveAgainst(baseDir, c.Paths.DataRoot)
 	}

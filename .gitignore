@@ -18,6 +18,9 @@ workspace/
 tmp/
 .env
 
+# Per-install settings written next to config.yaml (data root).
+nib-settings.json
+
 handler/nib-handler
 handler/nib-handler.exe
 handler/dist/

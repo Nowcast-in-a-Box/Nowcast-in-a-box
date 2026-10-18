@@ -162,7 +162,7 @@ func (s *Server) prepareDiagnostics(id string, config map[string]any, basemap bo
 	if basemap {
 		volumes = append(volumes, volumeSpec(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo"), "/basemap", true))
 	}
-	service := map[string]any{"image": s.Config.Diagnostics.Image, "command": []string{"--config", "/run/logs/diagnostics-" + attempt + "/request.json"}, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}}
+	service := map[string]any{"image": s.Config.Diagnostics.Image, "command": []string{"--config", "/run/logs/diagnostics-" + attempt + "/request.json"}, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
 	if user := containerUser(); user != "" {
 		service["user"] = user
 	}

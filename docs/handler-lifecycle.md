@@ -47,6 +47,11 @@ dataset files and Atlas revision). Data-root and trusted-origin updates do not
 change that compatibility identity. Credentials are not part of the public
 identity response.
 
+The Hub saves the selected data folder in `nib-settings.json` next to
+`config.yaml`. The file is gitignored, contains only `data_root`, is written
+atomically with mode `0600`, and is read after `config.yaml` and before
+`NIB_DATA_ROOT`. Deleting it returns the Handler to the config-file value.
+
 Local control ownership follows the config file's canonical path, separately
 from compatibility. After editing execution settings or a port, use `restart`
 with the **same config file**. The CLI verifies the old instance against its

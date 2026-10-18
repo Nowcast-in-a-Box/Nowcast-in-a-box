@@ -19,8 +19,17 @@ docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .
 ```
 
 The local data root must contain the configured processed SEVIR file and CATALOG;
-no path is invented when it is missing. Weights stay under `artifacts/sevir/...`
-and are checked against the model declarations' SHA256 before offline inference.
+no path is invented when it is missing. The Hub saves the folder chosen for the
+selected dataset in `nib-settings.json` next to `config.yaml`; that file is
+gitignored, survives a Handler restart, and is overridden by `NIB_DATA_ROOT`.
+Weights stay under `artifacts/<dataset>/<model>/...` and are checked against the
+model declarations' SHA256 before offline inference. A missing weight is copied
+from `runtime.weight_source` (a folder laid out like `artifacts/`) and verified;
+the Handler does not download it over the network. Image layers are expected to
+be present in Docker's local cache: `GET /v1/resources` reports each configured
+image as ready or missing, and `POST /v1/resources/prepare` copies missing
+weights and re-checks the selected images. Compose definitions use
+`pull_policy: never` so execution never hides a download.
 The initial reader requires six context and twenty target 128x128 frames. It
 rejects event/time ambiguity and events with missing pixels that the processed
 file can no longer mask reliably. Sample listings show this limitation.

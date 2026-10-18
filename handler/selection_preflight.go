@@ -94,10 +94,10 @@ func weightCheck(cfg Config, model string) Check {
 	path := filepath.Join(cfg.Paths.Artifacts, dataset, model, name)
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {
-		return Check{ID: "weight:" + model, OK: false, Message: "weight is not on this machine; download is required before running. Revision lookup stays paused."}
+		return Check{ID: "weight:" + model, OK: true, Message: "weight is not present yet; Validate copies it from runtime.weight_source"}
 	}
 	if err := verifyModelWeights(path, model); err != nil {
-		return Check{ID: "weight:" + model, OK: false, Message: "local weight does not match the pinned SHA-256"}
+		return Check{ID: "weight:" + model, OK: true, Message: "local weight does not match the pinned SHA-256; Validate replaces it from runtime.weight_source"}
 	}
 	return Check{ID: "weight:" + model, OK: true, Message: "local weight matches the pinned SHA-256"}
 }

@@ -47,6 +47,16 @@ func TestSettingsOnlyUpdatesExistingDataRootAndPreservesConfig(t *testing.T) {
 	if !strings.Contains(string(raw), "keep this comment") || !strings.Contains(string(raw), "future: retained") {
 		t.Fatal(string(raw))
 	}
+	if strings.Contains(string(raw), root) {
+		t.Fatal("data_root must not be written into config.yaml")
+	}
+	settings, err := os.ReadFile(filepath.Join(filepath.Dir(source), "nib-settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(settings), root) {
+		t.Fatalf("settings = %s", settings)
+	}
 	reloaded, err := handler.Load(source)
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +112,48 @@ func TestPickDataRootSavesAndOverwritesWithoutAcceptingABrowserPath(t *testing.T
 	reloaded, err = handler.Load(source)
 	if err != nil || reloaded.Paths.DataRoot != second {
 		t.Fatal(reloaded.Paths.DataRoot, err)
+	}
+}
+
+func TestSettingsPreferSavedFileOverYAMLAndEnvWins(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := filepath.Join(t.TempDir(), "config.yaml")
+	yamlRoot := t.TempDir()
+	if err := os.WriteFile(source, []byte("paths:\n  data_root: "+yamlRoot+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	savedRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), []byte(`{"data_root":"`+savedRoot+`"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Paths.DataRoot != savedRoot {
+		t.Fatalf("data_root=%q want saved %q", cfg.Paths.DataRoot, savedRoot)
+	}
+	t.Setenv("NIB_DATA_ROOT", t.TempDir())
+	cfg, err = handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Paths.DataRoot != os.Getenv("NIB_DATA_ROOT") {
+		t.Fatalf("data_root=%q want env", cfg.Paths.DataRoot)
+	}
+}
+
+func TestCorruptSettingsFileIsReported(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(source, []byte("paths:\n  runs: runs\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.Load(source); err == nil || !strings.Contains(err.Error(), "nib-settings.json") {
+		t.Fatalf("expected a readable settings error, got %v", err)
 	}
 }
 

@@ -77,8 +77,11 @@ func TestSelectionPreflightReportsMissingDataAndWeights(t *testing.T) {
 	}
 	server.Runner = readyRunner{}
 	joined := mustJSON(t, postPreflight(t, server, body))
-	if !strings.Contains(joined, "download is required") {
+	if !strings.Contains(joined, "Validate copies it from runtime.weight_source") {
 		t.Fatal(joined)
+	}
+	if result := postPreflight(t, server, body); result["ok"] != true {
+		t.Fatalf("a missing weight is prepared later, not a preflight failure: %s", mustJSON(t, result))
 	}
 	weight := filepath.Join(cfg.Paths.Artifacts, "sevir", "wadepre", "WADEPre.onnx")
 	if err := os.MkdirAll(filepath.Dir(weight), 0o755); err != nil {

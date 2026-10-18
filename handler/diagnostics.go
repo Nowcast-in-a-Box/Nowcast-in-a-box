@@ -545,6 +545,7 @@ func isDockerSock(path string) bool {
 func dockerRunArgs(image, name, runDir string, mounts []inputMount) []string {
 	args := []string{
 		"run", "--rm",
+		"--pull", "never",
 		"--name", name,
 		"--network", "none",
 		"--read-only",
