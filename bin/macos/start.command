@@ -71,8 +71,10 @@ if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 && ( "$action" == start || "$action"
 	registration="$(printf '%s\n' 'nib-handler-app-v3' "$bin" "$config" "$bind_host" "$bind_port")"
 	if [[ ! -f "$stamp" || "$(< "$stamp")" != "$registration" ]]; then
 		mkdir -p "$(dirname "$app")"
+		app_build="${app%.app}.new.app"
 		applescript="$(mktemp -t nib-handler-script)"
-		trap 'rm -f "$applescript"' EXIT
+		trap 'rm -f "$applescript"; rm -rf "$app_build"' EXIT
+		rm -rf "$app_build"
 		escape_applescript() {
 			local value="$1"
 			value="${value//\\/\\\\}"
@@ -90,14 +92,16 @@ if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 && ( "$action" == start || "$action"
 		fi
 		# URL schemes arrive as AppleEvents, not as a shell application's $1.
 		printf 'on run\n do shell script (quoted form of "%s") & " start -config " & (quoted form of "%s")%s\nend run\non open location theURL\n do shell script (quoted form of "%s") & " connect -config " & (quoted form of "%s")%s & " " & (quoted form of theURL)\nend open location\n' "$program" "$configuration" "$overrides" "$program" "$configuration" "$overrides" > "$applescript"
-		/usr/bin/osacompile -o "$app" "$applescript"
-		plist="$app/Contents/Info.plist"
+		/usr/bin/osacompile -o "$app_build" "$applescript"
+		plist="$app_build/Contents/Info.plist"
 		/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier app.nowcast.nib-handler' "$plist" 2>/dev/null ||
 			/usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string app.nowcast.nib-handler' "$plist"
 		/usr/libexec/PlistBuddy -c 'Delete :CFBundleURLTypes' "$plist" >/dev/null 2>&1 || true
 		/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes array' -c 'Add :CFBundleURLTypes:0 dict' -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes array' -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string nib' "$plist"
+		/usr/bin/codesign --force --sign - "$app_build"
+		rm -rf "$app"
+		mv "$app_build" "$app"
 		printf '%s\n' "$registration" > "$stamp"
-		/usr/bin/codesign --force --sign - "$app"
 	fi
 	lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 	"$lsregister" -f "$app"
