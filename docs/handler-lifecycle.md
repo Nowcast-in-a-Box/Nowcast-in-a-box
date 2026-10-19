@@ -41,6 +41,27 @@ unrelated. Startup does not select another port or kill a conflicting program.
 An old Handler without the identity protocol needs an explicit upgrade/stop,
 not silent adoption.
 
+## Remove the local installation
+
+Use the platform uninstaller when a fresh-user pass needs the Handler to be
+installed from scratch:
+
+- macOS: `Uninstall NiB.command`
+- Windows: `Uninstall NiB.cmd`
+- Linux: `Uninstall NiB.sh`
+
+The default removes the macOS application and launchd job, URL-scheme
+registration, `~/Library/Caches/NiB/handler`, the project `nib-settings.json`,
+and the Handler log. It keeps `runs/`, `artifacts/`, and the data folder. On
+Linux and Windows it removes the desktop/registry registration and the
+per-user Handler cache instead of a macOS application.
+
+Use `--dry-run` to inspect the planned paths, or `--purge` to additionally
+remove generated runs, artifacts, packaged resources, logs, and downloaded
+Handler binaries. `--purge` asks for a second confirmation and never deletes
+the external data folder. An active queued or running job blocks uninstall;
+wait for it to finish or stop it from the local CLI first.
+
 ## Configuration changes and local control
 
 Compatibility checks include the canonical config source, API/results addresses,

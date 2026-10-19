@@ -123,13 +123,28 @@ before distribution.
   panel or the Handler log; the token is never printed).
 - A screenshot of the result page with both tabs.
 
-## 6. Cleanup
+## 6. Cleanup and fresh-user reset
+
+For an ordinary cleanup:
 
 - Stop the Hub dev server and backend.
 - Stop the Handler with the launcher `stop` command.
 - Leave `runs/` in place for inspection; remove it manually only when the
   evidence is no longer needed.
 - Do not delete the user's artifacts or data folder.
+
+For a fresh-user pass, use the platform uninstaller:
+
+- macOS: `Uninstall NiB.command --dry-run`, then `Uninstall NiB.command`
+- Windows: `Uninstall NiB.cmd --dry-run`, then `Uninstall NiB.cmd`
+- Linux: `Uninstall NiB.sh --dry-run`, then `Uninstall NiB.sh`
+
+The default removes the local Handler installation and settings but keeps
+`runs/` and `artifacts/`. Add `--purge` only in a throwaway checkout or after
+backing up those folders; it also removes generated runs, artifacts, resources,
+logs, and locally downloaded binaries. Never add the external data folder to a
+purge. Start again with `Start NiB.<os>` and confirm a fresh app/launchd job and
+`/v1/identity` response.
 
 ## 7. Known limits
 

@@ -19,6 +19,7 @@ import (
 const exitUsage = 2
 
 var errUsage = errors.New("usage")
+var errBackgroundUnavailable = errors.New("background startup unavailable")
 
 func commandConfig(args []string) (Config, []string, error) {
 	fs := flag.NewFlagSet("nib-handler", flag.ContinueOnError)
@@ -167,6 +168,10 @@ func Main(args []string) int {
 			}
 			return 0
 		}
+	}
+	if errors.Is(err, errBackgroundUnavailable) {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 5
 	}
 	fmt.Fprintf(os.Stderr, "error: %v\n", err)
 	return 1

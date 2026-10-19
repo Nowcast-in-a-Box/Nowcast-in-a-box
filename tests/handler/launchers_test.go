@@ -22,13 +22,13 @@ func TestUnixLaunchersForwardPathsArgumentsAndExitCode(t *testing.T) {
 		name, os, arch, script, binary string
 	}{
 		{"linux-amd64", "Linux", "x86_64", "bin/linux/run.sh", "bin/linux/nib-handler-linux-amd64"},
-		{"linux-arm64-wrapper", "Linux", "aarch64", "scripts/run.sh", "bin/linux/nib-handler-linux-arm64"},
+		{"linux-root-entry", "Linux", "x86_64", "Start NiB.sh", "bin/linux/nib-handler-linux-amd64"},
 		{"macos-amd64", "Darwin", "x86_64", "bin/macos/start.command", "bin/macos/nib-handler-darwin-amd64"},
-		{"macos-arm64-wrapper", "Darwin", "arm64", "scripts/start.command", "bin/macos/nib-handler-darwin-arm64"},
+		{"macos-root-entry", "Darwin", "arm64", "Start NiB.command", "bin/macos/nib-handler-darwin-arm64"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := filepath.Join(t.TempDir(), "runtime with spaces")
-			for _, path := range []string{"bin/linux/run.sh", "bin/macos/start.command", "scripts/run.sh", "scripts/start.command"} {
+			for _, path := range []string{"bin/linux/run.sh", "bin/macos/start.command", "Start NiB.sh", "Start NiB.command"} {
 				body, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(path)))
 				if err != nil {
 					t.Fatal(err)
@@ -85,6 +85,48 @@ func TestUnixLaunchersForwardPathsArgumentsAndExitCode(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMacLauncherFallsBackToForegroundOnExitFive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix entry points require bash")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash is not installed")
+	}
+	repo := filepath.Dir(repoConfigPath(t))
+	root := filepath.Join(t.TempDir(), "runtime with spaces")
+	body, err := os.ReadFile(filepath.Join(repo, "bin", "macos", "start.command"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, filepath.Join(root, "bin", "macos", "start.command"), string(body))
+	tools := filepath.Join(root, "tools")
+	writeExecutable(t, filepath.Join(tools, "uname"), "#!/bin/bash\ncase \"$1\" in -s) echo Darwin ;; -m) echo arm64 ;; esac\n")
+	fake := `#!/bin/bash
+if [[ "$1" == "start" ]]; then
+  echo "launchd bootstrap failed" >&2
+  exit 5
+fi
+if [[ "$1" == "serve" ]]; then
+  printf '%s\n' "$@"
+  exit 23
+fi
+exit 24
+`
+	writeExecutable(t, filepath.Join(root, "bin", "macos", "nib-handler-darwin-arm64"), fake)
+	cmd := exec.Command(bash, filepath.Join(root, "bin", "macos", "start.command"))
+	cmd.Dir = t.TempDir()
+	cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"), "NIB_SKIP_URI_REGISTRATION=1")
+	out, err := cmd.CombinedOutput()
+	exit, ok := err.(*exec.ExitError)
+	if !ok || exit.ExitCode() != 23 {
+		t.Fatalf("exit=%v output=%s", err, out)
+	}
+	if !strings.Contains(string(out), "background startup failed") || !strings.Contains(string(out), "serve\n-config\n") {
+		t.Fatalf("launcher did not fall back to foreground serve: %s", out)
 	}
 }
 

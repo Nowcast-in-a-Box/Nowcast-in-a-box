@@ -22,9 +22,9 @@ planning map in `docs/modules.yaml`, not git ids.
 handler/          host daemon source (Go)
 handler/cmd/      nib-handler process entry
 bin/              prebuilt binaries and OS entry points
-  linux/          run.sh
-  macos/          start.command
-  windows/        run.ps1
+  linux/          run.sh, uninstall.sh
+  macos/          start.command, uninstall.command
+  windows/        run.ps1, uninstall.ps1
 diagnostics/      image scaffold and rendering library; computation entry pending
 runs/             diagnostics run outputs (gitignored)
 artifacts/        downloaded weights and docker config (not committed)
@@ -38,9 +38,11 @@ adapters/         packaging-time source; not a host package
   <data-id>/      one data source; source.py
     <model-id>/   one model; its program is adapter.py
 docs/             architecture and process
-scripts/          cross-build.sh; wrappers that call bin/
+scripts/          maintainer tooling only (cross-build, format, package, export)
 tests/             handler, runtime, verification, and visualization tests
 config.yaml       bind addresses, ports, paths
+Start NiB.*       user-facing start shims (macOS, Windows, Linux)
+Uninstall NiB.*   user-facing uninstall shims
 ```
 
 No repository-root `pyproject.toml` or `uv.lock`. Python belongs
@@ -62,10 +64,14 @@ bin/macos/start.command    # macOS (Finder or terminal)
 bin/windows/run.ps1        # Windows
 ```
 
-`scripts/run.sh`, `scripts/run.ps1`, and `scripts/start.command` call the
-matching `bin/` entry. Each entry uses `bin/<os>/nib-handler-<os>-<arch>`,
-or fetches it from the latest GitHub Release. Host and port come from
-`config.yaml`.
+The root `Start NiB.command`, `Start NiB.cmd`, and `Start NiB.sh` are the
+three user entry points; each calls its `bin/<os>/` launcher. The launcher
+uses `bin/<os>/nib-handler-<os>-<arch>`, or fetches it from the latest GitHub
+Release. Host and port come from `config.yaml`.
+
+`Uninstall NiB.command`, `Uninstall NiB.cmd`, and `Uninstall NiB.sh` remove
+the local Handler installation. They preserve runs, artifacts, and user data
+by default; `--purge` is explicit.
 
 Handler source only (contributors with Go 1.22+):
 

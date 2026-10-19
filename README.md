@@ -59,6 +59,22 @@ Use `bin/macos/start.command status`, `stop`, or `restart` for explicit control.
 See [Handler lifecycle and connection](docs/handler-lifecycle.md) for configured
 ports, trusted Hub origins, logs and platform limitations.
 
+### Remove the local Handler
+
+To return this computer to a fresh-user state, remove the local Handler
+installation with the matching uninstaller:
+
+- macOS: double-click `Uninstall NiB.command`
+- Windows: double-click `Uninstall NiB.cmd`
+- Linux: run `Uninstall NiB.sh`
+
+By default the uninstaller stops the Handler and removes the macOS app, launchd
+job, URL-scheme registration, local cache, `nib-settings.json`, and Handler log.
+It keeps `runs/`, `artifacts/`, and your data folder for inspection. Add
+`--dry-run` to preview the paths, or `--purge` to remove generated runs,
+artifacts, resources, logs, and downloaded Handler binaries as well. `--purge`
+never removes the external data folder.
+
 The root `config.yaml` holds host settings only: ports, paths, trusted Hub
 origins and the Atlas revision. It never selects a dataset or container. The
 Hub chooses the dataset from the packaged `runtime.yaml` manifests.
