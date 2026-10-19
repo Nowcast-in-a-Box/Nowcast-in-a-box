@@ -103,7 +103,7 @@ function showTab(name) {
   for (const section of $$("main > section")) {
     section.hidden = section.id !== `tab-${name}`;
   }
-  if (name === "results") { renderKindChips(); refreshResultsSelectors(); }
+  if (name === "results") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
 }
 
 $$("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -972,6 +972,22 @@ async function refreshResultsSelectors() {
   if (select.value) await onConfigPicked();
 }
 
+// What a run is called on screen. The platform's own name is an event id glued to
+// an ISO stamp -- 20260701@2026-07-01T00:00:00Z -- which is exact and unreadable.
+// Who was verified, against what, and from when: the three things that tell two
+// runs apart. The id stays on the tooltip for when they are not enough.
+function configLabel(c) {
+  const who = c.display_name || (c.member_names || []).join(" + ") || "no member";
+  const against = c.ground_truth || "";
+  const raw = String(c.name || "");
+  const when = raw.includes("@") ? raw.split("@").pop() : "";
+  const stamp = /^\d{4}-\d{2}-\d{2}T/.test(when)
+    ? when.slice(0, 16).replace("T", " ") + " UTC"
+    : "";
+  if (c.display_name) { return c.display_name; }   // the platform named it
+  return [who, against, stamp].filter(Boolean).join(" · ");
+}
+
 async function loadConfigsIntoSelect() {
   const select = $("#q-config");
   const previous = select.value;
@@ -981,11 +997,11 @@ async function loadConfigsIntoSelect() {
   }
   mount(select, configs.map(c => h("option", {
     value: c.group_id,
-    // The id, not the name: a dropdown is a list to pick from, and a sentence
-    // about why the config exists is not something to pick by. The name is on
-    // the tooltip and in the detail panel.
-    text: c.group_id,
-    title: `${c.group_id} — ${c.name}`,
+    // The name first: a run id is a timestamp and a hash, and nobody picks by
+    // one. The id stays on the tooltip, which is where to look when the name
+    // is not enough to tell two runs apart.
+      text: configLabel(c),
+      title: `${c.name || c.group_id}` + (c.n_metrics ? ` — ${c.n_metrics} metrics, ${c.n_members} member(s)` : ""),
   })));
   if (previous && configs.some(c => c.group_id === previous)) select.value = previous;
 }
@@ -1101,12 +1117,23 @@ function openInitPanel() {
 
 function closeInitPanel() { $("#init-panel").hidden = true; }
 
+// How long the config actually spans. "All" means the window covers it, not
+// that no window was chosen -- and initDays() answers with a number either way.
+function coversEverything(days) {
+  const span = state.initSpan;
+  if (!span || days === null) { return false; }
+  const full = (Date.parse(span[1]) - Date.parse(span[0])) / 86400000;
+  return days >= full - 0.5;
+}
+
 function renderInitQuick() {
   const days = initDays();
   const near = (one, other) => one !== null && other !== null && Math.abs(one - other) < 0.2;
   mount($("#q-init-quick"), INIT_PICKS.map(([count, label]) => h("button", {
     class: "chip", type: "button", text: label,
-    "aria-pressed": String(count !== null && near(days, count)),
+    // All is the whole span, and its count is null -- so the old test excluded it
+    // from ever looking pressed.
+    "aria-pressed": String(count === null ? coversEverything(days) : near(days, count)),
     onclick: () => setInitDays(count),
   })));
 }
@@ -1449,7 +1476,10 @@ for (const id of ["#q-init-from", "#q-init-to"]) {
 }
 $("#btn-init-range").addEventListener("click", openInitPanel);
 $("#btn-init-ok").addEventListener("click", applyInit);
-$("#q-config").addEventListener("change", onConfigPicked);
+$("#q-config").addEventListener("change", () => {
+  setTimeout(syncMethodChips, 60);   // the metrics change with the config
+  onConfigPicked();
+});
 $("#q-method").addEventListener("change", onMethodPicked);
 $("#q-axis").addEventListener("change", () => {
   if (state.lastQuery) runQuery(); else renderKindChips();
@@ -1557,6 +1587,47 @@ function renderMetricGroups() {
     h("button", { class: "act quiet", text: `+ ${f.label}`,
       onclick: () => { groups.push(defaultGroup(f.family)); renderMetricGroups(); } })));
 }
+
+// Every metric as a button, one row per family. The select underneath stays and
+// keeps doing the work: a click sets its value and fires change, so nothing
+// downstream has to know that what is being clicked is no longer the select.
+const FAMILY_ROWS = ["continuous", "yes_or_no", "spatial", "moments"];
+
+function syncMethodChips() {
+  const select = $("#q-method");
+  if (!select) { return; }
+  if (!select.dataset.watched) {
+    select.dataset.watched = "1";
+    new MutationObserver(() => syncMethodChips()).observe(select, { childList: true });
+  }
+  let host = $("#q-methods");
+  if (!host) {
+    const field = select.closest(".field") || select;
+    host = h("div", { id: "q-methods" });
+    // Outside the row, not inside it: Config and Metric share one flex row,
+    // and a panel of buttons dropped between them is squeezed onto one line.
+    const outside = field.closest(".row") || field;
+    outside.parentNode.insertBefore(host, outside.nextSibling);
+    field.style.display = "none";
+  }
+  const available = ((state.selected || {}).metrics_available) || [];
+  let rows = FAMILY_ROWS
+    .map(family => ({ family, items: available.filter(m => m.family === family) }))
+    .filter(row => row.items.length);
+  if (!rows.length && select.options.length) {
+    rows = [{ family: "metrics", items: Array.from(select.options).map(o => ({ method: o.value, label: o.textContent })) }];
+  }
+  const on = "background:#e7eefb;color:#1f5fbf;font-weight:600;border-color:#b9cdf0";
+  mount(host, rows.map(row => h("div", { class: "field", style: "margin-bottom:9px" },
+    h("label", { text: row.family.replace(/_/g, " ") }),
+    h("div", { class: "chips" }, row.items.map(m => h("button", {
+      class: "chip", type: "button", text: m.method, title: m.label || m.method,
+      style: m.method === select.value ? on : "",
+      onclick: () => { select.value = m.method;
+        select.dispatchEvent(new Event("change")); syncMethodChips(); },
+    }))))));
+}
+
 
 async function boot() {
   await Promise.all([loadConfigs(), loadCatalog(), loadMetrics()]);

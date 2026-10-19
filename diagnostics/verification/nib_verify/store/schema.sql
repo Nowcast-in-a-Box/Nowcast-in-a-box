@@ -146,3 +146,15 @@ CREATE TABLE IF NOT EXISTS run_record (
 
 -- `rowid` cannot appear in an index; the query uses it only to break a tie.
 CREATE INDEX IF NOT EXISTS ix_run_record_when ON run_record(group_id, started_at DESC);
+
+-- Aggregates read every row of a range, and over a year a range is nearly the
+-- whole table, so there is nothing to seek past. A covering index is the one
+-- thing that helps: it carries the counted columns, so the scan never touches
+-- the table. Measured over a year of hourly runs: yes/no 2509 -> 1207 ms,
+-- spatial 14963 -> 2360 ms. It costs about a third of the database in size.
+CREATE INDEX IF NOT EXISTS ix_yon_cover ON q_yes_or_no
+    (group_id, member, lead_minutes, init_time, H, F, M, C);
+CREATE INDEX IF NOT EXISTS ix_spa_cover ON q_spatial
+    (group_id, member, lead_minutes, level, half_window, init_time, pob, pfo, fbs);
+CREATE INDEX IF NOT EXISTS ix_con_cover ON q_continuous
+    (group_id, member, lead_minutes, init_time, T, E, A, S);
