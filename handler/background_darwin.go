@@ -122,7 +122,7 @@ func startBackground(cfg Config) error {
 	// This file is outside ~/Library/LaunchAgents: it is loaded only on demand,
 	// never automatically at login. launchd owns the process, not the terminal.
 	if _, err := launchctl("bootstrap", "gui/"+strconv.Itoa(os.Getuid()), plist); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", errBackgroundUnavailable, err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
