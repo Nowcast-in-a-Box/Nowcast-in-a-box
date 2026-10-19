@@ -25,22 +25,6 @@ body {
   font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
 }
 
-header {
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  padding: 14px 22px;
-  display: flex;
-  align-items: baseline;
-  gap: 22px;
-  flex-wrap: wrap;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-header h1 { font-size: 16px; margin: 0; font-weight: 650; }
-header .sub { color: var(--muted); font-size: 12px; }
-
 nav { display: flex; gap: 4px; margin-left: auto; }
 
 nav button {

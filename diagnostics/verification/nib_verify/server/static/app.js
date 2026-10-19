@@ -36,7 +36,7 @@ function h(tag, props, ...kids) {
   return node;
 }
 
-function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+function clear(node) { if (!node) { return; } while (node.firstChild) node.removeChild(node.firstChild); }
 
 /// Replace a node's children.
 ///
@@ -44,6 +44,7 @@ function clear(node) { while (node.firstChild) node.removeChild(node.firstChild)
 /// to write a list, and without it the array is stringified into one text node —
 /// which produces an empty dropdown rather than an error.
 function mount(node, ...kids) {
+    if (!node) { return; }   // a panel that no longer exists
   clear(node);
   const flat = kids.flat(4).filter(k => k !== null && k !== undefined && k !== false);
   node.append(...flat.map(k => k instanceof Node ? k : document.createTextNode(String(k))));
@@ -115,12 +116,15 @@ async function loadConfigs() {
   try {
     const data = await api("/api/configs");
     state.configs = data.configs;
-    $("#configs-source").textContent = `${data.configs.length} config(s) in the config directory`;
-    mount(target, renderConfigTable(data.configs, data.broken));
+    if ($("#configs-source")) {
+      $("#configs-source").textContent = `${data.configs.length} config(s) in the config directory`;
+    }
+    if (target) { mount(target, renderConfigTable(data.configs, data.broken)); }
     // The results tab offers the same configs, so it has to be told they moved.
     await loadConfigsIntoSelect();
   } catch (error) {
-    mount(target, notice("bad", `Could not read the configs: ${error.message}`));
+    if (target) { mount(target, notice("bad", `Could not read the configs: ${error.message}`)); }
+    else { console.warn("Could not read the configs:", error); }
   }
 }
 
@@ -513,6 +517,7 @@ async function removeConfig(groupId) {
 // New config
 // ==================================================================
 async function loadCatalog() {
+    if (!$("#truth-options")) { return; }   // wizard gone
   try {
     state.catalog = await api("/api/catalog");
   } catch (error) {
@@ -1425,19 +1430,19 @@ function renderKindChips() {
 // ==================================================================
 // wiring
 // ==================================================================
-$("#btn-reload-configs").addEventListener("click", loadConfigs);
-$("#btn-add-member").addEventListener("click", () => {
+if ($("#btn-reload-configs")) $("#btn-reload-configs").addEventListener("click", loadConfigs);
+if ($("#btn-add-member")) $("#btn-add-member").addEventListener("click", () => {
   const id = $("#member-pick").value;
   if (!id) return;
   // Picking one is the whole action: the leads are already known from its runs.
   state.memberRows.push({ name: id, leads: leadsFor(id) });
   renderMembers();
 });
-$("#btn-save").addEventListener("click", saveConfig);
+if ($("#btn-save")) $("#btn-save").addEventListener("click", saveConfig);
 // Choosing the ground truth is what fills the ruler in, so it is also what has to
 // clear it again when the choice changes to a package that declares less.
-$("#c-truth").addEventListener("input", applyGroundTruth);
-$("#c-truth").addEventListener("change", applyGroundTruth);
+if ($("#c-truth")) $("#c-truth").addEventListener("input", applyGroundTruth);
+if ($("#c-truth")) $("#c-truth").addEventListener("change", applyGroundTruth);
 $("#btn-query").addEventListener("click", runQuery);
 for (const id of ["#q-init-from", "#q-init-to"]) {
   $(id).addEventListener("change", () => { sayInit(false); renderInitQuick(); });
@@ -1555,9 +1560,9 @@ function renderMetricGroups() {
 
 async function boot() {
   await Promise.all([loadConfigs(), loadCatalog(), loadMetrics()]);
-  renderMembers();
+  // renderMembers is the roster editor of the removed New config panel.
   renderMetricGroups();
-  showTab("configs");
+  showTab("results");
 }
 
 boot();
