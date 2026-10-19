@@ -1,0 +1,9 @@
+.git
+.pi
+artifacts
+runs
+bin
+**/.venv
+**/__pycache__
+**/*.onnx
+**/*.h5

@@ -29,6 +29,6 @@ include = ["nib_verify*"]
 nib_verify = ["store/*.sql", "server/static/*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["../../tests/verification"]
 addopts = "-q --strict-markers"
 filterwarnings = ["error::RuntimeWarning"]

@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"fmt"
@@ -6,7 +6,8 @@ import (
 	"strings"
 )
 
-func requireLoopbackHost(host string) error {
+// RequireLoopbackHost reports an error when host is not localhost.
+func RequireLoopbackHost(host string) error {
 	if host == "localhost" {
 		return nil
 	}
@@ -40,7 +41,8 @@ func requireLoopbackHost(host string) error {
 	return nil
 }
 
-func isLoopbackRequestHost(hostport string) bool {
+// IsLoopbackRequestHost reports whether an HTTP Host header is loopback.
+func IsLoopbackRequestHost(hostport string) bool {
 	host, _, err := net.SplitHostPort(hostport)
 	if err != nil {
 		host = hostport

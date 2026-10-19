@@ -105,7 +105,6 @@ still there, unaggregated.
 
 | Path | What lives there |
 |---|---|
-| `spec/interfaces-we-consume.md` | **the four interfaces we consume** — `list_groups` / `get_group` / `read_truth` / `read_forecast` |
 | `spec/field-access.md` | the contract we build against, and its five guarantees |
 | `spec/field-access-http.md` | the wire binding, and the simulated data interface |
 | `spec/verification-config.md` | the config format and its mutability rules |
@@ -121,7 +120,7 @@ still there, unaggregated.
 | `nib_verify/demo.py` | the whole chain, in one command, for showing people |
 | `nib_verify/server/` | the web service, and the review page it serves |
 | `nib_verify/cli.py` | the command line |
-| `tests/` | 694 tests, all synthetic |
+| `tests/` | moved to repository `tests/verification` |
 
 ---
 
@@ -377,9 +376,9 @@ so three things are promised:
 ## Tests
 
 ```bash
-python -m pytest -q                        # everything
-python -m pytest tests/test_done_when.py   # just the acceptance conditions
-python -m pytest -q -k "not cli"           # skip the process-level tests
+python -m pytest -q                                          # everything
+python -m pytest ../../tests/verification/test_done_when.py  # acceptance conditions
+python -m pytest -q -k "not cli"                             # skip process-level tests
 ```
 
 | File | Covers |

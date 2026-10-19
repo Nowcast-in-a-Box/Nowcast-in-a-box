@@ -1,0 +1,14 @@
+# Runtime data and generated output are prepared separately.
+data/
+output/
+.venv/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+.env
+.env.*

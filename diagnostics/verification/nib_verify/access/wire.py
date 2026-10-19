@@ -168,27 +168,33 @@ def encode_field(field: Field, *, encoding: str = DEFAULT_ENCODING) -> dict:
     mask, and rewriting it here would make this module the authority on what
     "missing" means.
     """
+    if field.coords.crs != "EPSG:4326":
+        raise WireError("field-access HTTP v1 only supports geographic coordinates")
     mask = field.mask
     payload = {
         "name": field.name,
         "variable": field.variable,
         "unit": field.unit,
         "valid_time": time_to_wire(field.valid_time),
-        "lon": encode_array(np.asarray(field.coords.lon, dtype=float), encoding=encoding),
-        "lat": encode_array(np.asarray(field.coords.lat, dtype=float), encoding=encoding),
+        "lon": encode_array(
+            np.asarray(field.coords.lon, dtype=float), encoding=encoding
+        ),
+        "lat": encode_array(
+            np.asarray(field.coords.lat, dtype=float), encoding=encoding
+        ),
         "values": encode_array(field.data, encoding=encoding),
     }
     if mask is not None:
-        payload["mask"] = encode_array(np.asarray(mask, dtype=np.uint8), encoding=encoding)
+        payload["mask"] = encode_array(
+            np.asarray(mask, dtype=np.uint8), encoding=encoding
+        )
         payload["missing"] = int(np.count_nonzero(mask))
     else:
         payload["missing"] = 0
     return payload
 
 
-def decode_field(
-    obj: Any, *, on_warning: Callable[[str], None] | None = None
-) -> Field:
+def decode_field(obj: Any, *, on_warning: Callable[[str], None] | None = None) -> Field:
     """The inverse of :func:`encode_field`.
 
     Lenient in exactly one place. If the values carry NaN that the payload did

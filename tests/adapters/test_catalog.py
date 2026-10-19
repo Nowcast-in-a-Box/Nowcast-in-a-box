@@ -44,8 +44,13 @@ class CatalogTests(unittest.TestCase):
             requirements = (ADAPTERS / item["requirements"]).read_text()
             self.assertNotIn(">=", requirements)
             if item["id"] == "cma_radar":
-                self.assertNotIn("satpy", requirements)
-                self.assertEqual(item["models"], [])
+                self.assertEqual(
+                    [model["id"] for model in item["models"]], ["nowcastnet"]
+                )
+                model = item["models"][0]
+                paired = _load(CONTRACTS / "models" / "cma_radar" / "nowcastnet.json")
+                self.assertEqual(model["weights"], paired["weights"])
+                self.assertEqual(paired["demo"]["resolution_m"], 3000)
             elif item["id"] == "sevir":
                 self.assertIn("h5py==", requirements)
                 self.assertNotIn("satpy", requirements)

@@ -5,6 +5,8 @@
 .codegraph/
 .opencode/
 .claude/
+.pi/
+.vscode/
 
 __pycache__/
 *.py[cod]
@@ -20,18 +22,37 @@ handler/nib-handler
 handler/nib-handler.exe
 handler/dist/
 
+bin/nib-handler
+bin/nib-handler.exe
+bin/**/nib-handler-*
+
 # Downloaded weights and docker files. Keep the directory.
 artifacts/*
 !artifacts/.gitkeep
 
-# Weights and observations never belong in git. See docs/weights.md.
+# Diagnostics run outputs. Keep the directory.
+runs/*
+!runs/.gitkeep
+
+# Weights never belong in git. Extension list, not a blanket binary rule.
+# *.bin is intentionally omitted: CMA radar observations use that suffix.
 *.onnx
+*.onnx.data
 *.ckpt
 *.pt
 *.pth
+*.pb
+*.tflite
+*.ort
+*.msgpack
+*.gguf
 *.h5
 *.hdf5
 *.safetensors
+
+# Local observation samples. Not demo fixtures.
+/data/
+testdata/
 
 # Design drafts stay on disk. Git keeps markdown.
 *.pdf

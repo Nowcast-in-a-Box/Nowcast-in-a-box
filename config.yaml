@@ -6,7 +6,7 @@ handler:
   host: 127.0.0.1
   port: 8765
 
-# Reserved loopback address for a later review page. This process does not start it.
+# Loopback listener for registered diagnostic result pages.
 review:
   host: 127.0.0.1
   port: 8766
@@ -14,13 +14,35 @@ review:
 paths:
   # Downloaded weights and docker files. Relative to this file.
   artifacts: artifacts
-  # One directory per diagnostics invocation. Relative to this file.
+  # One unique directory per inference run; diagnostic attempts stay below it.
   runs: runs
   # Required before a job starts. Set here or with NIB_DATA_ROOT.
   # The handler never invents this path; omit it until the machine has one.
   # data_root:
 
-# Metrics and visualization image. The HTTP server does not start it.
-# Build: docker build -t nib-diagnostics:dev diagnostics/
+# Metrics and visualization image, started by the handler with controlled Compose.
+# Build from repository root: docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .
 diagnostics:
   image: nib-diagnostics:dev
+
+runtime:
+  # Use cma_radar with data_file: . when data_root points at cma-radar/.
+  dataset: sevir
+  # Optional explicit local Docker context; omitted uses Docker's current context.
+  # docker_context: desktop-linux
+  data_file: SEVIR/processed/sevir_vil.h5
+  catalog_file: source/CATALOG.csv
+  ingestion_image: nib-ingestion:dev
+  model_images:
+    nowcastnet: nib-nowcastnet:dev
+    cma_radar/nowcastnet: nib-nowcastnet:cma-demo
+    exprecast: nib-exprecast:dev
+    wadepre: nib-wadepre:dev
+  # Exact trusted Hub origins, including scheme and port; never use '*'.
+  # These are the documented local Hub entry points. For a remote deployment,
+  # the maintainer adds its actual origin here before distributing the config.
+  allowed_origins:
+    - http://127.0.0.1:8000
+    - http://127.0.0.1:5173
+  # Shared declarations including the CMA demo; matches the atlas submodule.
+  atlas_revision: "1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8"
