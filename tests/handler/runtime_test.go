@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler"
@@ -168,6 +169,35 @@ func TestRunsFilterByStableOrderID(t *testing.T) {
 	}
 	if page := request("/v1/runs?order_id=missing"); page["total"] != float64(0) {
 		t.Fatalf("empty filter: %#v", page)
+	}
+}
+
+func TestJobLogTruncatesAtLineBoundary(t *testing.T) {
+	cfg := handler.DefaultConfig()
+	cfg.Paths.Runs = t.TempDir()
+	cfg.Runtime.Token = "token"
+	directory := filepath.Join(cfg.Paths.Runs, "run-log", "logs")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := strings.Repeat("older output ", 800) + "\nTAIL\n"
+	if err := os.WriteFile(filepath.Join(directory, "ingestion.log"), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := handler.NewServer(cfg)
+	req := httptest.NewRequest("GET", "http://127.0.0.1/v1/jobs/run-log/log", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, req)
+	if response.Code != 200 {
+		t.Fatalf("%d %s", response.Code, response.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(body["tail"], "[earlier output truncated]\nTAIL\n") {
+		t.Fatalf("unexpected tail: %q", body["tail"])
 	}
 }
 

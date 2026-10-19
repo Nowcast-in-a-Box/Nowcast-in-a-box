@@ -686,12 +686,16 @@ func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
 		}
 		raw, readErr := os.ReadFile(logPath)
 		if readErr == nil {
-			tail.WriteString(entry.Name() + "\n" + string(raw))
+			tail.WriteString(entry.Name() + "\n" + string(raw) + "\n")
 		}
 	}
 	text := tail.String()
 	if len(text) > 8000 {
-		text = text[len(text)-8000:]
+		start := len(text) - 8000
+		if newline := strings.IndexByte(text[start:], '\n'); newline >= 0 {
+			start += newline + 1
+		}
+		text = "[earlier output truncated]\n" + text[start:]
 	}
 	writeJSON(w, 200, map[string]string{"path": filepath.Join(filepath.Dir(s.Config.Source), "logs", "handler.log"), "tail": text})
 }
