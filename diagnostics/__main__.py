@@ -11,6 +11,71 @@ import uuid
 from utils.stored_fields import StoredFields, save_manifest
 
 
+REPORT_STYLE = r"""
+:root {
+  --bg: #edf1f2;
+  --paper: #ffffff;
+  --ink: #13282d;
+  --muted: #53676d;
+  --line: #d6e1e5;
+  --accent: #164b58;
+  --accent-strong: #005a6c;
+  --ok-bg: #e8f5ef;
+  --ok-ink: #0b6148;
+  --warn-bg: #fff3df;
+  --warn-ink: #815200;
+  --bad-bg: #ffe9e1;
+  --bad-ink: #8f2f1b;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 1320px; margin: 0 auto; padding: clamp(22px, 4vw, 56px); }
+h1 { margin: 0; font-size: clamp(2rem, 3.8vw, 3.2rem); line-height: 1.05; letter-spacing: -0.035em; }
+h2 { margin: 0; font-size: 1.35rem; line-height: 1.25; letter-spacing: -0.015em; }
+h3 { margin: 0; font-size: 1.05rem; line-height: 1.3; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; }
+.result-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.result-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 12px; margin: 14px 0 0; color: var(--muted); font-size: 0.86rem; }
+.result-meta code { color: var(--ink); }
+.status { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.status-succeeded { color: var(--ok-ink); background: var(--ok-bg); }
+.status-partial { color: var(--warn-ink); background: var(--warn-bg); }
+.status-failed { color: var(--bad-ink); background: var(--bad-bg); }
+.notice { max-width: 82ch; margin: 18px 0 0; color: var(--muted); font-size: 0.9rem; }
+.views { display: block; margin: 24px 0 0; padding: 0; border: 0; }
+.views legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.views > input { position: absolute; opacity: 0; pointer-events: none; }
+.views > label { display: inline-block; margin-right: 4px; padding: 9px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--muted); cursor: pointer; font-size: 0.86rem; font-weight: 650; }
+.views > input:focus-visible + label { outline: 3px solid var(--accent-strong); outline-offset: 2px; }
+.views > input:checked + label { border-color: var(--accent); background: var(--accent); color: #fff; }
+.panel { display: none; margin-top: 26px; padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); box-shadow: 0 2px 4px rgb(19 40 45 / 4%); }
+#view-visualization:checked ~ .visualization, #view-verification:checked ~ .verification { display: block; }
+.panel > h2 { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.model { margin-top: 22px; }
+.model:first-of-type { margin-top: 18px; }
+.artifacts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 14px; }
+.artifact { margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #f7fafb; }
+.artifact img { display: block; width: 100%; height: auto; }
+.artifact figcaption { padding: 9px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; }
+.panel p { max-width: 78ch; }
+[role=alert] { padding: 12px 14px; border-radius: 8px; background: var(--bad-bg); color: var(--bad-ink); }
+@media (max-width: 640px) {
+  main { padding: 18px 14px 28px; }
+  .result-head { align-items: flex-start; flex-direction: column; }
+  .views > label { padding-inline: 14px; }
+  .panel { padding: 18px; }
+}
+"""
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
@@ -137,7 +202,7 @@ def write_report(directory, results, *, operation_id=None):
             continue
         model = result.get("model_id")
         title = model_names.get(model, model) if model else "Metrics"
-        content = []
+        artifacts = []
         if result.get("entry"):
             source = directory / result["entry"].rsplit("/", 1)[0]
             names = [
@@ -146,27 +211,38 @@ def write_report(directory, results, *, operation_id=None):
                 if (source / name).is_file()
             ]
             names.extend(image.name for image in sorted(source.glob("*.svg")))
+            captions = {
+                "comparison.png": "Latest input, observed field and forecast",
+                "map.png": "Forecast map",
+                "animation.gif": "Forecast animation",
+            }
             for name in names:
                 target = f"{index}-{name}"
                 os.link(source / name, out / target)
-                content.append(
-                    f'<img src="{escape(target)}" alt="{escape(str(title))}: {escape(Path(name).stem)}">'
+                caption = captions.get(name, Path(name).stem.replace("_", " "))
+                artifacts.append(
+                    '<figure class="artifact">'
+                    f'<img src="{escape(target)}" alt="{escape(str(title))}: {escape(caption)}">'
+                    f'<figcaption>{escape(caption)}</figcaption></figure>'
                 )
         status = result.get("status", "succeeded")
+        alerts = []
         if status != "succeeded":
             reason = result.get(
                 "error",
                 "Some requested fields were unavailable. Inspect this attempt summary and log.",
             )
-            content.append(
+            alerts.append(
                 f'<p role="alert">{escape(status)}: {escape(str(reason))}</p>'
             )
-        if not content:
-            content.append(
+        if not artifacts and not alerts:
+            alerts.append(
                 "<p>No display artifact was produced. Inspect the diagnostic attempt summary.</p>"
             )
+        artifact_html = f'<div class="artifacts">{"".join(artifacts)}</div>' if artifacts else ""
         sections[kind].append(
-            f'<section><h3>{escape(str(title))}</h3>{"".join(content)}</section>'
+            f'<section class="model"><h3>{escape(str(title))}</h3>'
+            f'{"".join(alerts)}{artifact_html}</section>'
         )
     panels = []
     for kind, label in (
@@ -185,23 +261,23 @@ def write_report(directory, results, *, operation_id=None):
         if any(result.get("status", "succeeded") != "succeeded" for result in results)
         else "succeeded"
     )
+    status_class = f"status-{status}"
+    notice_html = f'<p class="notice">{escape(str(notice))}</p>' if notice else ""
     (out / "index.html").write_text(
-        '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        "<title>NiB result</title><style>"
-        "body{margin:0;font-family:system-ui,sans-serif;background:#edf1f2;color:#13282d}"
-        "main{max-width:1480px;margin:auto;padding:24px}img{width:100%;height:auto;background:#fff}"
-        ".views{border:0;margin:20px 0;padding:0}.views legend{margin-bottom:12px}"
-        ".views>input{position:absolute;opacity:0}.views>label{display:inline-block;padding:12px 20px;background:white;cursor:pointer}"
-        ".views>input:focus-visible+label{outline:3px solid #005a6c;outline-offset:2px}"
-        ".views>input:checked+label{background:#164b58;color:white}.panel{display:none;padding-top:16px}"
-        "#view-visualization:checked~.visualization,#view-verification:checked~.verification{display:block}"
-        "[role=alert]{padding:12px;background:#ffe6da}section{margin-bottom:24px}"
-        "</style><main><h1>Run result</h1>"
-        f'<p>Run {escape(str(stored.get("id", directory.name)))} · {escape(str(sample.get("init_time", "")))} · {status}</p>'
-        f'<p>{escape(str(notice))}</p><fieldset class="views"><legend>Result views</legend>'
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<title>NiB result</title><style>{REPORT_STYLE}</style></head><body><main>'
+        '<header class="result-head"><div><h1>Run result</h1>'
+        '<p class="result-meta">'
+        f'<code>{escape(str(stored.get("id", directory.name)))}</code>'
+        f'<span aria-hidden="true">·</span><time>{escape(str(sample.get("init_time", "")))}</time>'
+        f'<span class="status {status_class}">{escape(status)}</span>'
+        '</p></div></header>'
+        f'{notice_html}'
+        '<fieldset class="views"><legend>Result views</legend>'
         '<input id="view-visualization" type="radio" name="view" checked><label id="visualization-label" for="view-visualization">Visualization</label>'
         '<input id="view-verification" type="radio" name="view"><label id="verification-label" for="view-verification">Metrics</label>'
-        f'{"".join(panels)}</fieldset></main></html>'
+        f'{"".join(panels)}</fieldset></main></body></html>'
     )
     return {
         "kind": "report",
