@@ -108,10 +108,17 @@ if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 && ( "$action" == start || "$action"
 fi
 
 if [[ "$action" == start ]]; then
-	if ! "$bin" start -config "$config" "$@"; then
+	# launchctl bootstrap returns 5 on this host; keep that one failure
+	# interactive. Other binary failures stay visible to the caller.
+	if "$bin" start -config "$config" "$@"; then
+		exit 0
+	else
+		status=$?
+	fi
+	if [[ "$status" -eq 5 ]]; then
 		echo "background startup failed; keeping the Handler in this Terminal window" >&2
 		exec "$bin" serve -config "$config" "$@"
 	fi
-	exit 0
+	exit "$status"
 fi
 exec "$bin" "$action" -config "$config" "$@"

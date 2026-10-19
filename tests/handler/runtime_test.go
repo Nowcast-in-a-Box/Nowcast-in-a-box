@@ -110,6 +110,67 @@ func TestOriginAndLocalToken(t *testing.T) {
 	}
 }
 
+func TestRunsFilterByStableOrderID(t *testing.T) {
+	cfg := handler.DefaultConfig()
+	cfg.Paths.Runs = t.TempDir()
+	cfg.Runtime.Token = "token"
+	for _, run := range []struct{ id, order string }{
+		{"run-a", "order-a"},
+		{"run-b", "order-a"},
+		{"run-c", "order-b"},
+	} {
+		directory := filepath.Join(cfg.Paths.Runs, run.id)
+		if err := os.Mkdir(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		manifest := map[string]any{"schema": "nib.run.v1", "id": run.id, "diagnostics": []any{}}
+		raw, _ := json.Marshal(manifest)
+		if err := os.WriteFile(filepath.Join(directory, "manifest.json"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		job := map[string]any{
+			"id": run.id, "status": "succeeded", "stage": "complete",
+			"request": map[string]any{"order_id": run.order},
+		}
+		raw, _ = json.Marshal(job)
+		if err := os.WriteFile(filepath.Join(directory, "job.json"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := handler.NewServer(cfg)
+	request := func(path string) map[string]any {
+		req := httptest.NewRequest("GET", "http://127.0.0.1"+path, nil)
+		req.Header.Set("Authorization", "Bearer token")
+		response := httptest.NewRecorder()
+		server.Routes().ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("%s: %d %s", path, response.Code, response.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	page := request("/v1/runs?order_id=order-a")
+	if page["total"] != float64(2) || len(page["runs"].([]any)) != 2 {
+		t.Fatalf("filtered page: %#v", page)
+	}
+	for _, value := range page["runs"].([]any) {
+		run := value.(map[string]any)
+		if run["job"].(map[string]any)["request"].(map[string]any)["order_id"] != "order-a" {
+			t.Fatalf("unexpected order in %#v", run)
+		}
+	}
+	if page := request("/v1/runs?order_id=order-b&offset=1"); page["total"] != float64(1) || len(page["runs"].([]any)) != 0 {
+		t.Fatalf("filtered pagination: %#v", page)
+	}
+	if page := request("/v1/runs?order_id=missing"); page["total"] != float64(0) {
+		t.Fatalf("empty filter: %#v", page)
+	}
+}
+
 func TestRegisteredResultsAndRestartedJob(t *testing.T) {
 	cfg := handler.DefaultConfig()
 	cfg.Paths.Runs = t.TempDir()

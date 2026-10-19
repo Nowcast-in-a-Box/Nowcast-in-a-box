@@ -91,6 +91,7 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, err)
 		return
 	}
+	orderID := r.URL.Query().Get("order_id")
 	entries, err := os.ReadDir(s.Config.Paths.Runs)
 	if os.IsNotExist(err) {
 		writeJSON(w, 200, map[string]any{"total": 0, "runs": []any{}})
@@ -109,9 +110,17 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
 	values := []map[string]any{}
 	for _, id := range ids {
-		if manifest, err := s.runManifest(id); err == nil {
-			values = append(values, manifest)
+		manifest, err := s.runManifest(id)
+		if err != nil {
+			continue
 		}
+		if orderID != "" {
+			job, ok := manifest["job"].(Job)
+			if !ok || job.Request.OrderID != orderID {
+				continue
+			}
+		}
+		values = append(values, manifest)
 	}
 	total := len(values)
 	if offset > total {
