@@ -103,4 +103,11 @@ if [[ "${NIB_SKIP_URI_REGISTRATION:-}" != 1 && ( "$action" == start || "$action"
 	"$lsregister" -f "$app"
 fi
 
+if [[ "$action" == start ]]; then
+	if ! "$bin" start -config "$config" "$@"; then
+		echo "background startup failed; keeping the Handler in this Terminal window" >&2
+		exec "$bin" serve -config "$config" "$@"
+	fi
+	exit 0
+fi
 exec "$bin" "$action" -config "$config" "$@"

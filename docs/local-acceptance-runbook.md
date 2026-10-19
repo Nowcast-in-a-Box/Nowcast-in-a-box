@@ -24,36 +24,32 @@ can be built or pulled before the run.
 
 ## 2. Start the Handler
 
-The binary already discovers the active `config.yaml` from the working or
-program directory, or from `NIB_CONFIG`; `-config` is only needed for a file
-with another name. The repository `config.yaml` is the SEVIR default (8765/8766).
-For the CMA demo, start with the example without a flag:
+Use the normal launcher, as a first-time user would. No terminal command,
+flag, or environment variable is required:
 
-```sh
-env NIB_CONFIG=tests/runtime/cma-demo.config.yaml .pi/local-e2e/nib-handler
-```
+- macOS: double-click `Start NiB.command` (or `bin/macos/start.command`).
+- Windows: double-click `Start NiB.cmd`.
+- Linux: run `Start NiB.sh`.
 
-The example uses 8765/8766 and allows the Hub dev server on 5173. Its
-`paths.resources: ../..` points at the repository tree that carries the data and
-model `runtime.yaml` manifests; `nib-diagnostics:automatic-flow` is the manifest
-image. It has no dataset or data-file setting: choose the CMA folder in Checkout,
-or set `NIB_DATA_ROOT` for a one-off run.
-
-Use the platform launcher instead when starting the installed bundle:
-
-- macOS: double-click `bin/macos/start.command`, or run it from Terminal.
-- Windows: in PowerShell, run `bin\windows\run.ps1`.
-- Linux: run `./bin/linux/run.sh`.
+The launcher starts the packaged binary with the repository `config.yaml`
+(8765/8766). That file contains host settings only: ports, paths, trusted Hub
+origins and the Atlas revision. It has no dataset or data-file setting, so the
+same launcher works for CMA, SEVIR, or a later data source. Choose the data
+folder in Checkout; it is saved in `nib-settings.json` next to `config.yaml`.
 
 The launcher reuses a compatible running instance. To stop it later:
 
 ```sh
-bin/macos/start.command stop          # macOS
-bin/linux/run.sh stop                 # Linux
-powershell -File bin\windows\run.ps1 stop   # Windows
+bin/macos/start.command stop                 # macOS
+bin/linux/run.sh stop                        # Linux
+powershell -File bin\windows\run.ps1 stop    # Windows
 ```
 
 Do not stop a Handler you did not start, especially one on ports 8765/8766.
+
+Contributor test harness only: the Hub browser E2E uses
+`.pi/automatic-flow/config.yaml` on 50154/50155 and `NIB_CONFIG` to keep test
+ports isolated. That file and `NIB_CONFIG` are never part of the user flow.
 
 ## 3. Start the Hub
 
@@ -72,8 +68,12 @@ cd backend
   --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:5173`. The Handler configuration must list this exact
-origin in `runtime.allowed_origins`.
+Open `http://127.0.0.1:5173`. The repository `config.yaml` already lists this
+origin in `runtime.allowed_origins`. For a built static Hub, serve `frontend/dist`
+at port 8000 instead; the dist defaults to the Handler at 8765, and the
+repository config already allows `http://127.0.0.1:8000`. A published Hub uses
+its own HTTPS origin, which the distributor must add to `runtime.allowed_origins`
+before distribution.
 
 ## 4. Walkthrough and expected outcomes
 

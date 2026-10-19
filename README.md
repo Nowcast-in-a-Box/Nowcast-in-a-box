@@ -23,9 +23,11 @@ Follow the step-by-step guidance down below:
    - If you encounter any problems, feel free to open an issue or contact contributors.
 3. Go to the Release page and download the latest version of NiB
    - [Releases](https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/releases)
-4. Start the handler
-   - Run the platform launcher once to register local application links. On macOS it starts a background Handler; Hub can then open or reuse it through `nib://`.
-   - Depending on your operating system, choose the right one.
+4. Start the handler from the downloaded folder. No terminal command or environment variable is needed.
+   - macOS: double-click `Start NiB.command`.
+   - Windows: double-click `Start NiB.cmd`.
+   - Linux: run `Start NiB.sh`.
+   - The first run registers the local `nib://` link. The Handler reads `config.yaml` next to the launcher; it does not need a dataset in that file. Hub then opens or reuses the Handler through `nib://`.
    - For more details, check [here](#Run the handler)
 5. Open the NiB Hub, enjoy!
 
@@ -35,11 +37,15 @@ Follow the step-by-step guidance down below:
 
 ### Windows
 
+Double-click `Start NiB.cmd` in the downloaded folder, or run:
+
 ```powershell
 bin/windows/run.ps1
 ```
 
 ### Linux
+
+Run `Start NiB.sh`, or:
 
 ```sh
 bin/linux/run.sh
@@ -47,11 +53,15 @@ bin/linux/run.sh
 
 ### macOS
 
-On macOS, double-click `bin/macos/start.command` in Finder, or run it from a terminal.
+Double-click `Start NiB.command` in Finder (or `bin/macos/start.command`), or run it from a terminal.
 It remains running after Terminal closes, without enabling login autostart.
-Use `start.command status`, `stop`, or `restart` for explicit control.
+Use `bin/macos/start.command status`, `stop`, or `restart` for explicit control.
 See [Handler lifecycle and connection](docs/handler-lifecycle.md) for configured
 ports, trusted Hub origins, logs and platform limitations.
+
+The root `config.yaml` holds host settings only: ports, paths, trusted Hub
+origins and the Atlas revision. It never selects a dataset or container. The
+Hub chooses the dataset from the packaged `runtime.yaml` manifests.
 
 
 

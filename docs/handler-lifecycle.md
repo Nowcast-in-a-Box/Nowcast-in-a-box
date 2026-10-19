@@ -6,7 +6,9 @@ the maintainer; the launchers do not build a missing binary for users.
 
 ## macOS: start once, keep running
 
-Double-click `bin/macos/start.command`, or run it from any working directory.
+Double-click `Start NiB.command` (or `bin/macos/start.command`), or run it from
+any working directory. If launchd cannot start the background job, the
+launcher keeps the Handler running in that Terminal window instead of exiting.
 The launcher registers `~/Applications/NiB Handler.app` for `nib://` URLs and
 starts an on-demand user launchd job. Closing Terminal or the Hub page does not
 stop it. It is **not** installed in `~/Library/LaunchAgents`, is not enabled at
