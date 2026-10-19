@@ -1,0 +1,18 @@
+schema: nib.resource.v1
+kind: diagnostics
+container:
+  image: nib-diagnostics:automatic-flow
+  build:
+    context: "."
+    dockerfile: diagnostics/Dockerfile
+  command: ["--config", "{{request}}"]
+  mounts:
+    - name: run
+      target: /run
+      write: true
+    - name: inputs
+      target: /run/inputs
+    - name: forecasts
+      target: /run/forecasts
+    - name: basemap
+      target: /basemap

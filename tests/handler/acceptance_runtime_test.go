@@ -110,7 +110,7 @@ func TestGenericAnimationAndCombinedVisualizationPackages(t *testing.T) {
 	for _, diagnostic := range []string{"animation", "both-visualizations"} {
 		t.Run(diagnostic, func(t *testing.T) {
 			raw, hash := selectionPackage(t, "S710140", []string{"nowcastnet", "wadepre"}, diagnostic)
-			request, err := handler.ParseRuntimePackage(raw, hash)
+			request, err := handler.ParseRuntimePackage(raw, hash, testResources(t))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -124,7 +124,7 @@ func TestGenericAnimationAndCombinedVisualizationPackages(t *testing.T) {
 func TestThreeModelPackageBindsEveryDiagnosticModel(t *testing.T) {
 	models := []string{"nowcastnet", "exprecast", "wadepre"}
 	raw, hash := selectionPackage(t, "S710140", models, "both")
-	request, err := handler.ParseRuntimePackage(raw, hash)
+	request, err := handler.ParseRuntimePackage(raw, hash, testResources(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,24 +178,15 @@ func waitJob(t *testing.T, server *handler.Server, id, want string) handler.Job 
 }
 
 func TestSameConfigurationRerunsInPlaceButKeepsOtherModels(t *testing.T) {
-	cfg := handler.DefaultConfig()
+	cfg := testConfig(t)
 	cfg.Paths.Runs = t.TempDir()
-	cfg.Paths.DataRoot = t.TempDir()
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Runtime.Token = "token"
 	cfg.Runtime.AtlasRevision = strings.Repeat("b", 40)
-	for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-		target := filepath.Join(cfg.Paths.DataRoot, name)
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(target, []byte("fixture"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSevirData(t, &cfg)
 	server := handler.NewServer(cfg)
 	server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
-	first := waitJob(t, server, submitSelection(t, server, "S710140", []string{"wadepre"}, "", "first").ID, "ready")
+	first := waitJob(t, server, submitSelection(t, server, "S710140", []string{"wadepre"}, "", "first").ID, "succeeded")
 	other := filepath.Join(cfg.Paths.Runs, first.ID, "forecasts", "nowcastnet", "fields.npz")
 	if err := os.MkdirAll(filepath.Dir(other), 0o755); err != nil {
 		t.Fatal(err)
@@ -203,7 +194,19 @@ func TestSameConfigurationRerunsInPlaceButKeepsOtherModels(t *testing.T) {
 	if err := os.WriteFile(other, []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	second := waitJob(t, server, submitSelection(t, server, "S710140", []string{"wadepre"}, "", "second").ID, "ready")
+	manifestPath := filepath.Join(cfg.Paths.Runs, first.ID, "manifest.json")
+	storedRaw, _ := os.ReadFile(manifestPath)
+	var stored map[string]any
+	if err := json.Unmarshal(storedRaw, &stored); err != nil {
+		t.Fatal(err)
+	}
+	stored["forecasts"] = map[string]any{"nowcastnet": map[string]any{"path": "forecasts/nowcastnet/fields.npz", "sha256": "kept"}}
+	stored["model_names"] = map[string]any{"nowcastnet": "Previously saved NowcastNet"}
+	storedRaw, _ = json.Marshal(stored)
+	if err := os.WriteFile(manifestPath, storedRaw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second := waitJob(t, server, submitSelection(t, server, "S710140", []string{"wadepre"}, "", "second").ID, "succeeded")
 	if second.ID != first.ID {
 		t.Fatalf("same configuration created %s after %s", second.ID, first.ID)
 	}
@@ -211,28 +214,32 @@ func TestSameConfigurationRerunsInPlaceButKeepsOtherModels(t *testing.T) {
 	if err != nil || string(raw) != "keep" {
 		t.Fatalf("other model forecast changed: %q %v", raw, err)
 	}
-	changed := waitJob(t, server, submitSelection(t, server, "S710140", []string{"nowcastnet"}, "", "changed").ID, "ready")
+	retainedRaw, _ := os.ReadFile(manifestPath)
+	var retained struct {
+		Forecasts map[string]struct {
+			SHA256 string `json:"sha256"`
+		}
+		ModelNames map[string]string `json:"model_names"`
+	}
+	if err := json.Unmarshal(retainedRaw, &retained); err != nil {
+		t.Fatal(err)
+	}
+	if retained.ModelNames["nowcastnet"] != "Previously saved NowcastNet" || retained.Forecasts["nowcastnet"].SHA256 != "kept" {
+		t.Fatal("extra model registration lost", string(retainedRaw))
+	}
+	changed := waitJob(t, server, submitSelection(t, server, "S710140", []string{"nowcastnet"}, "", "changed").ID, "succeeded")
 	if changed.ID == first.ID {
 		t.Fatal("a different model selection reused the run")
 	}
 }
 
 func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
-	cfg := handler.DefaultConfig()
+	cfg := testConfig(t)
 	cfg.Paths.Runs = t.TempDir()
-	cfg.Paths.DataRoot = t.TempDir()
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Runtime.Token = "token"
 	cfg.Runtime.AtlasRevision = strings.Repeat("b", 40)
-	for _, name := range []string{cfg.Runtime.DataFile, cfg.Runtime.CatalogFile} {
-		target := filepath.Join(cfg.Paths.DataRoot, name)
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(target, []byte("fixture"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSevirData(t, &cfg)
 	basemap := filepath.Join(cfg.Paths.Artifacts, "basemap", "wmo", "acquisition.json")
 	if err := os.MkdirAll(filepath.Dir(basemap), 0o755); err != nil {
 		t.Fatal(err)
@@ -243,10 +250,11 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	server := handler.NewServer(cfg)
 	server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
 	models := []string{"nowcastnet", "exprecast", "wadepre"}
-	first := waitJob(t, server, submitSelection(t, server, "S696651", models, "both", "all-models").ID, "ready")
-	second := waitJob(t, server, submitSelection(t, server, "S696652", models[:1], "", "other-event").ID, "ready")
-	postDiagnostics(t, server, first.ID, true)
-	postDiagnostics(t, server, second.ID, false)
+	first := waitJob(t, server, submitSelection(t, server, "S696651", models, "both", "all-models").ID, "succeeded")
+	second := waitJob(t, server, submitSelection(t, server, "S696652", models[:1], "", "other-event").ID, "succeeded")
+	if first.DiagnosticOperationID == "" || first.ReportEntry == "" || second.DiagnosticOperationID != "" {
+		t.Fatal("automatic diagnostics did not follow the frozen selection", first, second)
+	}
 	if first.ID == second.ID || first.Request.EventID == second.Request.EventID || first.Request.StartTime != second.Request.StartTime {
 		t.Fatalf("events were not kept apart: %+v %+v", first.Request, second.Request)
 	}
@@ -267,7 +275,8 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 		if err := yaml.Unmarshal(raw, &compose); err != nil {
 			t.Fatal(err)
 		}
-		if compose.Services["task"].Image != cfg.Runtime.ModelImages[model] {
+		modelResource, ok := server.Resources.Models["sevir"][model]
+		if !ok || compose.Services["task"].Image != modelResource.Container.Image {
 			t.Fatalf("%s image: %s", model, raw)
 		}
 	}
@@ -285,8 +294,7 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(cfg.Paths.Runs, second.ID, "compose-diagnostics.yaml")); !os.IsNotExist(err) {
 		t.Fatal("data and model job started diagnostics")
 	}
-	metrics := waitJob(t, server, submitSelection(t, server, "S696653", models[:1], "metrics", "metrics-only").ID, "ready")
-	postDiagnostics(t, server, metrics.ID, false)
+	metrics := waitJob(t, server, submitSelection(t, server, "S696653", models[:1], "metrics", "metrics-only").ID, "succeeded")
 	diagMatches, err := filepath.Glob(filepath.Join(cfg.Paths.Runs, metrics.ID, "logs", "diagnostics-*", "compose.yaml"))
 	if err != nil || len(diagMatches) != 1 {
 		t.Fatal(diagMatches, err)
@@ -298,8 +306,7 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	if strings.Contains(string(diag), "/basemap") {
 		t.Fatal("metrics-only job mounted a basemap")
 	}
-	maps := waitJob(t, server, submitSelection(t, server, "S696654", models[:1], "visualization", "maps-only").ID, "ready")
-	postDiagnostics(t, server, maps.ID, true)
+	maps := waitJob(t, server, submitSelection(t, server, "S696654", models[:1], "visualization", "maps-only").ID, "succeeded")
 	mapMatches, err := filepath.Glob(filepath.Join(cfg.Paths.Runs, maps.ID, "logs", "diagnostics-*", "compose.yaml"))
 	if err != nil || len(mapMatches) != 1 {
 		t.Fatal(mapMatches, err)
@@ -339,7 +346,7 @@ func postDiagnostics(t *testing.T, server *handler.Server, id string, visualizat
 }
 
 func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
-	cfg := handler.DefaultConfig()
+	cfg := testConfig(t)
 	cfg.Paths.Runs = t.TempDir()
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Runtime.Token = "token"
@@ -347,7 +354,7 @@ func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(run, "forecasts"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"schema":"nib.run.v1","id":"saved-run","forecasts":{"wadepre":{"path":"forecasts/wadepre.npz"}},"diagnostics":[]}`
+	manifest := `{"schema":"nib.run.v1","id":"saved-run","data":{"id":"sevir"},"forecasts":{"wadepre":{"path":"forecasts/wadepre.npz"}},"diagnostics":[]}`
 	if err := os.WriteFile(filepath.Join(run, "manifest.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -382,6 +389,12 @@ func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
+	for !server.ExecutionAvailableForTest() {
+		if time.Now().After(deadline) {
+			t.Fatal("diagnostic retry did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	for _, call := range runner.calls {
@@ -397,7 +410,7 @@ func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
 }
 
 func TestRestartKeepsInterruptedRun(t *testing.T) {
-	cfg := handler.DefaultConfig()
+	cfg := testConfig(t)
 	cfg.Paths.Runs = t.TempDir()
 	cfg.Runtime.Token = "token"
 	run := filepath.Join(cfg.Paths.Runs, "run-live")

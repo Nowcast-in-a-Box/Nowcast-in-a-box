@@ -84,34 +84,34 @@ func TestLoadConfigUnknownKeysIgnored(t *testing.T) {
 	}
 }
 
-func TestLoadRelativeDataRoot(t *testing.T) {
+func TestLoadResolvesResources(t *testing.T) {
 	t.Setenv("NIB_DATA_ROOT", "")
 	dir := t.TempDir()
-	path := writeConfig(t, dir, "paths:\n  data_root: data\n")
+	path := writeConfig(t, dir, "paths:\n  resources: resources\n")
 	cfg, err := handler.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := filepath.Abs(filepath.Join(dir, "data"))
+	want, err := filepath.Abs(filepath.Join(dir, "resources"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Paths.DataRoot != want {
-		t.Fatalf("data_root=%q want %q", cfg.Paths.DataRoot, want)
+	if cfg.Paths.Resources != want {
+		t.Fatalf("resources=%q want %q", cfg.Paths.Resources, want)
 	}
 }
 
-func TestLoadDataRootEnvOverridesYAML(t *testing.T) {
+func TestLoadDataRootEnvFallback(t *testing.T) {
 	dir := t.TempDir()
 	envRoot := filepath.Join(dir, "from-env")
 	t.Setenv("NIB_DATA_ROOT", envRoot)
-	path := writeConfig(t, dir, "paths:\n  data_root: from-yaml\n")
+	path := writeConfig(t, dir, "handler:\n  port: 9301\n")
 	cfg, err := handler.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Paths.DataRoot != envRoot {
-		t.Fatalf("data_root=%q want %q", cfg.Paths.DataRoot, envRoot)
+	if cfg.DataRootFallback != envRoot {
+		t.Fatalf("fallback=%q want %q", cfg.DataRootFallback, envRoot)
 	}
 }
 
@@ -156,6 +156,9 @@ func TestRepoRootConfigYAML(t *testing.T) {
 	}
 	if filepath.Base(cfg.Paths.Artifacts) != "artifacts" {
 		t.Fatalf("artifacts=%q", cfg.Paths.Artifacts)
+	}
+	if cfg.Paths.Resources != filepath.Dir(path) {
+		t.Fatalf("resources=%q want repository root %q", cfg.Paths.Resources, filepath.Dir(path))
 	}
 }
 

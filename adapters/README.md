@@ -11,6 +11,17 @@ adapters/<data-id>/<model-id>/   one model. Its program is adapter.py.
 artifacts/                       downloaded weight files, not committed
 ```
 
+Each data directory also carries the runtime definition the handler reads:
+`runtime.yaml` (container image, mounts, product id) and a `Dockerfile` for that
+reader. Each model directory has the same pair. See
+[runtime resources](../docs/runtime-resources.md); `config.yaml` does not name a
+dataset or image. Build images from the repository root, for example:
+
+```sh
+docker build -f adapters/sevir/Dockerfile -t nib-ingestion:dev .
+docker build -f adapters/sevir/nowcastnet/Dockerfile -t nib-nowcastnet:dev .
+```
+
 Contracts live outside this tree: `contracts/data/<id>.json` and
 `contracts/models/<data-id>/<model-id>.json`. The Python contracts are
 `interfaces/`. Path resolution and the Hugging Face weight fetch are

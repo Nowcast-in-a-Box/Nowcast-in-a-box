@@ -11,16 +11,33 @@ Initialize the atlas submodule and build images from the repository root:
 
 ```sh
 git submodule update --init --recursive
-docker build -f ingestion/Dockerfile -t nib-ingestion:dev .
-docker build -f containers/models/Dockerfile --build-arg MODEL=wadepre -t nib-wadepre:dev .
-docker build -f containers/models/Dockerfile --build-arg MODEL=nowcastnet -t nib-nowcastnet:dev .
-docker build -f containers/models/Dockerfile --build-arg MODEL=exprecast -t nib-exprecast:dev .
-docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .
+docker build -f adapters/sevir/Dockerfile -t nib-ingestion:dev .
+docker build -f adapters/sevir/wadepre/Dockerfile -t nib-wadepre:dev .
+docker build -f adapters/sevir/nowcastnet/Dockerfile -t nib-nowcastnet:dev .
+docker build -f adapters/sevir/exprecast/Dockerfile -t nib-exprecast:dev .
+docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow .
 ```
 
-The local data root must contain the configured processed SEVIR file and CATALOG;
-no path is invented when it is missing. Weights stay under `artifacts/sevir/...`
-and are checked against the model declarations' SHA256 before offline inference.
+`paths.resources` is the root of the packaged runtime tree. Each supported data
+source declares `runtime.yaml` under `adapters/<data-id>/`, and each model
+declares one under its data directory; the Handler reads those manifests and
+never hard-codes a dataset, data file, catalog path, or image tag in
+`config.yaml`. See [runtime resources](runtime-resources.md) for the schema and
+the release layout.
+
+The selected data source's folder is saved per data id in `nib-settings.json`
+next to `config.yaml` as `{"data_roots": {"<data-id>": "<folder>"}}`; that file
+is gitignored, survives a Handler restart, and `NIB_DATA_ROOT` remains a fallback
+for older single-root settings. The folder must contain the paths declared by
+that data source's manifest; no path is invented when it is missing. Weights
+stay under `artifacts/<data-id>/<model-id>/...` and are checked against the model
+manifest's SHA256 before offline inference. A missing weight is copied from
+`paths.weight_source` (a folder laid out like `artifacts/`) and verified; the
+Handler does not download it over the network. Image layers are expected to be
+present in Docker's local cache: `GET /v1/resources?data_id=<id>` reports each
+selected image as ready or missing, and `POST /v1/resources/prepare` copies
+missing weights and re-checks the selected images. Compose definitions use
+`pull_policy: never` so execution never hides a download.
 The initial reader requires six context and twenty target 128x128 frames. It
 rejects event/time ambiguity and events with missing pixels that the processed
 file can no longer mask reliably. Sample listings show this limitation.
@@ -32,8 +49,9 @@ need a basemap. Scientific VIL units are `raw`; they are not dBZ or rain rate.
 
 ## Connection and execution
 
-`config.yaml` controls loopback addresses, paths, images, optional Docker context
-and explicitly allowed Hub origins. Register/start the platform launcher once,
+`config.yaml` controls loopback addresses, paths (including the runtime resources
+root), optional Docker context, and explicitly allowed Hub origins. Images and
+data/model mounts come from the runtime manifests. Register/start the platform launcher once,
 then use Hub's connection button and confirm its browser `nib://` application
 prompt if needed. The token is transferred over trusted loopback HTTP, remains
 in browser memory, and is never printed or manually copied. Browsers may also
@@ -43,9 +61,12 @@ stop/restart, configuration ownership, trusted deployments and limitations.
 
 A successful CORS preflight is not evidence that permission was granted.
 
-Choose an explicit SEVIR event/window, then models and optional evaluation or
-visualization in the existing Hub catalog/Checkout. Run locally from the frozen
-order page: the browser uploads the actual ZIP and package checksum. The handler
+Choose a data product and an explicit event/window, then models and optional
+evaluation or visualization in the existing Hub catalog/Checkout. Run locally from Checkout (or an existing frozen order): the browser uploads the
+actual ZIP and package checksum once, then observes the job in Runs. Handler
+executes the selected diagnostics automatically after inference, independently
+of the browser. See [automatic diagnostics](automatic-diagnostics.md) for exact
+operation/report identity, partial results and crash recovery. The handler
 checks bounded ZIP entries, paths, checksums, supported product versions and
 frozen data/model/diagnostic bindings. Template bytes are never executed.
 

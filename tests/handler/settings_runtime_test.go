@@ -11,12 +11,19 @@ import (
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler"
 )
 
-func TestSettingsOnlyUpdatesExistingDataRootAndPreservesConfig(t *testing.T) {
-	t.Setenv("NIB_DATA_ROOT", "")
+func settingsConfig(t *testing.T) string {
+	t.Helper()
 	source := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(source, []byte("# keep this comment\nhandler:\n  port: 9000\npaths:\n  runs: runs\nfuture: retained\n"), 0o600); err != nil {
+	body := "# keep this comment\nhandler:\n  port: 9000\npaths:\n  runs: runs\n  resources: " + testResourcesPath(t) + "\nfuture: retained\n"
+	if err := os.WriteFile(source, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return source
+}
+
+func TestSettingsSavesDataRootPerDataIDAndPreservesConfig(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := settingsConfig(t)
 	cfg, err := handler.Load(source)
 	if err != nil {
 		t.Fatal(err)
@@ -31,14 +38,17 @@ func TestSettingsOnlyUpdatesExistingDataRootAndPreservesConfig(t *testing.T) {
 		server.Routes().ServeHTTP(result, req)
 		return result.Code
 	}
-	if code := patch(`{"docker_args":"bad"}`); code != 400 {
-		t.Fatal(code)
+	if code := patch(`{"data_root":"` + filepath.ToSlash(root) + `"}`); code != 400 {
+		t.Fatalf("legacy body without data_id: %d", code)
 	}
-	if code := patch(`{"data_root":"` + filepath.ToSlash(filepath.Join(root, "missing")) + `"}`); code != 422 {
-		t.Fatal(code)
+	if code := patch(`{"data_id":"unknown","data_root":"` + filepath.ToSlash(root) + `"}`); code != 422 {
+		t.Fatalf("unknown data id: %d", code)
 	}
-	if code := patch(`{"data_root":"` + filepath.ToSlash(root) + `"}`); code != 200 {
-		t.Fatal(code)
+	if code := patch(`{"data_id":"sevir","data_root":"` + filepath.ToSlash(filepath.Join(root, "missing")) + `"}`); code != 422 {
+		t.Fatalf("missing folder: %d", code)
+	}
+	if code := patch(`{"data_id":"sevir","data_root":"` + filepath.ToSlash(root) + `"}`); code != 200 {
+		t.Fatalf("save: %d", code)
 	}
 	raw, err := os.ReadFile(source)
 	if err != nil {
@@ -47,21 +57,28 @@ func TestSettingsOnlyUpdatesExistingDataRootAndPreservesConfig(t *testing.T) {
 	if !strings.Contains(string(raw), "keep this comment") || !strings.Contains(string(raw), "future: retained") {
 		t.Fatal(string(raw))
 	}
+	if strings.Contains(string(raw), root) {
+		t.Fatal("data root must not be written into config.yaml")
+	}
+	settings, err := os.ReadFile(filepath.Join(filepath.Dir(source), "nib-settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(settings), "data_roots") || !strings.Contains(string(settings), "sevir") {
+		t.Fatalf("settings = %s", settings)
+	}
 	reloaded, err := handler.Load(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reloaded.Paths.DataRoot != root || reloaded.Handler.Port != 9000 {
-		t.Fatal(reloaded)
+	if reloaded.DataRoots["sevir"] != root || reloaded.Handler.Port != 9000 {
+		t.Fatal(reloaded.DataRoots, reloaded.Handler.Port)
 	}
 }
 
-func TestPickDataRootSavesAndOverwritesWithoutAcceptingABrowserPath(t *testing.T) {
+func TestPickDataRootSavesPerDataIDWithoutAcceptingABrowserPath(t *testing.T) {
 	t.Setenv("NIB_DATA_ROOT", "")
-	source := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(source, []byte("paths:\n  runs: runs\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	source := settingsConfig(t)
 	cfg, err := handler.Load(source)
 	if err != nil {
 		t.Fatal(err)
@@ -81,32 +98,88 @@ func TestPickDataRootSavesAndOverwritesWithoutAcceptingABrowserPath(t *testing.T
 	if response := post(`{"data_root":"/tmp"}`); response.Code != 400 {
 		t.Fatal(response.Code, response.Body.String())
 	}
-	if response := post(""); response.Code != 200 || !strings.Contains(response.Body.String(), first) {
+	if response := post(`{"data_id":"sevir"}`); response.Code != 200 || !strings.Contains(response.Body.String(), first) {
 		t.Fatal(response.Code, response.Body.String())
 	}
 	server.PickFolder = func() (string, error) { return second, nil }
-	if response := post(""); response.Code != 200 {
+	if response := post(`{"data_id":"sevir"}`); response.Code != 200 {
 		t.Fatal(response.Code, response.Body.String())
 	}
 	reloaded, err := handler.Load(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reloaded.Paths.DataRoot != second {
-		t.Fatal(reloaded.Paths.DataRoot)
+	if reloaded.DataRoots["sevir"] != second {
+		t.Fatal(reloaded.DataRoots)
 	}
 	server.PickFolder = func() (string, error) { return "", fmt.Errorf("folder selection was canceled") }
-	if response := post(""); response.Code != 409 {
+	if response := post(`{"data_id":"sevir"}`); response.Code != 409 {
 		t.Fatal(response.Code, response.Body.String())
 	}
 	reloaded, err = handler.Load(source)
-	if err != nil || reloaded.Paths.DataRoot != second {
-		t.Fatal(reloaded.Paths.DataRoot, err)
+	if err != nil || reloaded.DataRoots["sevir"] != second {
+		t.Fatal(reloaded.DataRoots, err)
+	}
+}
+
+func TestSettingsReadPerDataAndLegacyFallback(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(source, []byte("paths:\n  resources: "+testResourcesPath(t)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sevirRoot, cmaRoot := t.TempDir(), t.TempDir()
+	settings := `{"data_roots":{"sevir":"` + sevirRoot + `","cma_radar":"` + cmaRoot + `"}}`
+	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DataRoots["sevir"] != sevirRoot || cfg.DataRoots["cma_radar"] != cmaRoot {
+		t.Fatal(cfg.DataRoots)
+	}
+
+	legacyRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), []byte(`{"data_root":"`+legacyRoot+`"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DataRootFallback != legacyRoot || len(cfg.DataRoots) != 0 {
+		t.Fatal(cfg.DataRootFallback, cfg.DataRoots)
+	}
+
+	envRoot := t.TempDir()
+	t.Setenv("NIB_DATA_ROOT", envRoot)
+	cfg, err = handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DataRootFallback != envRoot {
+		t.Fatalf("fallback=%q want env", cfg.DataRootFallback)
+	}
+}
+
+func TestCorruptSettingsFileIsReported(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(source, []byte("paths:\n  runs: runs\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.Load(source); err == nil || !strings.Contains(err.Error(), "nib-settings.json") {
+		t.Fatalf("expected a readable settings error, got %v", err)
 	}
 }
 
 func TestDiagnosticRetryRefusesMissingForecastAndNoProducts(t *testing.T) {
-	cfg := handler.DefaultConfig()
+	cfg := testConfig(t)
 	cfg.Paths.Runs = t.TempDir()
 	cfg.Runtime.Token = "token"
 	directory := filepath.Join(cfg.Paths.Runs, "run-one")

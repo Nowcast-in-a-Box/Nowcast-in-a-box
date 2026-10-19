@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"slices"
@@ -34,13 +35,14 @@ type RuntimeRequest struct {
 }
 
 type packageItem struct {
-	ID       string                     `json:"order_item_id"`
-	Product  string                     `json:"product_id"`
-	Name     string                     `json:"product_name"`
-	Version  string                     `json:"version_id"`
-	Category string                     `json:"category"`
-	Config   map[string]json.RawMessage `json:"resolved_configuration"`
-	Bindings []struct {
+	ID             string                     `json:"order_item_id"`
+	Product        string                     `json:"product_id"`
+	Name           string                     `json:"product_name"`
+	Version        string                     `json:"version_id"`
+	Category       string                     `json:"category"`
+	RuntimeModelID string                     `json:"runtime_model_id,omitempty"`
+	Config         map[string]json.RawMessage `json:"resolved_configuration"`
+	Bindings       []struct {
 		Consumer      string `json:"consumer_order_item_id"`
 		Producer      string `json:"producer_order_item_id"`
 		Input         string `json:"input_name"`
@@ -57,7 +59,7 @@ var MetricFamilies = map[string]string{
 	"fss": "spatial", "corr": "moments",
 }
 
-func metricGroups(config map[string]json.RawMessage) ([]map[string]any, error) {
+func metricGroups(config map[string]json.RawMessage, data *DataResource) ([]map[string]any, error) {
 	var methods []string
 	var levels []float64
 	var windows []int
@@ -65,9 +67,16 @@ func metricGroups(config map[string]json.RawMessage) ([]map[string]any, error) {
 		return nil, fmt.Errorf("invalid metric configuration")
 	}
 	levelSet := map[float64]bool{}
+	levelMin, levelMax, unit := 0.0, 255.0, "raw"
+	if data != nil {
+		levelMin, levelMax = data.Verification.LevelMin, data.Verification.LevelMax
+		if data.Verification.Unit != "" {
+			unit = data.Verification.Unit
+		}
+	}
 	for _, level := range levels {
-		if level < 0 || level > 255 || levelSet[level] {
-			return nil, fmt.Errorf("VIL thresholds must be distinct raw values 0..255")
+		if level < levelMin || level > levelMax || levelSet[level] {
+			return nil, fmt.Errorf("%s thresholds must be distinct values %g..%g %s", dataName(data), levelMin, levelMax, unit)
 		}
 		levelSet[level] = true
 	}
@@ -107,7 +116,10 @@ func metricGroups(config map[string]json.RawMessage) ([]map[string]any, error) {
 
 // ParseRuntimePackage checks the immutable package before selecting any execution.
 // Templates and deployment material remain inert bytes.
-func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
+func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (RuntimeRequest, error) {
+	if resources == nil {
+		return RuntimeRequest{}, fmt.Errorf("runtime resources are not loaded")
+	}
 	var request RuntimeRequest
 	digest := sha256.Sum256(raw)
 	if len(raw) > maxPackageBytes || hex.EncodeToString(digest[:]) != expected {
@@ -223,74 +235,97 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 	request.PackageID = manifest.PackageID
 	request.PackageSHA256 = expected
 	itemCategories := map[string]string{}
-	modelItems := map[string]bool{}
-	modelIDs := map[string]string{}
-	modelData := map[string]string{}
 	dataItem := ""
+	var dataResource *DataResource
 	for _, item := range manifest.Items {
-		if item.Version != "v1" || item.ID == "" || itemCategories[item.ID] != "" {
-			return request, fmt.Errorf("unsupported product version or repeated item")
+		if item.ID == "" || itemCategories[item.ID] != "" {
+			return request, fmt.Errorf("repeated item")
 		}
 		itemCategories[item.ID] = item.Category
-		switch item.Product {
-		case "sevir-vil", "cma-radar":
-			if item.Category != "data" || dataItem != "" {
-				return request, fmt.Errorf("one data product required")
+		switch item.Category {
+		case "data", "model", "evaluation", "visualization":
+		default:
+			return request, fmt.Errorf("unsupported product category %q", item.Category)
+		}
+	}
+	for _, item := range manifest.Items {
+		if item.Category != "data" {
+			continue
+		}
+		if dataItem != "" {
+			return request, fmt.Errorf("one data product required")
+		}
+		resource, ok := resources.DataByProductID(item.Product)
+		if !ok {
+			return request, fmt.Errorf("this Handler does not package data product %q; update its resources", item.Product)
+		}
+		dataItem, dataResource = item.ID, resource
+		request.DataID = resource.ID
+		if json.Unmarshal(item.Config["event_id"], &request.EventID) != nil || json.Unmarshal(item.Config["context_start_time"], &request.StartTime) != nil {
+			return request, fmt.Errorf("invalid data window configuration")
+		}
+		if raw, ok := item.Config["center_lon"]; ok {
+			if json.Unmarshal(raw, &request.CenterLon) != nil || math.IsNaN(request.CenterLon) || math.IsInf(request.CenterLon, 0) {
+				return request, fmt.Errorf("invalid region center")
 			}
-			dataItem = item.ID
-			request.DataID = "sevir"
-			if item.Product == "cma-radar" {
-				request.DataID = "cma_radar"
+		}
+		if raw, ok := item.Config["center_lat"]; ok {
+			if json.Unmarshal(raw, &request.CenterLat) != nil || math.IsNaN(request.CenterLat) || math.IsInf(request.CenterLat, 0) {
+				return request, fmt.Errorf("invalid region center")
 			}
-			if json.Unmarshal(item.Config["event_id"], &request.EventID) != nil || json.Unmarshal(item.Config["context_start_time"], &request.StartTime) != nil {
-				return request, fmt.Errorf("invalid data window configuration")
+		}
+	}
+	if dataItem == "" {
+		return request, fmt.Errorf("one data product required")
+	}
+	modelItems := map[string]bool{}
+	modelIDs := map[string]string{}
+	for _, item := range manifest.Items {
+		if item.Category != "model" {
+			continue
+		}
+		if len(item.Config) != 0 {
+			return request, fmt.Errorf("invalid model configuration")
+		}
+		var model *ModelResource
+		var ok bool
+		if item.RuntimeModelID != "" {
+			model, ok = resources.ModelByID(request.DataID, item.RuntimeModelID)
+		} else {
+			model, ok = resources.ModelByProductID(request.DataID, item.Product)
+		}
+		if !ok {
+			return request, fmt.Errorf("this Handler does not package model %q for data %q", item.Product, request.DataID)
+		}
+		if slices.Contains(request.Models, model.ID) {
+			return request, fmt.Errorf("duplicate model")
+		}
+		request.Models = append(request.Models, model.ID)
+		if item.Name != "" {
+			if request.ModelNames == nil {
+				request.ModelNames = map[string]string{}
 			}
-			if request.DataID == "cma_radar" {
-				if len(item.Config) != 4 || json.Unmarshal(item.Config["center_lon"], &request.CenterLon) != nil || json.Unmarshal(item.Config["center_lat"], &request.CenterLat) != nil || request.CenterLon < 76 || request.CenterLon > 132 || request.CenterLat < 15 || request.CenterLat > 51 {
-					return request, fmt.Errorf("CMA requires a regional center inside 76..132 E, 15..51 N")
-				}
-			} else if len(item.Config) != 2 {
-				return request, fmt.Errorf("invalid SEVIR configuration")
-			}
-		case "nowcastnet-sevir", "exprecast-sevir", "wadepre-sevir", "nowcastnet-cma":
-			if item.Category != "model" || len(item.Config) != 0 {
-				return request, fmt.Errorf("invalid model configuration")
-			}
-			model := strings.TrimSuffix(strings.TrimSuffix(item.Product, "-sevir"), "-cma")
-			modelData[item.ID] = "sevir"
-			if item.Product == "nowcastnet-cma" {
-				modelData[item.ID] = "cma_radar"
-			}
-			for _, existing := range request.Models {
-				if existing == model {
-					return request, fmt.Errorf("duplicate model")
-				}
-			}
-			request.Models = append(request.Models, model)
-			if item.Name != "" {
-				if request.ModelNames == nil {
-					request.ModelNames = map[string]string{}
-				}
-				request.ModelNames[model] = item.Name
-			}
-			modelItems[item.ID] = true
-			modelIDs[item.ID] = model
-		case "vil-verification", "cref-verification":
-			if item.Category != "evaluation" || request.Metrics != nil {
+			request.ModelNames[model.ID] = item.Name
+		}
+		modelItems[item.ID] = true
+		modelIDs[item.ID] = model.ID
+	}
+	for _, item := range manifest.Items {
+		switch item.Category {
+		case "evaluation":
+			if request.Metrics != nil {
 				return request, fmt.Errorf("invalid evaluation product")
 			}
-			groups, err := metricGroups(item.Config)
+			groups, err := metricGroups(item.Config, dataResource)
 			if err != nil {
 				return request, err
 			}
 			request.Metrics = groups
-		case "vil-visualization", "cref-visualization", "time-leadtime-animation":
-			if item.Category != "visualization" || len(item.Config) != 0 {
+		case "visualization":
+			if len(item.Config) != 0 {
 				return request, fmt.Errorf("invalid visualization configuration")
 			}
 			request.Visualization = true
-		default:
-			return request, fmt.Errorf("product is not supported by this local runtime")
 		}
 	}
 	if dataItem == "" || len(request.Models) == 0 || !idPattern.MatchString(request.EventID) {
@@ -306,17 +341,11 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 			}
 		}
 		if modelItems[item.ID] {
-			if modelData[item.ID] != request.DataID {
-				return request, fmt.Errorf("model and data pairing disagree")
-			}
 			if len(item.Bindings) != 1 || item.Bindings[0].Producer != dataItem || item.Bindings[0].Input != "observations" || item.Bindings[0].Output != "observations" {
 				return request, fmt.Errorf("model is not bound to selected observations")
 			}
 		}
 		if item.Category == "evaluation" || item.Category == "visualization" {
-			if (strings.HasPrefix(item.Product, "cref-") && request.DataID != "cma_radar") || (strings.HasPrefix(item.Product, "vil-") && request.DataID != "sevir") {
-				return request, fmt.Errorf("diagnostic and data variable disagree")
-			}
 			forecastModels := []string{}
 			seen := map[string]bool{}
 			observation := false
@@ -348,4 +377,11 @@ func ParseRuntimePackage(raw []byte, expected string) (RuntimeRequest, error) {
 		}
 	}
 	return request, nil
+}
+
+func dataName(data *DataResource) string {
+	if data == nil {
+		return "data"
+	}
+	return data.Name
 }

@@ -17,8 +17,22 @@ only when selected. See [runtime integration](../docs/runtime-integration.md) fo
 resource preparation, scientific semantics and completed validation limits.
 
 Build from the repository root with
-`docker build -f diagnostics/Dockerfile -t nib-diagnostics:dev .`. A successful
+`docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow .`. The image tag and mounts are declared in `diagnostics/runtime.yaml`. A successful
 build does not establish real model or basemap acceptance.
+
+## Automatic execution and read-only results
+
+Handler runs the diagnostics selected in a frozen inference request automatically
+after its model outputs finish. Explicit retries use the same internal executor
+and saved Forecasts. Each internal request may include an `operation_id`; the
+combined report binds it and the exact attempt IDs.
+
+The local report has keyboard-accessible native Visualization / Metrics radio
+views, without scripts. It is generated even when one diagnostic fails, retaining
+the successful content and showing the failed product's error. Loading/switching
+views never starts computation. The shell displays existing artifacts; a future
+interactive metrics webpage remains separate work. See
+[execution and recovery](../docs/automatic-diagnostics.md).
 
 ## CMA xarray data handoff
 
@@ -60,7 +74,7 @@ bin/macos/start.command diagnostics --request /path/to/request.yaml
 ```
 
 Host settings come from `config.yaml`; `-config` overrides the default.
-The image comes from `diagnostics.image`, or the CLI `-image` override.
+The image comes from `diagnostics/runtime.yaml` under `paths.resources`, or the CLI `-image` override.
 Request YAML cannot supply Docker arguments or override the image.
 Every invocation gets a timestamp plus random run ID; `-id` may supply an
 explicit ID, and an existing run is never overwritten. Failed runs remain.

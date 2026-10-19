@@ -55,16 +55,18 @@ repository root when preparing the development demo:
 
 ```sh
 git submodule update --init --recursive
-docker build -f ingestion/Dockerfile -t nib-ingestion:cma-demo .
-docker build -f containers/models/Dockerfile --build-arg MODEL=nowcastnet -t nib-nowcastnet:cma-demo .
-docker build -f diagnostics/Dockerfile -t nib-diagnostics:cma-demo .
+docker build -f adapters/cma_radar/Dockerfile -t nib-ingestion:cma-demo .
+docker build -f adapters/cma_radar/nowcastnet/Dockerfile -t nib-nowcastnet:cma-demo .
+docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow .
 ```
 
-Use [the example configuration](../tests/runtime/cma-demo.config.yaml), setting
-`paths.data_root` explicitly or setting `NIB_DATA_ROOT` to the existing
-`cma-radar` directory. The configured data file is `.` because ingestion mounts
-the directory, not a SEVIR HDF5 file. `runtime.dataset` selects the host's active
-data source. Change back to `sevir` with its data/catalog paths to use SEVIR.
+Use [the example configuration](../tests/runtime/cma-demo.config.yaml). The
+runtime tree comes from `paths.resources` (`runtime.yaml` in each data/model
+directory); the configured `cma_radar` manifest mounts the whole data folder.
+Choose the existing `cma-radar` directory for the CMA data source in Checkout,
+or set `NIB_DATA_ROOT` for a one-off run. Do not add `runtime.dataset`,
+`data_file`, or image names to `config.yaml`: selecting a different data product
+in the Hub switches the runtime without editing the host configuration.
 
 Authorize the exact HTTP Hub origin in `runtime.allowed_origins`. Handler and
 result listeners remain loopback. Weights and inputs mount read-only, containers
@@ -73,14 +75,18 @@ run offline, and all output stays under `runs/<unique ID>/`.
 ## Hub flow
 
 1. Initialize Hub's pinned Atlas submodule and start its backend and frontend.
-2. Open Local runs and connect this computer. With the CMA configuration active,
-   load samples and choose the July reference window.
+2. Select **Local** and connect this computer before opening the Catalog. With
+   the CMA configuration active, the Handler connection does not depend on
+   whether Docker or the local data directory is ready yet.
 3. Choose **NowcastNet · CMA demo**. Optionally choose **CREF verification** and
    **CREF comparison and animation**. SEVIR products have their own pairings.
-4. In Checkout, confirm the sample date/time and region center. Thresholds use
-   dBZ (defaults 10, 20, 30, 40, 50). Check local data and weights, then Start.
-5. After ingestion and model execution finish, open results to run the selected
-   diagnostics from saved Forecasts. No model rerun is needed for new metrics.
+4. In Checkout, confirm the data directory, load/select a sample if needed, and
+   confirm its date/time and region center. Thresholds use dBZ (defaults 10, 20,
+   30, 40, 50). Validate, check local data and weights, then Start.
+5. Start freezes/submits once and moves observation to Runs. Handler executes
+   the selected diagnostics automatically after inference, even when the browser
+   closes. **Open result** only reads the local Visualization / Metrics page.
+   Explicit diagnostics retry uses saved Forecasts and never reruns the model.
 6. Runs retains the run and diagnostic attempts. The CREF comparison shows the
    latest input, the observation at each lead and the matching prediction. Its
    20-frame GIF uses a common 0..75 dBZ color scale and projected kilometre axes.

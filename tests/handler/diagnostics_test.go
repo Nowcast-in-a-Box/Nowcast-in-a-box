@@ -72,8 +72,7 @@ func hostRunDir(args []string) string {
 func diagConfig(t *testing.T) handler.Config {
 	t.Helper()
 	return handler.Config{
-		Paths:       handler.Paths{Runs: filepath.Join(t.TempDir(), "runs")},
-		Diagnostics: handler.Diagnostics{Image: "nib-diagnostics:dev"},
+		Paths: handler.Paths{Runs: filepath.Join(t.TempDir(), "runs"), Resources: testResourcesPath(t)},
 	}
 }
 
@@ -634,7 +633,7 @@ func TestDiagnosticsUsage(t *testing.T) {
 
 func TestDiagnosticsCLIRejectsWithoutDocker(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := writeConfig(t, dir, "paths:\n  runs: runs\ndiagnostics:\n  image: nib-diagnostics:dev\n")
+	cfgPath := writeConfig(t, dir, "paths:\n  runs: runs\n  resources: "+testResourcesPath(t)+"\n")
 	req := writeRequest(t, dir, "metrics: []\n")
 	code := handler.DiagnosticsCLI([]string{"-config", cfgPath, "-request", req, "-id", "job1"})
 	if code != 1 {
@@ -694,7 +693,8 @@ func TestDiagnosticsTimeoutRemovesContainer(t *testing.T) {
 func TestLoadDiagnosticsConfig(t *testing.T) {
 	t.Setenv("NIB_DATA_ROOT", "")
 	dir := t.TempDir()
-	path := writeConfig(t, dir, "paths:\n  runs: out\ndiagnostics:\n  image: example:tag\n")
+	resources := testResourcesPath(t)
+	path := writeConfig(t, dir, "paths:\n  runs: out\n  resources: "+resources+"\n")
 	cfg, err := handler.Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -706,8 +706,8 @@ func TestLoadDiagnosticsConfig(t *testing.T) {
 	if cfg.Paths.Runs != want {
 		t.Fatalf("runs=%q want %q", cfg.Paths.Runs, want)
 	}
-	if cfg.Diagnostics.Image != "example:tag" {
-		t.Fatalf("image=%q", cfg.Diagnostics.Image)
+	if cfg.Paths.Resources != resources {
+		t.Fatalf("resources=%q want %q", cfg.Paths.Resources, resources)
 	}
 
 	bare := writeConfig(t, dir, "handler:\n  port: 9100\n")
@@ -717,9 +717,6 @@ func TestLoadDiagnosticsConfig(t *testing.T) {
 	}
 	if !strings.HasSuffix(cfg.Paths.Runs, string(filepath.Separator)+"runs") {
 		t.Fatalf("default runs=%q", cfg.Paths.Runs)
-	}
-	if cfg.Diagnostics.Image != "nib-diagnostics:dev" {
-		t.Fatalf("default image=%q", cfg.Diagnostics.Image)
 	}
 }
 

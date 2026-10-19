@@ -84,11 +84,17 @@ func profileID(cfg Config) string {
 }
 
 func configID(cfg Config) string {
-	// Only the data root and trusted origins are reloaded. Tokens stay private.
+	// Data roots and trusted origins are reloaded without changing identity.
+	// Tokens stay private. Resource manifests are loaded at start; editing one
+	// requires an explicit restart.
 	handlerURL, reviewURL := addressURL(cfg.Handler), addressURL(cfg.Review)
 	cfg.Handler, cfg.Review = Addr{}, Addr{}
-	cfg.Paths.DataRoot = ""
-	cfg.Paths.Runs, cfg.Paths.Artifacts = canonicalPath(cfg.Paths.Runs), canonicalPath(cfg.Paths.Artifacts)
+	cfg.DataRoots = nil
+	cfg.DataRootFallback = ""
+	cfg.Paths.Runs = canonicalPath(cfg.Paths.Runs)
+	cfg.Paths.Artifacts = canonicalPath(cfg.Paths.Artifacts)
+	cfg.Paths.Resources = canonicalPath(cfg.Paths.Resources)
+	cfg.Paths.WeightSource = canonicalPath(cfg.Paths.WeightSource)
 	cfg.Runtime.AllowedOrigins = nil
 	body, _ := json.Marshal(struct {
 		Source, Handler, Review string
@@ -297,6 +303,11 @@ func (s *Server) requestShutdown() error {
 		return fmt.Errorf("wait for active inference or diagnostics before stopping Handler")
 	}
 	defer s.executionMu.Unlock()
+	// Reconcile after holding the lock: an execution that just failed cleanup has
+	// released it and must no longer be exempt from the container check.
+	if err := s.reconcileExecutions(); err != nil {
+		return err
+	}
 	s.jobsMu.Lock()
 	defer s.jobsMu.Unlock()
 	if s.stopping {

@@ -10,26 +10,16 @@ import numpy as np
 from interfaces.model import PreparedInput
 from utils.stored_fields import StoredFields, add_forecast, save_manifest, sha256
 
-MODELS = ("nowcastnet", "exprecast", "wadepre")
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", required=True)
     parser.add_argument("--weights", required=True)
     args = parser.parse_args()
     model_id = os.environ.get("NIB_MODEL")
-    if model_id not in MODELS:
-        raise ValueError("image must select one supported algorithm")
+    module = os.environ.get("NIB_ADAPTER_MODULE")
+    if not model_id or not module:
+        raise ValueError("model image must declare NIB_MODEL and NIB_ADAPTER_MODULE")
     access = StoredFields(args.run)
-    data_id = access.manifest["data"]["id"]
-    if data_id == "cma_radar" and model_id != "nowcastnet":
-        raise ValueError("CMA Radar demo currently supports NowcastNet only")
-    module = (
-        f"adapters.{data_id}.nowcastnet.adapter"
-        if data_id == "cma_radar"
-        else f"adapters.sevir.{model_id}.adapter"
-    )
     adapter = importlib.import_module(module).ADAPTER
     weights = Path(args.weights)
     spec = adapter.weights()

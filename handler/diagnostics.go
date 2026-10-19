@@ -37,6 +37,7 @@ type CommandRunner interface {
 // image in Config when set. The request YAML cannot set the image.
 type DiagnosticsOptions struct {
 	Config      Config
+	Resources   *Resources
 	RequestPath string
 	Image       string
 	Timeout     time.Duration
@@ -72,7 +73,7 @@ func DiagnosticsCLI(args []string) int {
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "", "path to config.yaml")
 	request := fs.String("request", "", "diagnostics request YAML")
-	image := fs.String("image", "", "diagnostics image (overrides config)")
+	image := fs.String("image", "", "diagnostics image (overrides the runtime manifest)")
 	timeout := fs.Duration("timeout", diagnosticsTimeout, "container timeout")
 	id := fs.String("id", "", "run id")
 	if err := fs.Parse(args); err != nil {
@@ -87,8 +88,14 @@ func DiagnosticsCLI(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
+	resources, err := LoadResources(cfg.Paths.Resources)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
 	runDir, err := RunDiagnostics(DiagnosticsOptions{
 		Config:      cfg,
+		Resources:   resources,
 		RequestPath: *request,
 		Image:       *image,
 		Timeout:     *timeout,
@@ -120,13 +127,24 @@ func RunDiagnostics(opts DiagnosticsOptions) (string, error) {
 	}
 	now = now.UTC()
 
-	image := opts.Config.Diagnostics.Image
+	if opts.Resources == nil {
+		resources, err := LoadResources(opts.Config.Paths.Resources)
+		if err != nil {
+			return "", err
+		}
+		opts.Resources = resources
+	}
+	if opts.Resources.Diagnostics == nil {
+		return "", fmt.Errorf("diagnostics resources are not loaded")
+	}
+	image := opts.Resources.Diagnostics.Container.Image
 	if opts.Image != "" {
 		image = opts.Image
 	}
 	if image == "" {
 		return "", fmt.Errorf("diagnostics image is empty")
 	}
+	command := expandCommand(opts.Resources.Diagnostics.Container.Command, map[string]string{"request": "/run/request.yaml"})
 	runsRoot := opts.Config.Paths.Runs
 	if runsRoot == "" {
 		return "", fmt.Errorf("paths.runs is empty")
@@ -219,7 +237,7 @@ func RunDiagnostics(opts DiagnosticsOptions) (string, error) {
 	}
 
 	name := "nib-diagnostics-" + id
-	runArgs := dockerRunArgs(image, name, runDir, mounts)
+	runArgs := dockerRunArgs(image, name, runDir, mounts, command)
 	code, out, runErr := opts.Runner.Run(ctx, runArgs...)
 	if ctx.Err() != nil {
 		rmCtx, rmCancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -542,9 +560,10 @@ func isDockerSock(path string) bool {
 	return filepath.Base(path) == "docker.sock"
 }
 
-func dockerRunArgs(image, name, runDir string, mounts []inputMount) []string {
+func dockerRunArgs(image, name, runDir string, mounts []inputMount, command []string) []string {
 	args := []string{
 		"run", "--rm",
+		"--pull", "never",
 		"--name", name,
 		"--network", "none",
 		"--read-only",
@@ -557,8 +576,20 @@ func dockerRunArgs(image, name, runDir string, mounts []inputMount) []string {
 	if user := containerUser(); user != "" {
 		args = append(args, "--user", user)
 	}
-	args = append(args, image, "--config", "/run/request.yaml")
+	args = append(args, image)
+	args = append(args, command...)
 	return args
+}
+
+func expandCommand(command []string, values map[string]string) []string {
+	expanded := make([]string, 0, len(command))
+	for _, argument := range command {
+		for key, value := range values {
+			argument = strings.ReplaceAll(argument, "{{"+key+"}}", value)
+		}
+		expanded = append(expanded, argument)
+	}
+	return expanded
 }
 
 func volumeSpec(host, container string, readOnly bool) string {
