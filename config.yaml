@@ -32,5 +32,7 @@ runtime:
   allowed_origins:
     - http://127.0.0.1:8000
     - http://127.0.0.1:5173
+    # Remote demo Hub (parent nginx terminates TLS at this origin).
+    - https://www.wmc-bj.net
   # Shared declarations including the CMA demo; matches the atlas submodule.
   atlas_revision: "1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8"
