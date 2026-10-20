@@ -1036,7 +1036,7 @@ async function onConfigPicked() {
 const WEEK = 7 * 24 * 3600 * 1000;
 
 //: What the quick picks offer, in days. ``null`` is everything that was stored.
-const INIT_PICKS = [[1, "1 d"], [3, "3 d"], [7, "7 d"], [30, "30 d"], [null, "All"]];
+const INIT_PICKS = [[1, "1 d"], [3, "3 d"], [7, "7 d"], [30, "30 d"]];
 
 function initDays() {
   const from = $("#q-init-from").value, to = $("#q-init-to").value;
@@ -1117,33 +1117,27 @@ function openInitPanel() {
 
 function closeInitPanel() { $("#init-panel").hidden = true; }
 
-// How long the config actually spans. "All" means the window covers it, not
-// that no window was chosen -- and initDays() answers with a number either way.
-function coversEverything(days) {
-  const span = state.initSpan;
-  if (!span || days === null) { return false; }
-  const full = (Date.parse(span[1]) - Date.parse(span[0])) / 86400000;
-  return days >= full - 0.5;
-}
-
 function renderInitQuick() {
   const days = initDays();
   const near = (one, other) => one !== null && other !== null && Math.abs(one - other) < 0.2;
-  mount($("#q-init-quick"), INIT_PICKS.map(([count, label]) => h("button", {
+  const chips = INIT_PICKS.map(([count, label]) => h("button", {
     class: "chip", type: "button", text: label,
-    // All is the whole span, and its count is null -- so the old test excluded it
-    // from ever looking pressed.
-    "aria-pressed": String(count === null ? coversEverything(days) : near(days, count)),
+    "aria-pressed": String(near(days, count)),
     onclick: () => setInitDays(count),
-  })));
+  }));
+  // Custom does not set a range, it opens the thing that does. It lights up when
+  // the range is none of the presets, which is what custom means.
+  chips.push(h("button", {
+    class: "chip", type: "button", text: "Custom",
+    "aria-pressed": String(!INIT_PICKS.some(([count]) => near(days, count))),
+    onclick: () => openInitPanel(),
+  }));
+  mount($("#q-init-quick"), chips);
 }
 
 function setInitDays(count) {
-  const span = state.initSpan;
   const end = new Date();
-  const start = count === null
-    ? (span ? new Date(span[0]) : new Date(0))
-    : new Date(end.getTime() - count * 86400000);
+  const start = new Date(end.getTime() - count * 86400000);
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
   closeInitPanel();
@@ -1380,8 +1374,16 @@ function showChart(params) {
   state.chartUrl = `/api/chart?${chart.toString()}`;
   // No download link: the picture is for looking at, and what somebody who wants
   // to draw their own can use is the table's CSV.
-  $("#chart").src = state.chartUrl;
-  $("#chart-card").hidden = false;
+  // A year is several seconds. Without this the previous picture just sits there
+  // while the next one is on its way, and nothing says anything is happening.
+  const card = $("#chart-card");
+  const picture = $("#chart");
+  card.classList.add("is-loading");
+  const done = () => card.classList.remove("is-loading");
+  picture.onload = done;
+  picture.onerror = done;
+  picture.src = state.chartUrl;
+  card.hidden = false;
   $("#chart-empty").hidden = true;
   // What the picture is of, under the picture rather than across the plot: the
   // canvas is meant to be worth saving on its own.
