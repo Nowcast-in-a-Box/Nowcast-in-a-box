@@ -324,7 +324,7 @@ pre.log {
   animation: nib-spin .8s linear infinite;
 }
 #chart-card.is-loading::after {
-  content: "querying6";
+  content: "querying…";   /* the real character, no escape */
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, 22px);
   font-size: 12px; color: #6b7785;
