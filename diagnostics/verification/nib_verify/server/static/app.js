@@ -1345,9 +1345,11 @@ async function runQuery() {
     mount(host, renderScores(result));
     showChart(params);
   } catch (error) {
-      const grid = kindOf() === "mesh" && /over the \d+ limit/.test(error.message || "");
-      mount(host, grid
-        ? notice("bad", `This grid would take too many cells to draw at once (member × init × lead). Narrow the time range, or switch to a line along one axis.`)
+      const limit = /over the \d+ limit/.test(error.message || "");
+      mount(host, limit
+        ? notice("bad", kindOf() === "mesh"
+            ? `This grid would take too many cells to draw at once (member × init × lead). Narrow the time range, or switch to a line along one axis.`
+            : `Too many points for this range. Narrow the time range, or pick a shorter axis.`)
         : notice("bad", error.message));
     $("#chart-card").hidden = true;
     $("#chart-empty").hidden = false;
