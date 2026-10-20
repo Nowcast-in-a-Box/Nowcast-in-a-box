@@ -204,6 +204,17 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 422, err)
 		return
 	}
+	if len(request.SampleStarts) == 0 {
+		request.SampleStarts = []string{request.StartTime}
+	}
+	limit := s.Config.Runtime.MaxBatchSamples
+	if limit <= 0 {
+		limit = defaultMaxBatchSamples
+	}
+	if len(request.SampleStarts) > limit {
+		runtimeError(w, 422, fmt.Errorf("this Handler allows at most %d sample windows per run", limit))
+		return
+	}
 	initial, parseErr := time.Parse(time.RFC3339, request.StartTime)
 	_, zoneOffset := initial.Zone()
 	if parseErr != nil || zoneOffset != 0 {
@@ -337,7 +348,7 @@ func sameRunConfig(stored, next RuntimeRequest) bool {
 	right := append([]string(nil), next.Models...)
 	sort.Strings(left)
 	sort.Strings(right)
-	return stored.DataID == next.DataID && stored.CenterLon == next.CenterLon && stored.CenterLat == next.CenterLat && stored.EventID == next.EventID && stored.StartTime == next.StartTime && strings.Join(left, "\x00") == strings.Join(right, "\x00")
+	return stored.DataID == next.DataID && stored.CenterLon == next.CenterLon && stored.CenterLat == next.CenterLat && stored.EventID == next.EventID && stored.StartTime == next.StartTime && strings.Join(stored.SampleStarts, "\x00") == strings.Join(next.SampleStarts, "\x00") && strings.Join(left, "\x00") == strings.Join(right, "\x00")
 }
 
 // matchingRunID reuses one run when the sample and selected models are unchanged.
@@ -430,6 +441,10 @@ func (s *Server) executeJob(id string) {
 	request := s.jobs[id].Request
 	s.jobsMu.Unlock()
 	directory := filepath.Join(s.Config.Paths.Runs, id)
+	if len(request.SampleStarts) > 1 {
+		s.executeBatchJob(id, request, directory)
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	run := func(stage string, args ...string) error {
@@ -634,6 +649,224 @@ func (s *Server) executeJob(id string) {
 	if status == "failed" {
 		status = "partial"
 	} // Forecasts remain available.
+	s.updateJob(id, status, "finished", diagnosticError)
+}
+
+func (s *Server) runStage(ctx context.Context, directory, id, stage string, args ...string) error {
+	name := "nib-" + strings.ToLower(id) + "-" + stage
+	volumes := []string{}
+	for len(args) >= 2 && args[0] == "-v" {
+		volumes = append(volumes, args[1])
+		args = args[2:]
+	}
+	if len(args) == 0 {
+		return fmt.Errorf("missing configured image")
+	}
+	service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
+	if user := containerUser(); user != "" {
+		service["user"] = user
+	}
+	composition := map[string]any{"services": map[string]any{"task": service}}
+	raw, err := yaml.Marshal(composition)
+	if err != nil {
+		return err
+	}
+	composePath := filepath.Join(directory, "compose-"+stage+".yaml")
+	if err := os.WriteFile(composePath, raw, 0o600); err != nil {
+		return err
+	}
+	code, out, err := s.docker(ctx, "compose", "-f", composePath, "-p", name, "up", "--abort-on-container-exit", "--exit-code-from", "task")
+	logs := filepath.Join(directory, "logs")
+	_ = os.MkdirAll(logs, 0o755)
+	_ = os.WriteFile(filepath.Join(logs, stage+".log"), out, 0o644)
+	cleanup, c := context.WithTimeout(context.Background(), 15*time.Second)
+	cleanupCode, _, cleanupErr := s.docker(cleanup, "compose", "-f", composePath, "-p", name, "down", "--remove-orphans")
+	if cleanupErr == nil && cleanupCode != 0 {
+		cleanupErr = fmt.Errorf("container cleanup exited %d; inspect Docker before retrying", cleanupCode)
+	}
+	c()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if cleanupErr != nil && err == nil {
+		err = cleanupErr
+	}
+	if err != nil {
+		return err
+	}
+	if code != 0 {
+		return fmt.Errorf("%s exited %d: %s", stage, code, out)
+	}
+	return nil
+}
+
+func (s *Server) writeManifestJSON(directory string, manifest map[string]any) error {
+	raw, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(directory, "manifest.json"), append(raw, '\n'), 0o644)
+}
+
+func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	data, catalog, err := s.dataPaths(request.DataID)
+	if err != nil {
+		s.updateJob(id, "failed", "preflight", err)
+		return
+	}
+	dataResource, err := s.dataResource(request.DataID)
+	if err != nil {
+		s.updateJob(id, "failed", "preflight", err)
+		return
+	}
+	samplesRoot := filepath.Join(directory, "samples")
+	if err := os.MkdirAll(samplesRoot, 0o755); err != nil {
+		s.updateJob(id, "failed", "ingestion", err)
+		return
+	}
+	starts := request.SampleStarts
+	if len(starts) == 0 {
+		starts = []string{request.StartTime}
+	}
+	samples := []map[string]any{}
+	var firstManifest map[string]any
+	failures := []string{}
+	for index, start := range starts {
+		childID := fmt.Sprintf("%03d", index)
+		childDir := filepath.Join(samplesRoot, childID)
+		eventID := request.EventID
+		if request.DataID == "cma_radar" {
+			if len(start) < 10 {
+				failures = append(failures, fmt.Sprintf("%s: invalid start time", childID))
+				continue
+			}
+			eventID = strings.ReplaceAll(start[:10], "-", "")
+		}
+		s.updateJob(id, "running", fmt.Sprintf("sample %d/%d", index+1, len(starts)), nil)
+		args, argErr := s.dataCommandArgs(request.DataID, data, catalog, "--event", eventID, "--start", start, "--runs", "/workspace", "--id", childID, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+		if argErr != nil {
+			failures = append(failures, childID+": "+argErr.Error())
+			continue
+		}
+		if request.CenterLon != 0 || request.CenterLat != 0 {
+			args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
+		}
+		args = append([]string{"-v", volumeSpec(samplesRoot, "/workspace", false)}, args...)
+		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-ingestion", args...); err != nil {
+			failures = append(failures, childID+": ingestion: "+err.Error())
+			continue
+		}
+		for _, model := range request.Models {
+			args, specErr := s.modelCommandArgs(request.DataID, model, childDir)
+			if specErr != nil {
+				failures = append(failures, childID+": "+specErr.Error())
+				continue
+			}
+			if err := s.runStage(ctx, directory, id, "sample-"+childID+"-"+model, args...); err != nil {
+				failures = append(failures, childID+": "+model+": "+err.Error())
+				continue
+			}
+		}
+		childManifest := map[string]any{}
+		raw, readErr := os.ReadFile(filepath.Join(childDir, "manifest.json"))
+		if readErr != nil || json.Unmarshal(raw, &childManifest) != nil {
+			failures = append(failures, childID+": child manifest missing")
+			continue
+		}
+		if len(request.ModelNames) > 0 {
+			names, _ := childManifest["model_names"].(map[string]any)
+			if names == nil {
+				names = map[string]any{}
+			}
+			for model, name := range request.ModelNames {
+				names[model] = name
+			}
+			childManifest["model_names"] = names
+			if err := s.writeManifestJSON(childDir, childManifest); err != nil {
+				failures = append(failures, childID+": "+err.Error())
+				continue
+			}
+		}
+		if firstManifest == nil {
+			firstManifest = childManifest
+		}
+		sample := map[string]any{}
+		if rawSample, ok := childManifest["sample"].(map[string]any); ok {
+			for key, value := range rawSample {
+				sample[key] = value
+			}
+		}
+		sample["path"] = filepath.ToSlash(filepath.Join("samples", childID))
+		samples = append(samples, sample)
+	}
+	if firstManifest == nil {
+		s.updateJob(id, "failed", "ingestion", fmt.Errorf("no sample window completed: %s", strings.Join(failures, "; ")))
+		return
+	}
+	batchManifest := map[string]any{
+		"schema": "nib.run.v1", "id": id, "batch": true,
+		"status": "ingested", "sample_count": len(samples), "samples": samples,
+		"sample": firstManifest["sample"], "data": firstManifest["data"],
+		"observations": firstManifest["observations"], "forecasts": firstManifest["forecasts"],
+		"diagnostics": []any{},
+	}
+	if names, ok := firstManifest["model_names"]; ok {
+		batchManifest["model_names"] = names
+	}
+	if len(failures) > 0 {
+		batchManifest["failed_samples"] = failures
+	}
+	if err := s.writeManifestJSON(directory, batchManifest); err != nil {
+		s.updateJob(id, "failed", "ingestion", err)
+		return
+	}
+	if len(request.Metrics) == 0 && !request.Visualization {
+		status := "succeeded"
+		if len(failures) > 0 {
+			status = "partial"
+		}
+		s.updateJob(id, status, "finished", nil)
+		return
+	}
+	s.updateJob(id, "running", "diagnostics", nil)
+	config := map[string]any{"version": 2, "run": "/run"}
+	if len(request.Metrics) > 0 {
+		config["metrics"] = request.Metrics
+		config["verification_models"] = request.VerificationModels
+	}
+	if request.Visualization {
+		config["visualization"] = map[string]any{"models": request.VisualizationModels, "basemap": "/basemap"}
+	}
+	operation, err := s.prepareDiagnostics(id, config, request.Visualization && dataResource.VisualizationBasemap)
+	if err != nil {
+		s.updateJob(id, "partial", "diagnostics", err)
+		return
+	}
+	s.jobsMu.Lock()
+	s.jobs[id].DiagnosticOperationID = operation.ID
+	err = writeJob(directory, s.jobs[id])
+	s.jobsMu.Unlock()
+	if err != nil {
+		s.updateJob(id, "partial", "diagnostics", err)
+		return
+	}
+	operation = s.executeDiagnostics(id, operation)
+	s.jobsMu.Lock()
+	s.jobs[id].ReportEntry = operation.ReportEntry
+	s.jobsMu.Unlock()
+	var diagnosticError error
+	if operation.Error != "" {
+		diagnosticError = fmt.Errorf("%s", operation.Error)
+	}
+	status := operation.Status
+	if status == "failed" {
+		status = "partial"
+	}
+	if status == "succeeded" && len(failures) > 0 {
+		status = "partial"
+	}
 	s.updateJob(id, status, "finished", diagnosticError)
 }
 

@@ -18,6 +18,7 @@ const (
 	defaultReviewPort      = 8766
 	defaultDiagnosticsHost = "127.0.0.1"
 	defaultDiagnosticsPort = 8767
+	defaultMaxBatchSamples = 32
 	defaultArtifacts       = "artifacts"
 	defaultRuns            = "runs"
 	defaultResources       = "."
@@ -42,10 +43,11 @@ type Paths struct {
 
 // Runtime configures host-side container control; browser requests cannot set these values.
 type Runtime struct {
-	DockerContext  string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
-	AllowedOrigins []string `yaml:"allowed_origins" json:"allowed_origins"`
-	Token          string   `yaml:"token,omitempty" json:"-"`
-	AtlasRevision  string   `yaml:"atlas_revision" json:"atlas_revision"`
+	DockerContext   string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
+	AllowedOrigins  []string `yaml:"allowed_origins" json:"allowed_origins"`
+	Token           string   `yaml:"token,omitempty" json:"-"`
+	AtlasRevision   string   `yaml:"atlas_revision" json:"atlas_revision"`
+	MaxBatchSamples int      `yaml:"max_batch_samples,omitempty" json:"max_batch_samples,omitempty"`
 }
 
 // Config is the host runtime settings loaded from config.yaml.
@@ -144,6 +146,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Paths.Resources == "" {
 		c.Paths.Resources = d.Paths.Resources
+	}
+	if c.Runtime.MaxBatchSamples == 0 {
+		c.Runtime.MaxBatchSamples = defaultMaxBatchSamples
 	}
 }
 

@@ -92,7 +92,7 @@ def _verification_root(run: Path) -> Path:
 def _visualization_models(run: Path) -> list[dict]:
     manifest = _read_json(run / "manifest.json")
     names = manifest.get("model_names") or {}
-    models: list[dict] = []
+    latest: dict[str, dict] = {}
     for attempt in manifest.get("diagnostics") or []:
         if not isinstance(attempt, dict):
             continue
@@ -104,6 +104,12 @@ def _visualization_models(run: Path) -> list[dict]:
         model_id = attempt.get("model_id")
         if not isinstance(path, str) or not isinstance(model_id, str):
             continue
+        # A retry appends another attempt. The result page shows the newest
+        # visualization per model, not one card per historical retry.
+        latest[model_id] = attempt
+    models: list[dict] = []
+    for model_id, attempt in latest.items():
+        path = attempt.get("path")
         directory = run / path
         if not directory.is_dir():
             continue
@@ -138,14 +144,18 @@ def _visualization_models(run: Path) -> list[dict]:
         )
     return models
 
-
 def _safe_visualization_file(run: Path, path: str) -> Path:
     candidate = (run / Path(path)).resolve()
     root = run.resolve()
     if root not in candidate.parents:
         raise HTTPException(status_code=404, detail="visualization file unavailable")
     relative = candidate.relative_to(root)
-    if relative.parts[:2] != ("diagnostics", "visualization"):
+    batch_visualization = (
+        len(relative.parts) >= 4
+        and relative.parts[0] == "samples"
+        and relative.parts[2:4] == ("diagnostics", "visualization")
+    )
+    if relative.parts[:2] != ("diagnostics", "visualization") and not batch_visualization:
         raise HTTPException(status_code=404, detail="visualization file unavailable")
     if not candidate.is_file():
         raise HTTPException(status_code=404, detail="visualization file unavailable")

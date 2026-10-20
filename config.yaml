@@ -41,4 +41,5 @@ runtime:
     # Remote demo Hub (parent nginx terminates TLS at this origin).
     - https://www.wmc-bj.net
   # Shared declarations including the CMA demo; matches the atlas submodule.
+  max_batch_samples: 32
   atlas_revision: "1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8"

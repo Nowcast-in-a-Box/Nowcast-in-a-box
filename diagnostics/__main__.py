@@ -35,6 +35,9 @@ def main():
     ):
         raise ValueError("invalid diagnostics operation identity")
     directory = Path(request["run"])
+    manifest = json.loads((directory / "manifest.json").read_text())
+    if manifest.get("samples"):
+        return _batch_main(directory, manifest, request)
     source = StoredFields(directory)
     results = []
     failed = False
@@ -115,6 +118,84 @@ def main():
         results.append(report)
     save_manifest(directory, source.manifest)
     print(json.dumps({"run_id": source.manifest["id"], "diagnostics": results}))
+    return 1 if failed else 0
+
+
+def _batch_main(directory, manifest, request):
+    results = []
+    failed = False
+    jobs = []
+    samples = manifest.get("samples") or []
+    children = [directory / item["path"] for item in samples]
+    if not children:
+        raise ValueError("batch run has no sample windows")
+    first = StoredFields(children[0])
+    if request.get("metrics"):
+        from diagnostics.verification_run import verification_batch
+
+        attempt_id = uuid.uuid4().hex
+        jobs.append((
+            "verification", None, attempt_id,
+            lambda attempt_id=attempt_id: verification_batch(
+                directory, samples, request["metrics"], attempt_id=attempt_id,
+                models=request.get("verification_models"),
+            ),
+        ))
+    if request.get("visualization"):
+        from diagnostics.visualization_run import visualization
+
+        config = request["visualization"]
+        for model in config["models"]:
+            if model not in first.manifest["forecasts"]:
+                raise ValueError("visualization selects a model without stored forecasts")
+            attempt_id = uuid.uuid4().hex
+            jobs.append((
+                "visualization", model, attempt_id,
+                lambda model=model, attempt_id=attempt_id: visualization(
+                    children[0], model, config["basemap"], attempt_id=attempt_id
+                ),
+            ))
+    if not jobs:
+        raise ValueError("select at least one diagnostic product")
+    for kind, model_id, attempt_id, job in jobs:
+        try:
+            result = job()
+            if kind == "visualization":
+                result = dict(result)
+                result["path"] = (Path(samples[0]["path"]) / result["path"]).as_posix()
+                result["entry"] = (Path(samples[0]["path"]) / result["entry"]).as_posix() if result.get("entry") else None
+            results.append(result)
+            failed = failed or result["status"] != "succeeded"
+        except Exception as exc:  # noqa: BLE001
+            failed = True
+            out = directory / "diagnostics" / kind / attempt_id
+            out.mkdir(parents=True, exist_ok=True)
+            error = {
+                "kind": kind, "id": attempt_id, "model_id": model_id,
+                "path": out.relative_to(directory).as_posix(),
+                "status": "failed", "error": str(exc),
+            }
+            (out / "summary.json").write_text(json.dumps(error, indent=2) + "\n")
+            manifest["diagnostics"].append(error)
+            results.append(error)
+            print(json.dumps(error), file=sys.stderr)
+    manifest["status"] = "partial" if failed else "succeeded"
+    recorded_ids = {item.get("id") for item in manifest.get("diagnostics", [])}
+    for result in results:
+        if result.get("id") not in recorded_ids:
+            manifest["diagnostics"].append(result)
+    operation_id = request.get("operation_id")
+    for result in results:
+        result["operation_id"] = operation_id
+        for recorded in manifest["diagnostics"]:
+            if recorded.get("id") == result.get("id"):
+                recorded["operation_id"] = operation_id
+    if results:
+        report = write_report(directory, results, operation_id=operation_id)
+        manifest["diagnostics"].append(report)
+        results.append(report)
+    save_manifest(directory, manifest)
+    print(json.dumps({"run_id": manifest["id"], "diagnostics": results}))
     return 1 if failed else 0
 
 

@@ -96,6 +96,9 @@ func configID(cfg Config) string {
 	cfg.Paths.Resources = canonicalPath(cfg.Paths.Resources)
 	cfg.Paths.WeightSource = canonicalPath(cfg.Paths.WeightSource)
 	cfg.Runtime.AllowedOrigins = nil
+	if cfg.Runtime.MaxBatchSamples == 0 {
+		cfg.Runtime.MaxBatchSamples = defaultMaxBatchSamples
+	}
 	body, _ := json.Marshal(struct {
 		Source, Handler, Review string
 		Config                  Config

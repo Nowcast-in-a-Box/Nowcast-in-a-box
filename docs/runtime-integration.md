@@ -110,3 +110,11 @@ This feature is still in integration. See the actual verification record and PR
 for completed container/browser checks; library tests or successful image builds
 alone do not prove a real inference run. Public HTTPS Hub deployment, other host
 platform execution and unavailable input cases must be reported separately.
+
+## Batch sample windows
+
+A package may put `sample_starts` on its single data item. The Handler keeps
+the one-window layout when exactly one start is present and uses a batch run
+with `samples/<index>` children when more are selected. Children are ingested
+and inferred independently; only verification aggregates their init times.
+The first selected child is used for the temporary single-case Visualization.
