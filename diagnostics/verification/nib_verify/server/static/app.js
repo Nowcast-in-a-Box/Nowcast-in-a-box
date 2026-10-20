@@ -1346,13 +1346,15 @@ async function runQuery() {
     showChart(params);
   } catch (error) {
       const limit = /over the \d+ limit/.test(error.message || "");
-      mount(host, limit
-        ? notice("bad", kindOf() === "mesh"
-            ? `This grid would take too many cells to draw at once (member × init × lead). Narrow the time range, or switch to a line along one axis.`
-            : `Too many points for this range. Narrow the time range, or pick a shorter axis.`)
-        : notice("bad", error.message));
-    $("#chart-card").hidden = true;
-    $("#chart-empty").hidden = false;
+      const msg = limit
+        ? kindOf() === "mesh"
+          ? `This grid would take too many cells to draw at once (member × init × lead). Narrow the time range, or switch to a line along one axis.`
+          : `Too many points for this range. Narrow the time range, or pick a shorter axis.`
+        : error.message;
+      mount(host, notice("bad", msg));
+      $("#chart-card").hidden = true;
+      $("#chart-empty").hidden = false;
+      $("#chart-empty").textContent = msg;    // the card says the same as the table
   }
 }
 
