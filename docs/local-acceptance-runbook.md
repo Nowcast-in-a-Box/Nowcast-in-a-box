@@ -108,10 +108,15 @@ before distribution.
 8. **Run.** Press `Start`. The browser submits the frozen package once and
    navigates to Local runs. Closing the page does not stop inference or the
    automatic diagnostics.
-9. **Open the result.** When the run finishes, press `Open result`. The page is
-   served from the Handler's registered result files. Switch between
-   `Visualization` and `Metrics` with the keyboard; the selected panel changes
-   without JavaScript.
+9. **Open the result.** When the run finishes, press `Open result`. Handler
+   starts one diagnostics result viewer and proxies it on the existing result
+   listener; the page contains `Visualization` and `Metrics` tabs in one
+   document. The diagnostics viewer address comes from `config.yaml`; it is not
+   selected by the browser. Switch tabs and exercise the metric query in the
+   Metrics view.
+
+The result viewer uses `diagnostics.host` and `diagnostics.port` in
+`config.yaml`. Its container is stopped when Handler stops.
 
 ## 5. Evidence to capture
 

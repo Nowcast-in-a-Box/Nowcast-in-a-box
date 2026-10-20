@@ -94,19 +94,45 @@ const state = {
   hidden: [],            // members the legend has been clicked off
 };
 
-// ---------------------------------------------------------------- tabs
-function showTab(name) {
-  if (state.poll && name !== "configs") { clearTimeout(state.poll); state.poll = null; }
-  for (const button of $$("#tabs button")) {
-    button.setAttribute("aria-selected", String(button.dataset.tab === name));
+// ---------------------------------------------------------------- result views
+function showView(name) {
+  for (const section of $$(".result-view")) {
+    section.hidden = section.dataset.view !== name;
   }
-  for (const section of $$("main > section")) {
-    section.hidden = section.id !== `tab-${name}`;
+  for (const button of $$(".result-tabs button")) {
+    button.setAttribute("aria-selected", String(button.dataset.view === name));
   }
-  if (name === "results") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
+  if (name === "metrics") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
 }
 
-$$("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+$$(".result-tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
+
+async function loadVisualization() {
+  const host = $("#visualization-body");
+  if (!host) { return; }
+  try {
+    const res = await fetch("/visualization", { cache: "no-store", credentials: "omit" });
+    if (!res.ok) { throw new Error(`visualization returned ${res.status}`); }
+    const data = await res.json();
+    if ($("#result-meta") && data.run_id) {
+      $("#result-meta").textContent = data.sample_id || data.run_id;
+    }
+    const models = data.models || [];
+    if (!models.length) {
+      mount(host, empty(data.message || "No visualization was selected for this run."));
+      return;
+    }
+    mount(host, models.map(model => h("section", { class: "card viz-model" },
+      h("h2", { text: model.name || model.id }),
+      model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
+      h("div", { class: "viz-artifacts" }, (model.images || []).map(image =>
+        h("figure", { class: "viz-shot" },
+          h("img", { src: image.url, alt: image.alt || image.caption || "" }),
+          h("figcaption", { text: image.caption || "" })))))));
+  } catch (error) {
+    mount(host, notice("bad", `Could not load visualization: ${error.message}`));
+  }
+}
 
 // ==================================================================
 // Configs
@@ -1652,10 +1678,10 @@ function syncMethodChips() {
 
 
 async function boot() {
-  await Promise.all([loadConfigs(), loadCatalog(), loadMetrics()]);
+  await Promise.all([loadConfigs(), loadCatalog(), loadMetrics(), loadVisualization()]);
   // renderMembers is the roster editor of the removed New config panel.
   renderMetricGroups();
-  showTab("results");
+  showView("visualization");
 }
 
 boot();

@@ -12,15 +12,17 @@ import (
 )
 
 const (
-	defaultHandlerHost = "127.0.0.1"
-	defaultHandlerPort = 8765
-	defaultReviewHost  = "127.0.0.1"
-	defaultReviewPort  = 8766
-	defaultArtifacts   = "artifacts"
-	defaultRuns        = "runs"
-	defaultResources   = "."
-	configFileName     = "config.yaml"
-	settingsFileName   = "nib-settings.json"
+	defaultHandlerHost     = "127.0.0.1"
+	defaultHandlerPort     = 8765
+	defaultReviewHost      = "127.0.0.1"
+	defaultReviewPort      = 8766
+	defaultDiagnosticsHost = "127.0.0.1"
+	defaultDiagnosticsPort = 8767
+	defaultArtifacts       = "artifacts"
+	defaultRuns            = "runs"
+	defaultResources       = "."
+	configFileName         = "config.yaml"
+	settingsFileName       = "nib-settings.json"
 )
 
 // Addr is a loopback bind address from config.yaml.
@@ -52,6 +54,7 @@ type Config struct {
 	Source           string            `yaml:"-" json:"-"`
 	Handler          Addr              `yaml:"handler"`
 	Review           Addr              `yaml:"review"`
+	Diagnostics      Addr              `yaml:"diagnostics"`
 	Paths            Paths             `yaml:"paths"`
 	Runtime          Runtime           `yaml:"runtime"`
 	DataRoots        map[string]string `yaml:"-" json:"-"`
@@ -62,9 +65,10 @@ type Config struct {
 // no config file is found.
 func DefaultConfig() Config {
 	return Config{
-		Handler: Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
-		Review:  Addr{Host: defaultReviewHost, Port: defaultReviewPort},
-		Paths:   Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Resources: defaultResources},
+		Handler:     Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
+		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
+		Diagnostics: Addr{Host: defaultDiagnosticsHost, Port: defaultDiagnosticsPort},
+		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Resources: defaultResources},
 	}
 }
 
@@ -125,6 +129,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Review.Port == 0 {
 		c.Review.Port = d.Review.Port
+	}
+	if c.Diagnostics.Host == "" {
+		c.Diagnostics.Host = d.Diagnostics.Host
+	}
+	if c.Diagnostics.Port == 0 {
+		c.Diagnostics.Port = d.Diagnostics.Port
 	}
 	if c.Paths.Artifacts == "" {
 		c.Paths.Artifacts = d.Paths.Artifacts

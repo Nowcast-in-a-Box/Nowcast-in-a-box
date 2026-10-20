@@ -38,7 +38,7 @@ def test_diagnostics_retains_incomplete_attempt_and_forecasts(
     report = manifest["diagnostics"][-1]
     assert report["kind"] == "report" and report["status"] == "partial"
     assert report["attempt_ids"] == [attempt["id"]]
-    assert (run / report["entry"]).is_file()
+    assert not (run / report["entry"]).exists()
     assert attempt["status"] == expected
     summary = json.loads((run / attempt["path"] / "summary.json").read_text())
     assert summary["status"] == expected

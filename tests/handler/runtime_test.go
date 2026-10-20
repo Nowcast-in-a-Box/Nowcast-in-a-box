@@ -231,19 +231,16 @@ func TestRegisteredResultsAndRestartedJob(t *testing.T) {
 	if out.Code != 200 || !bytes.Contains(out.Body.Bytes(), []byte("interrupted")) {
 		t.Fatal(out.Code, out.Body.String())
 	}
-	for _, tc := range []struct {
-		path   string
-		status int
-	}{
-		{"diagnostics/verification/attempt/index.html", 200},
-		{"manifest.json", 403},
-		{"diagnostics/verification/unknown/index.html", 403},
+	for _, path := range []string{
+		"diagnostics/verification/attempt/index.html",
+		"manifest.json",
+		"diagnostics/verification/unknown/index.html",
 	} {
-		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/v1/runs/run-one/files/"+tc.path, nil)
+		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/v1/runs/run-one/files/"+path, nil)
 		out := httptest.NewRecorder()
 		server.Routes().ServeHTTP(out, req)
-		if out.Code != tc.status {
-			t.Fatalf("%s: %d %s", tc.path, out.Code, out.Body.String())
+		if out.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s: %d %s", path, out.Code, out.Body.String())
 		}
 	}
 }

@@ -49,7 +49,11 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/jobs/{id}/log", s.authorize(s.handleJobLog))
 	mux.HandleFunc("GET /v1/runs", s.authorize(s.handleRuns))
 	mux.HandleFunc("GET /v1/runs/{id}", s.authorize(s.handleRun))
-	mux.HandleFunc("GET /v1/runs/{id}/files/{file...}", s.handleResultFile)
+	mux.HandleFunc("GET /v1/runs/{id}/files/{file...}", s.handleDiagnosticsPage)
+	mux.HandleFunc("GET /api/{path...}", s.handleDiagnosticsPage)
+	mux.HandleFunc("GET /static/{path...}", s.handleDiagnosticsPage)
+	mux.HandleFunc("GET /visualization", s.handleDiagnosticsPage)
+	mux.HandleFunc("GET /visualization/{path...}", s.handleDiagnosticsPage)
 }
 
 func (s *Server) docker(ctx context.Context, args ...string) (int, []byte, error) {

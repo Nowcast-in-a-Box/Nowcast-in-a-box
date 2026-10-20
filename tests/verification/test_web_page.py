@@ -142,10 +142,7 @@ def test_every_static_file_on_disk_is_reachable():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     for path in sorted(STATIC.iterdir()):
         if path.is_file() and path.name != "index.html":
-            # The shell wraps index.html; the reverse is not a rule. A file that
-            # the page never asks for is dead, and a file that loads the page is not.
-            if path.name != "shell.html":
-                assert path.name in html, f"{path.name} is never loaded by index.html"
+            assert path.name in html, f"{path.name} is never loaded by index.html"
 
 
 def test_the_chart_is_an_image_the_page_can_load():

@@ -44,8 +44,11 @@ func commandConfig(args []string) (Config, []string, error) {
 	if err := RequireLoopbackHost(cfg.Review.Host); err != nil {
 		return Config{}, nil, fmt.Errorf("review host: %w", err)
 	}
-	if cfg.Handler.Port < 1 || cfg.Handler.Port > 65535 || cfg.Review.Port < 1 || cfg.Review.Port > 65535 {
-		return Config{}, nil, fmt.Errorf("handler and review ports must be in 1..65535")
+	if err := RequireLoopbackHost(cfg.Diagnostics.Host); err != nil {
+		return Config{}, nil, fmt.Errorf("diagnostics host: %w", err)
+	}
+	if cfg.Handler.Port < 1 || cfg.Handler.Port > 65535 || cfg.Review.Port < 1 || cfg.Review.Port > 65535 || cfg.Diagnostics.Port < 1 || cfg.Diagnostics.Port > 65535 {
+		return Config{}, nil, fmt.Errorf("handler, review and diagnostics ports must be in 1..65535")
 	}
 	return cfg, fs.Args(), nil
 }
@@ -203,6 +206,7 @@ func serve(cfg Config) int {
 	defer reviewListener.Close()
 
 	srv := NewServer(cfg)
+	defer srv.stopDiagnosticsViewer()
 	if err := saveSession(cfg, localSession{ConfigID: configID(cfg), InstanceID: srv.instanceID, URL: addressURL(cfg.Handler), ReviewURL: addressURL(cfg.Review), PID: os.Getpid(), Token: srv.Token}); err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot create private local control session: %v\n", err)
 		return 1

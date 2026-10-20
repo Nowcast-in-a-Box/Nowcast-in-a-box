@@ -97,10 +97,12 @@ provenance, SQLite or rendering manifest, summary, logs and webpage. Adding a ne
 threshold supplements quantities from stored Forecasts; it never invokes ONNX.
 Existing threshold queries use SQLite only.
 
-Go exposes registered HTML/SVG/PNG/GIF result files on loopback, with containment
-checks and a restrictive content policy. Runs is an independent Hub destination,
-not merely a link from an order. Its diagnostic retry starts a new attempt from
-saved Forecasts, never overwrites previous report output and never reruns models.
+Handler starts one diagnostics result viewer on a loopback address from
+`config.yaml`; the viewer serves Visualization and Metrics in one document and
+Handler proxies it through the existing result listener. There is no second
+metrics container and no iframe. Runs is an independent Hub destination, not
+merely a link from an order. Its diagnostic retry starts a new attempt from
+saved Forecasts, never overwrites previous attempts and never reruns models.
 
 ## Validation status
 

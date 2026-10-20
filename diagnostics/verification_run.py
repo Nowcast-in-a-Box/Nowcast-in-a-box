@@ -1,7 +1,6 @@
 """Verification execution over immutable stored Forecasts, without inference."""
 
 from datetime import datetime
-from html import escape
 import json
 from pathlib import Path
 import uuid
@@ -13,7 +12,6 @@ from nib_verify.config.schema import VerificationConfig, Ruler, Member, MetricGr
 from nib_verify.runner import run_tasks, RunRef
 from nib_verify.store import Store
 from nib_verify.query import query_scores
-from nib_verify.report import chart_for, line_chart
 
 from utils.stored_fields import save_manifest
 
@@ -99,10 +97,9 @@ def verification(directory, metrics, *, attempt_id=None, models=None):
             **stats.as_dict(),
             "scores": {},
         }
-        images = []
         for group in cfg.metrics:
             for method in group.items:
-                query = query_scores(
+                summary["scores"][method] = query_scores(
                     store,
                     cfg,
                     method=method,
@@ -113,43 +110,15 @@ def verification(directory, metrics, *, attempt_id=None, models=None):
                         *(["half_window"] if group.half_windows else []),
                     ],
                 )
-                summary["scores"][method] = query
-                svg = line_chart(
-                    chart_for(
-                        store,
-                        cfg,
-                        method=method,
-                        series=(
-                            "member",
-                            *(["level"] if group.levels else []),
-                            *(["half_window"] if group.half_windows else []),
-                        ),
-                    )
-                )
-                (out / f"{method}.svg").write_text(svg)
-                images.append(
-                    f'<h2>{escape(method)}</h2><img src="{escape(method)}.svg" alt="{escape(method)} score by lead">'
-                )
         store.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     (out / "summary.json").write_text(
         json.dumps(summary, indent=2, allow_nan=False) + "\n"
-    )
-    (out / "index.html").write_text(
-        '<!doctype html><meta charset="utf-8"><title>NiB verification</title>'
-        + "<h1>Verification</h1><p>"
-        + escape(cfg.name)
-        + "</p>"
-        + "<p>Status: "
-        + summary["status"]
-        + "</p>"
-        + "".join(images)
     )
     attempt = {
         "kind": "verification",
         "id": attempt_id,
         "status": summary["status"],
         "path": out.relative_to(Path(directory)).as_posix(),
-        "entry": (out / "index.html").relative_to(Path(directory)).as_posix(),
     }
     manifest["diagnostics"].append(attempt)
     save_manifest(directory, manifest)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NiB verification</title>
+<title>NiB diagnostics</title>
 <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAm0lEQVR42mNkwAK0cr/8Z6ABuDaZhxFdjJEeFuNzCBO9LUe3i4nelqM7golhgAHjQPgeGQx4CAy4A1go0Xx1EjecrZ33lb4hgGw5Nv5oGhh1wPDKhtTIbmSHALWy2/AsCakRZUy0tJyYKBvNhqMOIOgA9FQM45MqPtomxOkAbN0leoFrk3kYB0ciHIhQgNnJhK/nSo/OKeNAd88Bl8o/Qv8ybkgAAAAASUVORK5CYII=">
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -12,6 +12,24 @@
 
 
 <main>
+<header class="page-head">
+  <div>
+    <h1>Diagnostics</h1>
+    <p class="muted" id="result-meta">Current run</p>
+  </div>
+  <nav class="result-tabs" role="tablist" aria-label="Diagnostic result views">
+    <button type="button" role="tab" data-view="visualization" aria-controls="view-visualization" aria-selected="true">Visualization</button>
+    <button type="button" role="tab" data-view="metrics" aria-controls="view-metrics" aria-selected="false">Metrics</button>
+  </nav>
+</header>
+
+<section id="view-visualization" class="result-view" data-view="visualization" role="tabpanel">
+  <div id="visualization-body" class="visualization-body">
+    <div class="empty">Loading visualization…</div>
+  </div>
+</section>
+
+<section id="view-metrics" class="result-view" data-view="metrics" role="tabpanel" hidden>
 <!-- ==================================================== results -->
 <section id="tab-results">
   <div class="split">
@@ -19,7 +37,8 @@
     <!-- left: what to ask -->
     <div class="ask">
       <div class="card">
-        <h2>Query</h2>
+        <h2>Query</h2>
+
 
         <div class="row" style="gap:10px; margin-bottom:10px">
           <div class="field" style="flex:1 1 0; min-width:0">
@@ -109,6 +128,7 @@
       <div id="query-result"></div>
 
   </div>
+</section>
 </section>
 
 </main>

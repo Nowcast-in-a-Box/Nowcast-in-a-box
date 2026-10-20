@@ -1,73 +1,67 @@
 import json
 
-from diagnostics.__main__ import write_report
+from fastapi.testclient import TestClient
+
+from diagnostics.diagnostics_server import build_app
 
 
-def test_combined_report_keeps_map_and_scores_in_one_directory(tmp_path):
+def make_run(tmp_path):
     run = tmp_path / "run"
-    pictures = run / "diagnostics" / "visualization" / "picture"
-    scores = run / "diagnostics" / "verification" / "score"
-    pictures.mkdir(parents=True)
-    scores.mkdir(parents=True)
-    (pictures / "map.png").write_bytes(b"png")
-    (scores / "mae.svg").write_text("<svg></svg>")
-    report = write_report(
-        run,
-        [
-            {
-                "kind": "visualization",
-                "entry": "diagnostics/visualization/picture/index.html",
-            },
-            {
-                "kind": "verification",
-                "entry": "diagnostics/verification/score/index.html",
-            },
-        ],
-    )
-    page = (run / report["entry"]).read_text()
-    assert 'src="0-map.png"' in page and 'src="1-mae.svg"' in page
-    assert 'name="view"' in page and "Visualization" in page and "Metrics" in page
-    assert "<script" not in page and 'role="tab"' not in page
-    assert 'type="radio"' in page and ":focus-visible" in page
-    assert (run / report["path"] / "0-map.png").samefile(pictures / "map.png")
-
-
-def test_combined_report_keeps_all_model_maps_without_name_collisions(tmp_path):
-    (tmp_path / "manifest.json").write_text(
+    picture = run / "diagnostics" / "visualization" / "picture"
+    picture.mkdir(parents=True)
+    (picture / "map.png").write_bytes(b"png")
+    (picture / "animation.gif").write_bytes(b"gif")
+    (run / "manifest.json").write_text(
         json.dumps(
             {
-                "model_names": {
-                    "nowcastnet": "NowcastNet",
-                    "exprecast": "exPreCast",
-                    "wadepre": "WADEPre",
-                }
+                "schema": "nib.run.v1",
+                "id": "run-one",
+                "sample": {"sample_id": "S700003"},
+                "model_names": {"wadepre": "WADEPre"},
+                "diagnostics": [
+                    {
+                        "kind": "visualization",
+                        "status": "succeeded",
+                        "model_id": "wadepre",
+                        "path": "diagnostics/visualization/picture",
+                    }
+                ],
             }
         )
     )
-    results = []
-    for model in ("nowcastnet", "exprecast", "wadepre"):
-        source = tmp_path / "diagnostics" / "visualization" / model
-        source.mkdir(parents=True)
-        (source / "map.png").write_bytes(model.encode())
-        (source / "animation.gif").write_bytes(model.encode())
-        results.append(
-            {
-                "kind": "visualization",
-                "model_id": model,
-                "entry": f"diagnostics/visualization/{model}/index.html",
-            }
+    return run
+
+
+def test_the_result_page_has_both_views_in_one_document(tmp_path):
+    run = make_run(tmp_path)
+    with TestClient(build_app(run)) as client:
+        page = client.get("/")
+        assert page.status_code == 200
+        assert "NiB diagnostics" in page.text
+        assert 'data-view="visualization"' in page.text
+        assert 'data-view="metrics"' in page.text
+        assert "iframe" not in page.text
+        assert "Content-Security-Policy" in page.headers
+        assert "frame-ancestors 'none'" in page.headers["Content-Security-Policy"]
+
+
+def test_visualization_is_a_same_origin_artifact_list(tmp_path):
+    run = make_run(tmp_path)
+    with TestClient(build_app(run)) as client:
+        body = client.get("/visualization").json()
+        assert body["run_id"] == "run-one"
+        assert body["sample_id"] == "S700003"
+        assert body["models"][0]["name"] == "WADEPre"
+        urls = {image["url"] for image in body["models"][0]["images"]}
+        assert "/visualization/diagnostics/visualization/picture/map.png" in urls
+        assert client.get(next(iter(urls))).content in (b"png", b"gif")
+
+
+def test_a_result_url_serves_the_same_page(tmp_path):
+    run = make_run(tmp_path)
+    with TestClient(build_app(run)) as client:
+        page = client.get(
+            "/v1/runs/run-one/files/diagnostics/report/current/index.html"
         )
-    report = write_report(tmp_path, results)
-    out = tmp_path / report["path"]
-    page = (tmp_path / report["entry"]).read_text()
-    for index, (model, name) in enumerate(
-        (
-            ("nowcastnet", "NowcastNet"),
-            ("exprecast", "exPreCast"),
-            ("wadepre", "WADEPre"),
-        )
-    ):
-        assert name in page
-        for filename in ("map.png", "animation.gif"):
-            assert (out / f"{index}-{filename}").read_bytes() == model.encode()
-            assert f'src="{index}-{filename}"' in page
+        assert page.status_code == 200
+        assert "NiB diagnostics" in page.text

@@ -75,9 +75,10 @@ It keeps `runs/`, `artifacts/`, and your data folder for inspection. Add
 artifacts, resources, logs, and downloaded Handler binaries as well. `--purge`
 never removes the external data folder.
 
-The root `config.yaml` holds host settings only: ports, paths, trusted Hub
-origins and the Atlas revision. It never selects a dataset or container. The
-Hub chooses the dataset from the packaged `runtime.yaml` manifests.
+The root `config.yaml` holds host settings only: handler, review and diagnostics
+viewer addresses, paths, trusted Hub origins and the Atlas revision. It never
+selects a dataset or container. The Hub chooses the dataset from the packaged
+`runtime.yaml` manifests.
 
 
 

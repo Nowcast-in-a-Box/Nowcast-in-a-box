@@ -12,6 +12,12 @@ review:
   host: 127.0.0.1
   port: 8766
 
+# Loopback result viewer. The Handler starts one diagnostics container that
+# serves both Visualization and Metrics, then proxies it on the review listener.
+diagnostics:
+  host: 127.0.0.1
+  port: 8767
+
 paths:
   # Downloaded weights and docker files. Relative to this file.
   artifacts: artifacts

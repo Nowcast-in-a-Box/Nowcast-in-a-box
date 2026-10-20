@@ -16,7 +16,7 @@ func (s *Server) originControl(next http.Handler) http.Handler {
 			return
 		}
 		if origin != "" {
-			permitted := false
+			permitted := origin == "http://"+r.Host
 			for _, allowed := range s.currentConfig().Runtime.AllowedOrigins {
 				if origin == allowed {
 					permitted = true

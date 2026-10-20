@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -140,77 +139,4 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, manifest)
-}
-
-func (s *Server) resultFilePath(id, name string, manifest map[string]any) (string, int, error) {
-	clean := filepath.FromSlash(name)
-	if filepath.IsAbs(clean) || filepath.Clean(clean) != clean || strings.Contains(name, "\\") {
-		return "", 400, fmt.Errorf("invalid artifact path")
-	}
-	switch strings.ToLower(filepath.Ext(clean)) {
-	case ".html", ".png", ".gif", ".svg":
-	default:
-		return "", 403, fmt.Errorf("only registered result files are served")
-	}
-	allowed := false
-	attempts, _ := manifest["diagnostics"].([]any)
-	for _, value := range attempts {
-		attempt, ok := value.(map[string]any)
-		if !ok || attempt["status"] != "succeeded" && attempt["status"] != "partial" {
-			continue
-		}
-		prefix, _ := attempt["path"].(string)
-		if prefix != "" && strings.HasPrefix(name, prefix+"/") {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
-		return "", 403, fmt.Errorf("result is not registered")
-	}
-	root, err := filepath.EvalSymlinks(filepath.Join(s.Config.Paths.Runs, id))
-	if err != nil {
-		return "", 404, err
-	}
-	target, err := filepath.EvalSymlinks(filepath.Join(root, clean))
-	if err != nil {
-		return "", 404, err
-	}
-	rel, err := filepath.Rel(root, target)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", 403, fmt.Errorf("artifact escapes run")
-	}
-	info, err := os.Stat(target)
-	if err != nil || !info.Mode().IsRegular() {
-		return "", 404, fmt.Errorf("result file unavailable")
-	}
-	return target, http.StatusOK, nil
-}
-
-func (s *Server) handleResultFile(w http.ResponseWriter, r *http.Request) {
-	id, name := r.PathValue("id"), r.PathValue("file")
-	manifest, err := s.runManifest(id)
-	if err != nil {
-		runtimeError(w, 404, err)
-		return
-	}
-	target, status, err := s.resultFilePath(id, name, manifest)
-	if err != nil {
-		runtimeError(w, status, err)
-		return
-	}
-	info, err := os.Stat(target)
-	if err != nil {
-		runtimeError(w, 404, err)
-		return
-	}
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
-	file, err := os.Open(target)
-	if err != nil {
-		runtimeError(w, 404, err)
-		return
-	}
-	defer file.Close()
-	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
