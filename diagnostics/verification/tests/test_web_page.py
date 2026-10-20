@@ -13,6 +13,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import nib_verify
+
 import pytest
 
 from nib_verify.catalog.hostconfig import load as load_host
@@ -20,7 +22,10 @@ from nib_verify.server import create_app
 
 from .conftest import make_access, make_config
 
-STATIC = Path(__file__).resolve().parents[1] / "nib_verify" / "server" / "static"
+# From the module, not from this file: a test that counts
+# directories breaks the moment it is moved to the layout
+# the repository actually uses.
+STATIC = Path(nib_verify.__file__).parent / "server" / "static"
 
 #: the page writes a call either literally or as a template string with an id
 #: interpolated into it, so the match has to allow the interpolated expression
