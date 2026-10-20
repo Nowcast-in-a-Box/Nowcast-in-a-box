@@ -1585,7 +1585,7 @@ function renderScores(result) {
   const head = h("tr", {},
     dims.map(d => h("th", { text: d })),
     h("th", { class: "num", text: result.meta.label }),
-    h("th", { class: "num", text: "samples" }));
+    h("th", { class: "num", title: "valid grid cells in this aggregate, not the number of forecast cases", text: "valid cells" }));
   const body = usable.map(r => h("tr", {},
     dims.map(d => h("td", { class: d === "valid_time" || d === "init_time" ? "mono" : "", text: r[d] == null ? "—" : String(r[d]) })),
     h("td", { class: "num", text: r.value == null ? "—" : Number(r.value).toFixed(4) }),
@@ -1594,7 +1594,7 @@ function renderScores(result) {
   return h("div", {},
     h("div", { class: "row", style: "margin-top:12px" },
       pill(`${usable.length} record(s)`),
-      pill(`${num(usable.reduce((a, r) => a + r.n_valid, 0))} valid samples`),
+      pill(`${num(usable.reduce((a, r) => a + r.n_valid, 0))} valid cells`),
       pill(`ruler ${result.meta.group ? result.meta.group.ruler.fingerprint : "—"}`),
       h("span", { class: "spacer" }),
       // Beside the table and not in the chart card: this is the table, saved.
@@ -1603,7 +1603,7 @@ function renderScores(result) {
         title: "Save the rows below as a CSV file",
         onclick: () => saveCsv(result) })),
     dropped ? h("p", { class: "tiny muted" },
-      `${dropped} group(s) had no samples and are not shown.`) : null,
+      `${dropped} group(s) had no valid cells and are not shown.`) : null,
     h("div", { class: "scroll", style: "margin-top:10px" },
       h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
 }
@@ -1622,7 +1622,7 @@ function saveCsv(result) {
     `# config ${(meta.group || {}).id || "?"}, `
       + `ruler ${((meta.group || {}).ruler || {}).fingerprint || "?"}`,
     `# filters ${JSON.stringify(meta.s || {})}`,
-    ["method", ...dims, "value", "samples"].join(","),
+    ["method", ...dims, "value", "valid_cells"].join(","),
   ];
   for (const row of result.records) {
     const cells = [meta.method, ...dims.map(d => row[d]), row.value, row.n_valid];
