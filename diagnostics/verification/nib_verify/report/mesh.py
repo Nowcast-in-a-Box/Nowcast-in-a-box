@@ -285,8 +285,13 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
         out.append(f'<rect x="{left}" y="{y}" width="{panel_w}" height="{panel_h}" '
                    f'fill="none" stroke="#9aa5b1" stroke-width="0.6"/>')
 
-        # y ticks: leads, bottom to top
+        # y ticks: leads, bottom to top, skipped the way the x ticks are skipped
+        # below: a mesh cell is often shorter than a line of text, and one label
+        # per lead then stacks into a grey smear at the axis.
+        y_stride = max(1, -(-14 // cell))
         for row, lead in enumerate(mesh.y_values):
+            if row % y_stride and row != len(mesh.y_values) - 1:
+                continue      # the far lead is where the axis stops: say so
             py = y + (nrow - 1 - row) * cell + cell / 2 + 3.5
             out.append(f'<text x="{left - 8}" y="{py}" font-size="{fs(10)}" fill="#414b57" '
                        f'text-anchor="end">{_esc(_short(lead))}</text>')
