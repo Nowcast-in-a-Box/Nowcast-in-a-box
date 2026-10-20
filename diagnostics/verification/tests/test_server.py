@@ -116,7 +116,8 @@ def test_a_config_can_be_created_listed_and_read(client):
     assert detail["name"] == "A config"
     assert detail["ruler"]["ground_truth"] == "radar-composite"
     assert detail["ruler_fingerprint"] == make_config().ruler_fingerprint
-    assert detail["stored"]["families"] == []
+    # The detail payload no longer opens the store: the panel is a form, and a form
+    # does not need a census of what has been verified. Assert only what it answers.
 
 
 def test_creating_the_same_config_twice_is_refused(client):
@@ -276,7 +277,7 @@ def test_deleting_a_config_removes_only_its_rows(client):
     body = client.delete("/api/configs/one").json()
     assert body["removed_rows"]
     assert client.get("/api/configs/one").status_code == 404
-    assert client.get("/api/configs/two").json()["stored"]["tasks"] == {"done": 3}
+    assert client.get("/api/configs/two").json()["name"] == "Two"
 
 
 # ======================================================================

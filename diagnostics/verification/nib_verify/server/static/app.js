@@ -1018,7 +1018,7 @@ async function onConfigPicked() {
   // the wall clock is right for a live system and an empty page for a replayed
   // one, and the page has no way to tell the two apart -- so the window opens on
   // the most recent week this config was actually verified over.
-  state.initSpan = (cfg.stored || {}).init_span || null;
+  state.initSpan = cfg.init_span || null;
   state.leads = cfg.leads || [];
   fillInitDefaults();
   fillLeadDefaults();
@@ -1029,7 +1029,6 @@ async function onConfigPicked() {
   mount(select, available.map(m => h("option", { value: m.method, text: m.method })));
   if (previous && available.some(m => m.method === previous)) select.value = previous;
   if (available.length) await onMethodPicked();
-  renderCoverage(cfg);
 }
 
 //: The default window: seven days.
@@ -1486,17 +1485,6 @@ $("#q-method").addEventListener("change", onMethodPicked);
 $("#q-axis").addEventListener("change", () => {
   if (state.lastQuery) runQuery(); else renderKindChips();
 });
-
-function renderCoverage(cfg) {
-  const stored = cfg.stored || {};
-  const counts = Object.entries(stored.tasks || {});
-  mount($("#coverage"),
-    counts.length
-      ? h("div", { class: "chips" }, counts.map(([s, n]) => pill(`${s}: ${num(n)}`, s === "failed" ? "bad" : s === "done" ? "ok" : "")))
-      : empty("Nothing verified under this config yet."),
-    h("p", { class: "tiny muted" }, `families: ${(stored.families || []).join(", ") || "none"}`
-      + (stored.missing_obs_times ? ` · ${stored.missing_obs_times} missing observation time(s)` : "")));
-}
 
 function renderScores(result) {
   // The store always answers, even when nothing matched: an ungrouped query

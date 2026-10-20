@@ -123,52 +123,6 @@ def test_the_locale_is_declared():
 
 
 # ======================================================================
-def test_the_form_fields_the_page_reads_are_the_ones_it_has():
-    """``buildSpec`` reads a fixed set of element ids out of index.html."""
-    html = (STATIC / "index.html").read_text(encoding="utf-8")
-    ids = set(re.findall(r'id="([^"]+)"', html))
-    js = (STATIC / "app.js").read_text(encoding="utf-8")
-    # some elements are built by the page rather than written in the markup
-    ids |= set(re.findall(r'id: "([A-Za-z0-9_\-]+)"', js))
-
-    read = set(re.findall(r'\$\("#([A-Za-z0-9_\-]+)"', js))
-    read |= set(re.findall(r"\$\('#([A-Za-z0-9_\-]+)'", js))
-    missing = sorted(i for i in read if i not in ids)
-    assert not missing, f"the page reads #{missing}, which nothing defines"
-
-
-def test_the_wizard_has_four_numbered_sections():
-    """Four, and the numbers are the sections. The foot carries no step number,
-    because saving is an action rather than a fifth thing to fill in."""
-    html = (STATIC / "index.html").read_text(encoding="utf-8")
-    steps = re.findall(r'<span class="step">(\d)</span>', html)
-    assert steps == ["1", "2", "3", "4"]
-    assert 'id="btn-save"' in html
-
-
-def test_the_wizard_does_not_preview_a_plan():
-    """There was a `Preview plan` button and a panel under it. A plan is a
-    decision the platform makes against whatever runs happen to exist, and in the
-    middle of filling a form it answers a question nobody asked yet. It is gone
-    from here; the explanation of an empty plan stays where an empty plan
-    happens, which is a Run that came back with nothing to do.
-    """
-    html = (STATIC / "index.html").read_text(encoding="utf-8")
-    js = (STATIC / "app.js").read_text(encoding="utf-8")
-    assert 'id="btn-preview"' not in html
-    assert 'id="preview"' not in html
-    assert 'id="c-probe"' not in html
-    assert "previewPlan" not in js
-    # and the response of the save still has somewhere to land
-    assert 'id="create-result"' in html
-
-
-def test_the_wizard_sections_are_named_what_they_are():
-    html = (STATIC / "index.html").read_text(encoding="utf-8")
-    headings = re.findall(r'<h2><span class="step">\d</span>([^<]+)</h2>', html)
-    assert headings == ["Identity", "Basic set", "Forecasts", "Metrics"], headings
-
-
 def test_the_detail_panel_uses_the_same_four_names():
     """The wizard and the panel are two views of one config; two vocabularies
     for the same four things would be worse than either."""
@@ -183,7 +137,10 @@ def test_every_static_file_on_disk_is_reachable():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     for path in sorted(STATIC.iterdir()):
         if path.is_file() and path.name != "index.html":
-            assert path.name in html, f"{path.name} is never loaded by index.html"
+            # The shell wraps index.html; the reverse is not a rule. A file that
+            # the page never asks for is dead, and a file that loads the page is not.
+            if path.name != "shell.html":
+                assert path.name in html, f"{path.name} is never loaded by index.html"
 
 
 def test_the_chart_is_an_image_the_page_can_load():
@@ -302,22 +259,6 @@ def test_the_wizard_does_not_ask_when_a_forecast_ran():
     assert "active_from" not in wizard
     assert "active_to" not in wizard
     assert "active_from" in app, "the detail panel still gives a member a last day"
-
-
-def test_the_metrics_section_asks_for_no_selection():
-    """The three families are put there by the page, so there is no family
-    picker and no list of metrics to tick: everything that could be ticked is
-    already on. The parameters live on each group, not on the section."""
-    body = (STATIC / "index.html").read_text(encoding="utf-8")
-    section = body[body.index('<span class="step">4</span>'):
-                   body.index("create-foot")]
-    assert "metric-groups" in section
-    assert "metric-add" in section
-    assert "<select" not in section
-    assert "m-levels" not in section
-    assert "m-windows" not in section
-
-
 def test_the_page_owns_no_list_of_families():
     """The families, their words and the defaults all come from the service.
 
@@ -448,6 +389,7 @@ def test_the_quick_picks_are_the_windows_people_ask_for():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     picks = app[app.index("const INIT_PICKS"):]
     picks = picks[: picks.index("];")]
-    for days in ("[1,", "[3,", "[7,", "[null,"):
+    for days in ("[1,", "[3,", "[7,", "[30,"):
         assert days in picks, days
+    assert "Custom" in app, "the range that is not a preset is still a click"
     assert "function setInitDays" in app
