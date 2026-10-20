@@ -285,11 +285,17 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
         out.append(f'<rect x="{left}" y="{y}" width="{panel_w}" height="{panel_h}" '
                    f'fill="none" stroke="#9aa5b1" stroke-width="0.6"/>')
 
-        # y ticks: leads, bottom to top
+        # y ticks: leads, bottom to top, every 24 minutes -- 24, 48, 72, 96, 120.
+        # One per lead is a grey smear on a short canvas; every nth has no
+        # meaning to anyone reading the axis; every 24 does, because the data
+        # is on a six-minute grid and a label on a multiple of four of them
+        # lands on a minute the lead grid itself respects.
         for row, lead in enumerate(mesh.y_values):
+            if lead % 24 and row != len(mesh.y_values) - 1:
+                continue      # the far lead stays: the axis stops there
             py = y + (nrow - 1 - row) * cell + cell / 2 + 3.5
             out.append(f'<text x="{left - 8}" y="{py}" font-size="{fs(10)}" fill="#414b57" '
-                       f'text-anchor="end">{_esc(_short(lead))}</text>')
+                       f'text-anchor="end">{_esc(_short(int(lead)))}</text>')
         # x ticks: init times
         # Skipped as needed rather than every n-th: what matters is that the
         # stamps do not sit on top of each other, and that depends on the cells.

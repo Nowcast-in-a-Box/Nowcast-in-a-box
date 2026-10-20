@@ -100,9 +100,20 @@ class Store:
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path)
+        # The default page cache is 2 MB, which is nothing beside a multi-gigabyte
+        # store, and mmap lets reads come out of the page cache instead of read(2).
+        self.conn.execute("PRAGMA cache_size=-65536")     # 64 MB
+        self.conn.execute("PRAGMA mmap_size=1073741824")  # 1 GB
         self.conn.row_factory = sqlite3.Row
         self._refuse_an_older_layout()
-        self.conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        # DDL on every open, not just the first, is not free: creating the indexes is a
+        # no-op when they exist but the statement still dirties the WAL, and the WAL's
+        # size is what the chart cache uses to tell whether the data moved. Run it when
+        # there is no schema yet, and leave an existing store alone.
+        if not self.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='task'"
+        ).fetchone():
+            self.conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         self.conn.commit()
 
     def _refuse_an_older_layout(self) -> None:

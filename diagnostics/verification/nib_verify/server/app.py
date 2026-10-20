@@ -20,6 +20,7 @@ Three rules the API enforces rather than trusts the page to respect:
 """
 
 from __future__ import annotations
+from collections import OrderedDict
 
 import json
 from collections.abc import Mapping
@@ -134,6 +135,38 @@ def create_app(
         )
 
     # ---------------------------------------------------------------- helpers
+    _AGGREGATES = OrderedDict()
+    _AGGREGATES_MAX = 12
+
+
+    def _aggregate(key, build):
+        """Memoise one aggregation, keyed by the query minus its presentation.
+
+        Drawing is not querying. line and bar read exactly the same numbers and differ
+        only in how they are put on the canvas, so switching between them should not go
+        back to SQLite -- and over a year of hourly runs that switch cost six seconds.
+        """
+        # Sizes, not timestamps. Opening a WAL database touches the -wal and -shm
+        # files, so a stamp built from their mtimes changes on every request and the
+        # cache never once hit. Sizes move when data is written and not when it is
+        # merely read, which is the distinction the key needs.
+        try:
+            main = (root / "verify.sqlite").stat().st_size
+            wal = root / "verify.sqlite-wal"
+            stamp = (main, wal.stat().st_size if wal.exists() else 0)
+        except OSError:
+            stamp = None                      # no store yet: nothing worth keeping
+        full = (stamp,) + tuple(key)
+        if full in _AGGREGATES:
+            _AGGREGATES.move_to_end(full)
+            return _AGGREGATES[full]
+        value = build()
+        _AGGREGATES[full] = value
+        while len(_AGGREGATES) > _AGGREGATES_MAX:
+            _AGGREGATES.popitem(last=False)
+        return value
+
+
     @contextmanager
     def store():
         s = Store(root / "verify.sqlite")
@@ -215,34 +248,56 @@ def create_app(
         return {"method": method, "dimensions": available_expansions(method)}
 
     # ============================================================== configs
+    def display_names(group_id):
+        """The platform's own name for each member, from the run's job.json.
+
+        job.json carries model_names -- {'nowcastnet': 'NowcastNet · CMA demo'} -- and
+        nothing else does, so a page left to itself can only show the bare id. Read
+        here rather than invented: a display name is the platform's to choose.
+        """
+        for root in run_roots:
+            job = Path(root) / group_id / "job.json"
+            if not job.is_file():
+                continue
+            try:
+                data = json.loads(job.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {}
+            names = (data.get("request") or {}).get("model_names") or {}
+            if names:
+                seen = list(dict.fromkeys(str(v) for v in names.values()))
+                return {"member_labels": {str(k): str(v) for k, v in names.items()},
+                        "display_name": " · ".join(seen)}
+        return {}
+
     @app.get("/api/configs")
     def list_configs():
-        return {"configs": library.entries(), "broken": library.broken()}
+        entries = library.entries()
+        for entry in entries:
+            entry.update(display_names(entry.get("group_id", "")))
+        return {"configs": entries, "broken": library.broken()}
 
     @app.get("/api/configs/{group_id}")
     def get_config(group_id: str):
         cfg = library.get(group_id)
         payload = cfg.to_dict()
         payload.update(library.summary(cfg))
-        with store() as s:
-            init_times, _ = s.task_axes(group_id)
-            payload["stored"] = {
-                "tasks": s.task_counts(group_id),
-                "families": s.families_present(group_id),
-                "missing_obs_times": len(s.obs_gaps(group_id)),
-                "runs": s.run_history(group_id, limit=10),
-                # The window the config was actually verified over, so a form can
-                # open on a range that has something in it. "The last week" taken
-                # off the wall clock is the right default for a live system and an
-                # empty page for a replayed one, and there is no way for the page
-                # to tell the two apart.
-                "init_span": [init_times[0], init_times[-1]] if init_times else None,
-            }
         payload["metrics_available"] = available_metrics(cfg)
         # The page draws the legend and the canvas draws the lines. One palette,
         # handed over rather than re-derived: a key whose swatch is a different
         # colour from the line it names is worse than no key.
         payload["series_colours"] = series_colours(cfg)
+        # One number the panel cannot get anywhere else: the last week *of the data*
+        # it is about to ask questions of. Read as min/max it is one index probe; read
+        # as the list of init times it was 681 ms, and read as the whole store it was
+        # two seconds. Without it the window opens on the wall clock, which is right
+        # for a live system and an empty page for a replayed run.
+        with store() as s:
+            row = s.conn.execute(
+                "SELECT min(init_time), max(init_time) FROM task WHERE group_id = ?",
+                (cfg.group_id,),
+            ).fetchone()
+        payload["init_span"] = [row[0], row[1]] if row and row[0] else None
         return payload
 
     @app.post("/api/configs", status_code=201)
@@ -398,14 +453,16 @@ def create_app(
             raise QueryError("method is required")
         cfg = library.get(config_id) if config_id else None
 
+        key = (method, config_id,
+               tuple(sorted((k, tuple(v)) for k, v in params.multi_items())))
         with store() as s:
-            result = query_scores(
+            result = _aggregate(key, lambda: query_scores(
                 s, cfg,
                 method=method,
                 s=_filters_from_query(params),
                 g=params.getlist("g"),
                 limit=int(params.get("limit") or 20000),
-            )
+            ))
         return result
 
     @app.get("/api/chart")
@@ -454,33 +511,40 @@ def create_app(
         drawing = "bar" if kind == "bar" else "line"
         width = _int_param(params, "width", 760)
 
+        # Everything that says what to draw is in the key; nothing that says how.
+        key = (kind == "mesh", method, config_id,
+               params.get("x"), tuple(params.getlist("series")),
+               tuple(params.getlist("panel")),
+               tuple(sorted((k, tuple(v)) for k, v in params.multi_items()
+                            if k not in ("kind", "width", "height"))))
         with store() as s:
             if kind == "mesh":
-                return mesh_svg(mesh_for(
+                mesh = _aggregate(key, lambda: mesh_for(
                     s, cfg,
                     method=method,
                     s=_filters_from_query(params),
                     time_dim=params.get("x") or "init_time",
                     lead_dim=params.get("series") or "lead_minutes",
                     panel_dims=("member", *params.getlist("panel")),
-                ), width=width)
+                ))
+                return mesh_svg(mesh, width=width)
             if params.getlist("panel"):
-                labels, charts = chart_panels(
+                labels, charts = _aggregate(key, lambda: chart_panels(
                     s, cfg,
                     method=method,
                     s=_filters_from_query(params),
                     x=params.get("x") or "lead_minutes",
                     series=tuple(params.getlist("series")) or ("member",),
                     panel_dims=tuple(params.getlist("panel")),
-                )
+                ))
                 return small_multiples(charts, labels, kind=drawing, width=width)
-            chart = chart_for(
+            chart = _aggregate(key, lambda: chart_for(
                 s, cfg,
                 method=method,
                 s=_filters_from_query(params),
                 x=params.get("x") or "lead_minutes",
                 series=tuple(params.getlist("series")) or ("member",),
-            )
+            ))
             return line_chart(chart, width=width,
                               height=_int_param(params, "height", 440),
                               kind=drawing)

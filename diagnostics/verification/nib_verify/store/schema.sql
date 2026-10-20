@@ -146,3 +146,27 @@ CREATE TABLE IF NOT EXISTS run_record (
 
 -- `rowid` cannot appear in an index; the query uses it only to break a tie.
 CREATE INDEX IF NOT EXISTS ix_run_record_when ON run_record(group_id, started_at DESC);
+
+-- Aggregates read every row of a range, and over a year a range is nearly the
+-- whole table, so there is nothing to seek past. A covering index is the one
+-- thing that helps: it carries the counted columns, so the scan never touches
+-- the table. Measured over a year of hourly runs: yes/no 2509 -> 1207 ms,
+-- spatial 14963 -> 2360 ms. It costs about a third of the database in size.
+CREATE INDEX IF NOT EXISTS ix_yon_cover ON q_yes_or_no
+    -- level sits next to the grouping keys on purpose: filtering by threshold
+    -- must not cost the covering index, or one level is slower than all five.
+    (group_id, member, lead_minutes, level, init_time, H, F, M, C);
+-- Threshold metrics are the expensive ones: one row per level. A query that
+-- picks a level has to seek to it, which means level leads the index -- with
+-- level behind the grouping keys the filter is only a residual test and the
+-- planner abandons this index for a smaller one that has to visit the table.
+CREATE INDEX IF NOT EXISTS ix_yon_level ON q_yes_or_no
+    (group_id, level, member, lead_minutes, init_time, H, F, M, C);
+CREATE INDEX IF NOT EXISTS ix_spa_cover ON q_spatial
+    (group_id, member, lead_minutes, level, half_window, init_time, pob, pfo, fbs);
+-- Same reason as ix_yon_level: a threshold and a half-window are things the
+-- page lets you pick, so they have to be seekable, not residual.
+CREATE INDEX IF NOT EXISTS ix_spa_level ON q_spatial
+    (group_id, level, half_window, member, lead_minutes, init_time, pob, pfo, fbs);
+CREATE INDEX IF NOT EXISTS ix_con_cover ON q_continuous
+    (group_id, member, lead_minutes, init_time, T, E, A, S);

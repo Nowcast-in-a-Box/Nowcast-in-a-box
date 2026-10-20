@@ -25,22 +25,6 @@ body {
   font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
 }
 
-header {
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  padding: 14px 22px;
-  display: flex;
-  align-items: baseline;
-  gap: 22px;
-  flex-wrap: wrap;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-header h1 { font-size: 16px; margin: 0; font-weight: 650; }
-header .sub { color: var(--muted); font-size: 12px; }
-
 nav { display: flex; gap: 4px; margin-left: auto; }
 
 nav button {
@@ -326,3 +310,23 @@ pre.log {
   border: 1px solid #c6d6e6; border-radius: 5px;
 }
 .popup-foot { display: flex; justify-content: flex-end; padding-top: 2px; }
+
+/* ---- the wait ---------------------------------------------------------- */
+/* The chart is built on the server, and over a year that takes seconds. The
+   previous picture stays until the next arrives, so something has to say so. */
+#chart-card { position: relative; }
+#chart-card.is-loading #chart { opacity: .28; }
+#chart-card.is-loading::before {
+  content: "";
+  position: absolute; top: 50%; left: 50%;
+  width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border: 2px solid #d8dee6; border-top-color: #1f5fbf; border-radius: 50%;
+  animation: nib-spin .8s linear infinite;
+}
+#chart-card.is-loading::after {
+  content: "querying…";   /* the real character, no escape */
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, 22px);
+  font-size: 12px; color: #6b7785;
+}
+@keyframes nib-spin { to { transform: rotate(360deg); } }

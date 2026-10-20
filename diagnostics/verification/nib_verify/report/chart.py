@@ -365,7 +365,12 @@ def line_chart(
 
     # --- the x axis ---------------------------------------------------
     x_step = _x_step(xs)
-    for tick in _x_ticks(x_lo, x_hi, xs):
+    # How many labels fit is a question about width, not about the data. A fixed
+    # budget assumes a fixed chart, and a cell of a grid is a third of one: twenty
+    # labels that sit comfortably across 760 px overlap each other in 240.
+    widest = max((len(chart.x_text(v) or str(v)) for v in set(xs)), default=3)
+    x_budget = max(2, int(plot.w // (widest * 6.4 + 14)))
+    for tick in _x_ticks(x_lo, x_hi, xs, x_budget):
         x = sx(tick)
         out.append(
             f'<line x1="{x:.1f}" y1="{plot.y1:.1f}" x2="{x:.1f}" '
@@ -564,7 +569,8 @@ def _x_step(values: Sequence[float]) -> float:
     return min(b - a for a, b in zip(distinct, distinct[1:]))
 
 
-def _x_ticks(lo: float, hi: float, values: Sequence[float]) -> list[float]:
+def _x_ticks(lo: float, hi: float, values: Sequence[float],
+             budget: int = MAX_ORDINAL_TICKS) -> list[float]:
     """Ticks along x, with both ends of the *data* among them.
 
     Snapping to round numbers alone left an axis running 10 to 180 labelled 50,
@@ -576,13 +582,20 @@ def _x_ticks(lo: float, hi: float, values: Sequence[float]) -> list[float]:
     distinct = sorted(set(values))
     if not distinct:
         return []
-    if len(distinct) <= MAX_ORDINAL_TICKS:
+    if len(distinct) <= budget:
         return distinct
-    step = _nice_step((hi - lo) / 6)
-    first, last = distinct[0], distinct[-1]
-    if last <= first:
-        return [first]
-    return [first, *[t for t in _ticks(first, last, step) if first < t < last], last]
+    if len(distinct) == 1:
+        return distinct
+    # Fewer labels, but still on the data. Snapping the middle to round numbers
+    # put 25, 50 and 75 on an axis whose values are 6, 12 and 18 -- marks at
+    # positions where nothing was measured, evenly spaced in nothing. Taking
+    # every nth value instead keeps the spacing the data has, and keeps both
+    # ends, which is what the axis has to show.
+    stride = math.ceil((len(distinct) - 1) / max(1, budget - 1))
+    chosen = distinct[::stride]
+    if chosen[-1] != distinct[-1]:
+        chosen.append(distinct[-1])
+    return chosen
 
 
 def _nice_step(raw: float) -> float:

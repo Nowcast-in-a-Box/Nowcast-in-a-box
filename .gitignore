@@ -71,3 +71,8 @@ testdata/
 ~$*
 
 .DS_Store
+
+# Local scratch: run copies, generated stores, benchmark output. The store for a
+# year of fake results is several gigabytes, and it is reproducible from
+# diagnostics/verification/tools/make_year.py -- nothing here belongs in git.
+_tmp/
