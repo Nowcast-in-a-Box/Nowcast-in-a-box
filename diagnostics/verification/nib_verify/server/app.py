@@ -298,7 +298,13 @@ def create_app(
                 "SELECT min(init_time), max(init_time) FROM task WHERE group_id = ?",
                 (cfg.group_id,),
             ).fetchone()
+            days = s.conn.execute(
+                "SELECT DISTINCT substr(init_time, 1, 10) FROM task "
+                "WHERE group_id = ? AND init_time IS NOT NULL ORDER BY 1",
+                (cfg.group_id,),
+            ).fetchall()
         payload["init_span"] = [row[0], row[1]] if row and row[0] else None
+        payload["init_days"] = [day[0] for day in days if day[0]]
         return payload
 
     @app.post("/api/configs", status_code=201)
