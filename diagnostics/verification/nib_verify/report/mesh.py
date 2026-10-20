@@ -295,7 +295,7 @@ def mesh_svg(mesh: Mesh, *, cell: int = CELL, width: int | None = None) -> str:
                 continue      # the far lead stays: the axis stops there
             py = y + (nrow - 1 - row) * cell + cell / 2 + 3.5
             out.append(f'<text x="{left - 8}" y="{py}" font-size="{fs(10)}" fill="#414b57" '
-                       f'text-anchor="end">{_esc(_short(lead))}</text>')
+                       f'text-anchor="end">{_esc(_short(int(lead)))}</text>')
         # x ticks: init times
         # Skipped as needed rather than every n-th: what matters is that the
         # stamps do not sit on top of each other, and that depends on the cells.

@@ -1315,6 +1315,20 @@ async function runQuery() {
     mount(host, notice("bad", `Pick at least one ${none.join(" and ")}.`));
     return;
   }
+  // A mesh is a grid of member x time x lead. A parameter at more than one
+  // value -- levels, half windows -- is a third dimension, and a third does
+  // not fit in a grid. The request would come back wrong, so say so before
+  // sending it.
+  if (kindOf() === "mesh" && manyParams().length) {
+    const which = PARAM_LABEL[manyParams()[0]] || manyParams()[0];
+    $("#chart-empty").textContent =
+      `Pick a single ${which} — the grid already spans member × init × lead.`;
+    $("#chart-empty").hidden = false;
+    $("#chart-card").hidden = true;
+    mount(host, empty(`Pick a single ${which} to draw the grid.`));
+    return;
+  }
+
   mount(host, empty("Querying…"));
   const params = queryParams();
   // What the table expands by has to be what the chart draws, or the two would
@@ -1331,7 +1345,10 @@ async function runQuery() {
     mount(host, renderScores(result));
     showChart(params);
   } catch (error) {
-    mount(host, notice("bad", error.message));
+      const grid = kindOf() === "mesh" && /over the \d+ limit/.test(error.message || "");
+      mount(host, grid
+        ? notice("bad", `This grid would take too many cells to draw at once (member × init × lead). Narrow the time range, or switch to a line along one axis.`)
+        : notice("bad", error.message));
     $("#chart-card").hidden = true;
     $("#chart-empty").hidden = false;
   }
@@ -1347,6 +1364,17 @@ function canvasWidth() {
 function showChart(params) {
   const kind = kindOf();
   const many = manyParams();
+  // The grid already spans member x init x lead. A parameter held at more than
+  // one value -- levels, half windows -- is a third dimension, and a third does
+  // not fit in a grid. Say so, instead of sending the server a grid it cannot
+  // draw and showing the placeholder that says nothing.
+  if (kind === "mesh" && many.length) {
+    $("#chart-empty").textContent =
+      `Pick a single ${PARAM_LABEL[many[0]] || many[0]} — the grid already spans member × init × lead.`;
+    $("#chart-empty").hidden = false;
+    $("#chart-card").hidden = true;
+    return;
+  }
   const chart = new URLSearchParams(params);
   chart.delete("g");
   chart.set("kind", kind);
