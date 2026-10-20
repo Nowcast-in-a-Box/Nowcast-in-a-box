@@ -135,7 +135,11 @@ func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	args, err := s.dataCommandArgs(dataset, data, catalog, "--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit))
+	extra := []string{"--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit)}
+	if day := strings.TrimSpace(r.URL.Query().Get("day")); day != "" {
+		extra = append(extra, "--day", day)
+	}
+	args, err := s.dataCommandArgs(dataset, data, catalog, extra...)
 	if err != nil {
 		runtimeError(w, 500, err)
 		return

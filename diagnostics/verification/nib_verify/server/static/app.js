@@ -1161,7 +1161,9 @@ function renderInitQuick() {
 }
 
 function setInitDays(count) {
-  const end = new Date();
+  // Anchor quick ranges to the stored data, not the wall clock: a replayed run
+  // would otherwise open a window months after its only initialization.
+  const end = state.initSpan ? new Date(state.initSpan[1]) : new Date();
   const start = new Date(end.getTime() - count * 86400000);
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
@@ -1183,14 +1185,12 @@ function applyInit() {
 
 function fillInitDefaults() {
   const span = state.initSpan;
-  // The window ends now: it follows the clock on a live system. It starts a week
-  // before the data ends rather than a week before now, because on a replayed
-  // dataset those are months apart and a week before now is an empty page -- and
-  // the page cannot tell a replay from a live feed.
-  const end = new Date();
-  const anchor = span ? new Date(span[1]) : end;
+  // This page reads stored runs, so the window ends at the data's last init
+  // time, not at the browser clock. A run with one init time therefore opens
+  // on that exact time and needs no manual selection.
+  const end = span ? new Date(span[1]) : new Date();
   const start = new Date(Math.max(span ? new Date(span[0]).getTime() : 0,
-                                  anchor.getTime() - WEEK));
+                                  end.getTime() - WEEK));
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
   closeInitPanel();
@@ -1331,6 +1331,10 @@ function queryParams() {
 
 async function runQuery() {
   const host = $("#query-result");
+  if (!$("#q-method").value) {
+    mount(host, notice("bad", "No metric is available for this run. Re-run diagnostics with a metric selection."));
+    return;
+  }
   // Every parameter has to keep at least one value. An empty list is not "no
   // filter" -- it is a question with no answer, and sending nothing would quietly
   // widen the query to every threshold the config ever stored, which is the

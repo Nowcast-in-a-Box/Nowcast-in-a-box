@@ -11,7 +11,10 @@ the current run's visualization artifacts and the result-page route around it.
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
+import shutil
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
@@ -43,6 +46,28 @@ def _read_json(path: Path) -> dict:
     except (OSError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _config_directory(verification: Path) -> Path:
+    """Give the config library the filename it expects.
+
+    A verification attempt stores its config as ``config.json``. The merged
+    server's library scans ``<group_id>.json`` files, so handing it the attempt
+    directory directly made the config list visible but every detail request a
+    404 -- and the page then had no metric to select. The container is disposable,
+    so a temporary copy is enough.
+    """
+    config = _read_json(verification / "config.json")
+    group = config.get("group")
+    group_id = group.get("id") if isinstance(group, dict) else None
+    if not isinstance(group_id, str) or not group_id.strip():
+        return verification
+    if any(char in group_id for char in '\\/:*?"<>|') or group_id.startswith("."):
+        return verification
+    directory = Path(tempfile.mkdtemp(prefix="nib-result-configs-"))
+    (directory / f"{group_id}.json").write_text(json.dumps(config), encoding="utf-8")
+    atexit.register(shutil.rmtree, directory, ignore_errors=True)
+    return directory
 
 
 def _verification_root(run: Path) -> Path:
@@ -142,7 +167,7 @@ def build_app(run: Path) -> FastAPI:
     verification = _verification_root(run)
     app = create_app(
         root=verification,
-        configs=verification,
+        configs=_config_directory(verification),
         packages=[],
         runs=[],
         host=HostConfig(),

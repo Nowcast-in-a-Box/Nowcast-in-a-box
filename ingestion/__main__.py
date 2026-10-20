@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--check-window", action="store_true")
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--day")
     args = parser.parse_args()
     if args.dataset == "cma_radar":
         from ingestion import cma_radar
@@ -32,7 +33,10 @@ def main():
             print(
                 json.dumps(
                     cma_radar.list_samples(
-                        args.data, offset=args.offset, limit=args.limit
+                        args.data,
+                        offset=args.offset,
+                        limit=args.limit,
+                        day=args.day,
                     )
                 )
             )
