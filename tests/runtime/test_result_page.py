@@ -83,6 +83,7 @@ def test_the_result_page_has_both_views_in_one_document(tmp_path):
         assert 'data-view="visualization"' in page.text
         assert 'data-view="metrics"' in page.text
         assert "iframe" not in page.text
+        assert 'id="viz-sample"' in page.text
         assert "Content-Security-Policy" in page.headers
         assert "frame-ancestors 'none'" in page.headers["Content-Security-Policy"]
 
@@ -98,6 +99,65 @@ def test_visualization_is_a_same_origin_artifact_list(tmp_path):
         assert "/visualization/diagnostics/visualization/picture/map.png" in urls
         assert client.get(next(iter(urls))).content in (b"png", b"gif")
 
+
+
+def test_a_batch_result_exposes_each_sample_as_a_visualization_case(tmp_path):
+    run = tmp_path / "run"
+    samples = []
+    for index, init_time in enumerate(
+        ("2026-07-01T00:00:00Z", "2026-07-01T00:06:00Z")
+    ):
+        sample_id = f"20260701@{init_time}"
+        path = f"samples/{index:03d}"
+        picture = run / path / "diagnostics" / "visualization" / "picture"
+        picture.mkdir(parents=True)
+        (picture / "map.png").write_bytes(b"png")
+        samples.append(
+            {
+                "sample_id": sample_id,
+                "event_id": "20260701",
+                "init_time": init_time,
+                "path": path,
+            }
+        )
+    run.mkdir(exist_ok=True)
+    (run / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nib.run.v1",
+                "id": "run-batch",
+                "batch": True,
+                "samples": samples,
+                "sample_count": 2,
+                "sample": samples[0],
+                "model_names": {"wadepre": "WADEPre"},
+                "diagnostics": [
+                    {
+                        "kind": "visualization",
+                        "status": "succeeded",
+                        "model_id": "wadepre",
+                        "sample_id": sample["sample_id"],
+                        "path": f"{sample['path']}/diagnostics/visualization/picture",
+                    }
+                    for sample in samples
+                ],
+            }
+        )
+    )
+    with TestClient(build_app(run)) as client:
+        body = client.get("/visualization").json()
+        assert [sample["sample_id"] for sample in body["samples"]] == [
+            sample["sample_id"] for sample in samples
+        ]
+        assert len(body["models"][0]["cases"]) == 2
+        first = body["models"][0]["cases"][0]
+        second = body["models"][0]["cases"][1]
+        assert first["sample_id"] == samples[0]["sample_id"]
+        assert second["sample_id"] == samples[1]["sample_id"]
+        assert "/visualization/samples/000/" in first["images"][0]["url"]
+        assert "/visualization/samples/001/" in second["images"][0]["url"]
+        image = client.get(second["images"][0]["url"])
+        assert image.content == b"png"
 
 def test_a_result_config_is_queryable_with_a_metric(tmp_path):
     run = make_run(tmp_path)

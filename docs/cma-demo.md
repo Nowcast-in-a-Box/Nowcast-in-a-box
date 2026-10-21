@@ -82,7 +82,7 @@ run offline, and all output stays under `runs/<unique ID>/`.
    **CREF comparison and animation**. SEVIR products have their own pairings.
 4. In Checkout, confirm the data directory and load samples from the day picker.
    Select one or more windows (up to `runtime.max_batch_samples`; default 32).
-   The first window supplies the single Visualization case; Metrics aggregates
+   Each selected window gets its own Visualization case; Metrics aggregates
    every selected init time. Confirm the region center. Thresholds use dBZ
    (defaults 10, 20, 30, 40, 50). Validate, check local data and weights, then
    Start.

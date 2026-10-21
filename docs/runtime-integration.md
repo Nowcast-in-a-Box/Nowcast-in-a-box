@@ -117,4 +117,5 @@ A package may put `sample_starts` on its single data item. The Handler keeps
 the one-window layout when exactly one start is present and uses a batch run
 with `samples/<index>` children when more are selected. Children are ingested
 and inferred independently; only verification aggregates their init times.
-The first selected child is used for the temporary single-case Visualization.
+Visualization is rendered for every selected child and the result page exposes
+them as a Case selector; verification aggregates every selected init time.

@@ -90,6 +90,7 @@ const state = {
   poll: null,
   job: null,
   chartUrl: null,
+  visualization: null,
   initDates: [],
   kind: "line",
   hidden: [],            // members the legend has been clicked off
@@ -115,24 +116,58 @@ async function loadVisualization() {
     const res = await fetch("/visualization", { cache: "no-store", credentials: "omit" });
     if (!res.ok) { throw new Error(`visualization returned ${res.status}`); }
     const data = await res.json();
+    state.visualization = data;
+    const samples = Array.isArray(data.samples) ? data.samples : [];
+    const picker = $("#visualization-picker");
+    const select = $("#viz-sample");
+    if (picker && select) {
+      const previous = select.value;
+      mount(select, samples.map(sample => h("option", {
+        value: sample.sample_id,
+        text: [sample.event_id, sample.init_time || sample.sample_id].filter(Boolean).join(" · "),
+      })));
+      const chosen = samples.some(sample => sample.sample_id === previous)
+        ? previous
+        : (data.sample_id || samples[0]?.sample_id || "");
+      select.value = chosen;
+      select.onchange = () => renderVisualization(data, select.value);
+      picker.hidden = samples.length <= 1;
+    }
     if ($("#result-meta") && data.run_id) {
       $("#result-meta").textContent = data.sample_id || data.run_id;
     }
-    const models = data.models || [];
-    if (!models.length) {
-      mount(host, empty(data.message || "No visualization was selected for this run."));
-      return;
-    }
-    mount(host, models.map(model => h("section", { class: "card viz-model" },
-      h("h2", { text: model.name || model.id }),
-      model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
-      h("div", { class: "viz-artifacts" }, (model.images || []).map(image =>
-        h("figure", { class: "viz-shot" },
-          h("img", { src: image.url, alt: image.alt || image.caption || "" }),
-          h("figcaption", { text: image.caption || "" })))))));
+    renderVisualization(data, (select && select.value) || data.sample_id);
   } catch (error) {
     mount(host, notice("bad", `Could not load visualization: ${error.message}`));
   }
+}
+
+function renderVisualization(data, sampleId) {
+  const host = $("#visualization-body");
+  if (!host) { return; }
+  const models = data.models || [];
+  if (!models.length) {
+    mount(host, empty(data.message || "No visualization was selected for this run."));
+    return;
+  }
+  const meta = $("#viz-case-meta");
+  const sample = (data.samples || []).find(item => item.sample_id === sampleId);
+  if (meta) meta.textContent = sample ? (sample.init_time || sample.sample_id) : "";
+  if ($("#result-meta") && sample) $("#result-meta").textContent = sample.sample_id;
+  mount(host, models.map(model => {
+    const cases = model.cases || [];
+    const selected = cases.find(item => item.sample_id === sampleId) || cases[0];
+    const images = selected ? selected.images || [] : [];
+    return h("section", { class: "card viz-model" },
+      h("h2", { text: model.name || model.id }),
+      model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
+      images.length
+        ? h("div", { class: "viz-artifacts" }, images.map(image =>
+            h("figure", { class: "viz-shot" },
+              h("img", { src: image.url, alt: image.alt || image.caption || "" }),
+              h("figcaption", { text: image.caption || "" }))))
+        : empty("No visualization is available for this case."));
+  }));
 }
 
 // ==================================================================

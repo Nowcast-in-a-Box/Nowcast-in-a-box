@@ -129,13 +129,12 @@ def _batch_main(directory, manifest, request):
     children = [directory / item["path"] for item in samples]
     if not children:
         raise ValueError("batch run has no sample windows")
-    first = StoredFields(children[0])
     if request.get("metrics"):
         from diagnostics.verification_run import verification_batch
 
         attempt_id = uuid.uuid4().hex
         jobs.append((
-            "verification", None, attempt_id,
+            "verification", None, None, attempt_id,
             lambda attempt_id=attempt_id: verification_batch(
                 directory, samples, request["metrics"], attempt_id=attempt_id,
                 models=request.get("verification_models"),
@@ -145,25 +144,29 @@ def _batch_main(directory, manifest, request):
         from diagnostics.visualization_run import visualization
 
         config = request["visualization"]
-        for model in config["models"]:
-            if model not in first.manifest["forecasts"]:
-                raise ValueError("visualization selects a model without stored forecasts")
-            attempt_id = uuid.uuid4().hex
-            jobs.append((
-                "visualization", model, attempt_id,
-                lambda model=model, attempt_id=attempt_id: visualization(
-                    children[0], model, config["basemap"], attempt_id=attempt_id
-                ),
-            ))
+        for sample, child in zip(samples, children):
+            child_fields = StoredFields(child)
+            for model in config["models"]:
+                if model not in child_fields.manifest["forecasts"]:
+                    raise ValueError("visualization selects a model without stored forecasts")
+                attempt_id = uuid.uuid4().hex
+                jobs.append((
+                    "visualization", model, sample.get("sample_id"), attempt_id,
+                    lambda model=model, child=child, attempt_id=attempt_id: visualization(
+                        child, model, config["basemap"], attempt_id=attempt_id
+                    ),
+                ))
     if not jobs:
         raise ValueError("select at least one diagnostic product")
-    for kind, model_id, attempt_id, job in jobs:
+    for kind, model_id, sample_id, attempt_id, job in jobs:
         try:
             result = job()
             if kind == "visualization":
                 result = dict(result)
-                result["path"] = (Path(samples[0]["path"]) / result["path"]).as_posix()
-                result["entry"] = (Path(samples[0]["path"]) / result["entry"]).as_posix() if result.get("entry") else None
+                case = next((item for item in samples if item.get("sample_id") == sample_id), samples[0])
+                result["sample_id"] = sample_id
+                result["path"] = (Path(case["path"]) / result["path"]).as_posix()
+                result["entry"] = (Path(case["path"]) / result["entry"]).as_posix() if result.get("entry") else None
             results.append(result)
             failed = failed or result["status"] != "succeeded"
         except Exception as exc:  # noqa: BLE001
@@ -172,6 +175,7 @@ def _batch_main(directory, manifest, request):
             out.mkdir(parents=True, exist_ok=True)
             error = {
                 "kind": kind, "id": attempt_id, "model_id": model_id,
+                "sample_id": sample_id,
                 "path": out.relative_to(directory).as_posix(),
                 "status": "failed", "error": str(exc),
             }

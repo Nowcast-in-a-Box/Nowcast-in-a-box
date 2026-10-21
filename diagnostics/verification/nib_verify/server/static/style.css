@@ -399,3 +399,27 @@ pre.log {
   .result-tabs { width: 100%; }
   .result-tabs button { flex: 1 1 0; }
 }
+
+.viz-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.viz-picker > label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.viz-picker > select {
+  min-width: 240px;
+  max-width: 100%;
+}
+@media (max-width: 680px) {
+  .viz-picker { align-items: stretch; flex-direction: column; }
+  .viz-picker > select { min-width: 0; width: 100%; }
+}

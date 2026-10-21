@@ -1,16 +1,17 @@
 """Render stored fields using the delivered Core and an explicitly prepared WMO cache."""
 
-from pathlib import Path
 import sys
 import uuid
+from pathlib import Path
 
+import matplotlib.pyplot as plt
 from nib_visualization import (
     RenderConfig,
     prepare_scene,
     render_frame,
     write_animation,
-    write_manifest,
     write_gallery,
+    write_manifest,
 )
 from nib_visualization.artifacts import (
     axes_pixel_box,
@@ -18,9 +19,8 @@ from nib_visualization.artifacts import (
     verify_source_identity,
 )
 from nib_visualization.wmo_basemap import load_wmo_basemap
-import matplotlib.pyplot as plt
 
-from diagnostics.fields import visualization_field, display_grid
+from diagnostics.fields import display_grid, visualization_field
 from utils.stored_fields import StoredFields, save_manifest
 
 ROOT = Path(__file__).resolve().parent / "visualization"
@@ -103,6 +103,7 @@ def visualization(directory, model_id, basemap_path, *, attempt_id=None):
         "kind": "visualization",
         "id": attempt_id,
         "model_id": model_id,
+        "sample_id": access.manifest["sample"].get("sample_id"),
         "status": "succeeded",
         "path": out.relative_to(Path(directory)).as_posix(),
         "entry": gallery.relative_to(Path(directory)).as_posix(),

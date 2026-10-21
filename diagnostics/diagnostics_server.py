@@ -89,10 +89,58 @@ def _verification_root(run: Path) -> Path:
     return run
 
 
-def _visualization_models(run: Path) -> list[dict]:
-    manifest = _read_json(run / "manifest.json")
+def _manifest_samples(manifest: dict) -> list[dict]:
+    raw = manifest.get("samples")
+    if isinstance(raw, list) and raw:
+        samples = [item for item in raw if isinstance(item, dict)]
+    else:
+        sample = manifest.get("sample")
+        samples = [sample] if isinstance(sample, dict) else []
+    return [item for item in samples if item.get("sample_id")]
+
+
+def _attempt_sample_id(attempt: dict, samples: list[dict]) -> str:
+    explicit = attempt.get("sample_id")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    path = attempt.get("path")
+    if isinstance(path, str) and path.startswith("samples/"):
+        prefix = "/".join(path.split("/")[:2])
+        for sample in samples:
+            if sample.get("path") == prefix:
+                return str(sample.get("sample_id", ""))
+    return str((samples[0] if samples else {}).get("sample_id", ""))
+
+
+def _case_images(run: Path, path: str, model_id: str, names: dict) -> list[dict]:
+    directory = run / path
+    if not directory.is_dir():
+        return []
+    images = []
+    for name, caption in CAPTIONS.items():
+        if not (directory / name).is_file():
+            continue
+        images.append(
+            {
+                "url": f"/visualization/{quote(path, safe='/')}/{name}",
+                "caption": caption,
+                "alt": f"{names.get(model_id, model_id)}: {caption}",
+            }
+        )
+    for image in sorted(directory.glob("*.svg")):
+        images.append(
+            {
+                "url": f"/visualization/{quote(path, safe='/')}/{quote(image.name)}",
+                "caption": image.stem.replace("_", " "),
+                "alt": f"{names.get(model_id, model_id)}: {image.stem}",
+            }
+        )
+    return images
+
+
+def _visualization_models(run: Path, manifest: dict, samples: list[dict]) -> list[dict]:
     names = manifest.get("model_names") or {}
-    latest: dict[str, dict] = {}
+    latest: dict[tuple[str, str], dict] = {}
     for attempt in manifest.get("diagnostics") or []:
         if not isinstance(attempt, dict):
             continue
@@ -104,42 +152,34 @@ def _visualization_models(run: Path) -> list[dict]:
         model_id = attempt.get("model_id")
         if not isinstance(path, str) or not isinstance(model_id, str):
             continue
+        sample_id = _attempt_sample_id(attempt, samples)
         # A retry appends another attempt. The result page shows the newest
-        # visualization per model, not one card per historical retry.
-        latest[model_id] = attempt
+        # visualization per model and sample, not one card per historical retry.
+        latest[(model_id, sample_id)] = attempt
     models: list[dict] = []
-    for model_id, attempt in latest.items():
-        path = attempt.get("path")
-        directory = run / path
-        if not directory.is_dir():
-            continue
-        images = []
-        for name, caption in CAPTIONS.items():
-            if not (directory / name).is_file():
+    model_ids: list[str] = []
+    for model_id, _sample_id in latest:
+        if model_id not in model_ids:
+            model_ids.append(model_id)
+    for model_id in model_ids:
+        cases = []
+        for sample in samples:
+            sample_id = str(sample.get("sample_id"))
+            attempt = latest.get((model_id, sample_id))
+            if attempt is None:
                 continue
-            images.append(
-                {
-                    "url": f"/visualization/{quote(path, safe='/')}/{name}",
-                    "caption": caption,
-                    "alt": f"{names.get(model_id, model_id)}: {caption}",
-                }
-            )
-        for image in sorted(directory.glob("*.svg")):
-            images.append(
-                {
-                    "url": f"/visualization/{quote(path, safe='/')}/{quote(image.name)}",
-                    "caption": image.stem.replace("_", " "),
-                    "alt": f"{names.get(model_id, model_id)}: {image.stem}",
-                }
-            )
-        if not images:
+            images = _case_images(run, attempt["path"], model_id, names)
+            if images:
+                cases.append({"sample_id": sample_id, "images": images})
+        if not cases:
             continue
         models.append(
             {
                 "id": model_id,
                 "name": names.get(model_id, model_id),
                 "notice": (manifest.get("sample") or {}).get("provenance", {}).get("notice"),
-                "images": images,
+                "cases": cases,
+                "images": cases[0]["images"],
             }
         )
     return models
@@ -164,10 +204,12 @@ def _safe_visualization_file(run: Path, path: str) -> Path:
 
 def _visualization_payload(run: Path) -> dict:
     manifest = _read_json(run / "manifest.json")
-    models = _visualization_models(run)
+    samples = _manifest_samples(manifest)
+    models = _visualization_models(run, manifest, samples)
     return {
         "run_id": manifest.get("id", run.name),
-        "sample_id": (manifest.get("sample") or {}).get("sample_id"),
+        "sample_id": (samples[0].get("sample_id") if samples else None),
+        "samples": samples,
         "models": models,
         "message": None if models else "No visualization was selected for this run.",
     }
