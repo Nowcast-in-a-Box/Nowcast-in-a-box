@@ -13,6 +13,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 )
 
 const maxPackageBytes = 8 << 20
@@ -26,6 +27,7 @@ type RuntimeRequest struct {
 	PackageSHA256       string            `json:"package_sha256"`
 	EventID             string            `json:"event_id"`
 	StartTime           string            `json:"context_start_time"`
+	SampleStarts        []string          `json:"sample_starts,omitempty"`
 	Models              []string          `json:"models"`
 	ModelNames          map[string]string `json:"model_names,omitempty"`
 	Metrics             []map[string]any  `json:"metrics,omitempty"`
@@ -264,6 +266,25 @@ func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (Run
 		if json.Unmarshal(item.Config["event_id"], &request.EventID) != nil || json.Unmarshal(item.Config["context_start_time"], &request.StartTime) != nil {
 			return request, fmt.Errorf("invalid data window configuration")
 		}
+		if raw, ok := item.Config["sample_starts"]; ok {
+			var starts []string
+			if json.Unmarshal(raw, &starts) != nil || len(starts) == 0 || len(starts) > 32 {
+				return request, fmt.Errorf("invalid sample_starts; expected 1..32 UTC start times")
+			}
+			seen := map[string]bool{}
+			for _, start := range starts {
+				stamp, err := time.Parse(time.RFC3339, start)
+				_, zoneOffset := stamp.Zone()
+				if err != nil || zoneOffset != 0 || seen[start] {
+					return request, fmt.Errorf("sample_starts must be distinct explicit UTC times")
+				}
+				seen[start] = true
+			}
+			if starts[0] != request.StartTime {
+				return request, fmt.Errorf("sample_starts must start with context_start_time")
+			}
+			request.SampleStarts = starts
+		}
 		if raw, ok := item.Config["center_lon"]; ok {
 			if json.Unmarshal(raw, &request.CenterLon) != nil || math.IsNaN(request.CenterLon) || math.IsInf(request.CenterLon, 0) {
 				return request, fmt.Errorf("invalid region center")
@@ -277,6 +298,9 @@ func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (Run
 	}
 	if dataItem == "" {
 		return request, fmt.Errorf("one data product required")
+	}
+	if len(request.SampleStarts) == 0 {
+		request.SampleStarts = []string{request.StartTime}
 	}
 	modelItems := map[string]bool{}
 	modelIDs := map[string]string{}

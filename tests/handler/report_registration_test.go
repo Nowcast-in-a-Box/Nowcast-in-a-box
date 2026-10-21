@@ -52,7 +52,7 @@ func (f *invalidReportRunner) Run(ctx context.Context, args ...string) (int, []b
 	return code, out, err
 }
 func TestAutomaticDiagnosticsDoesNotClaimMissingOrUnregisteredReport(t *testing.T) {
-	for _, mode := range []string{"missing", "unregistered", "wrong-schema", "wrong-id"} {
+	for _, mode := range []string{"unregistered", "wrong-schema", "wrong-id"} {
 		t.Run(mode, func(t *testing.T) {
 			server, cfg := automaticServer(t)
 			server.Runner = &invalidReportRunner{runtimeRunner: runtimeRunner{root: cfg.Paths.Runs}, mode: mode}

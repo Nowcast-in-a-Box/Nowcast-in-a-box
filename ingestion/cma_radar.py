@@ -107,7 +107,7 @@ def check_window(path, event_id, start):
     return {"event_id": event_id, "context_start_time": stamp(times[0]), "ready": True}
 
 
-def list_samples(path, *, offset=0, limit=100):
+def list_samples(path, *, offset=0, limit=100, day=None):
     if offset < 0 or not 1 <= limit <= 500:
         raise ValueError("sample pagination requires offset>=0 and 1<=limit<=500")
     index = file_index(path)
@@ -118,6 +118,9 @@ def list_samples(path, *, offset=0, limit=100):
             t + timedelta(minutes=CADENCE * i) in index for i in range(CONTEXT + TARGET)
         )
     ]
+    days = sorted({t.strftime("%Y%m%d") for t in starts})
+    if day:
+        starts = [t for t in starts if t.strftime("%Y%m%d") == day]
     samples = []
     for row, start in enumerate(starts[offset : offset + limit], start=offset):
         samples.append(
@@ -138,6 +141,8 @@ def list_samples(path, *, offset=0, limit=100):
         "total": len(starts),
         "offset": offset,
         "limit": limit,
+        "days": days,
+        "day": day,
         "samples": samples,
     }
 

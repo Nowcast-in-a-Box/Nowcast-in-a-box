@@ -12,6 +12,12 @@ review:
   host: 127.0.0.1
   port: 8766
 
+# Loopback result viewer. The Handler starts one diagnostics container that
+# serves both Visualization and Metrics, then proxies it on the review listener.
+diagnostics:
+  host: 127.0.0.1
+  port: 8767
+
 paths:
   # Downloaded weights and docker files. Relative to this file.
   artifacts: artifacts
@@ -26,6 +32,10 @@ paths:
 runtime:
   # Optional explicit local Docker context; omitted uses Docker's current context.
   # docker_context: desktop-linux
+  # Images are pulled from this registry when their local manifest tag is missing.
+  # Keep the short local tag in runtime.yaml; the Handler tags the pulled image
+  # under that local name before Docker Compose runs.
+  image_registry: ghcr.io/nowcast-in-a-box
   # Exact trusted Hub origins, including scheme and port; never use '*'.
   # These are the documented local Hub entry points. For a remote deployment,
   # the maintainer adds its actual origin here before distributing the config.
@@ -35,4 +45,5 @@ runtime:
     # Remote demo Hub (parent nginx terminates TLS at this origin).
     - https://www.wmc-bj.net
   # Shared declarations including the CMA demo; matches the atlas submodule.
+  max_batch_samples: 32
   atlas_revision: "1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8"

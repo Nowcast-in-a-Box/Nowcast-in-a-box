@@ -10,6 +10,7 @@ paths:
   runs: ../../runs
   resources: ../..
 runtime:
+  image_registry: ghcr.io/nowcast-in-a-box
   allowed_origins:
     - http://127.0.0.1:5173
   atlas_revision: 1ae9ae9a62ba63ab3193d418dd6f1858ba58d1c8

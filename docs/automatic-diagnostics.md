@@ -21,24 +21,24 @@ result. Legacy `ready` jobs retain their old registered report links.
 The diagnostics container accepts `operation_id` in its internal version-2
 request. The report records this ID and the exact diagnostic attempt IDs. Handler
 only accepts a matching operation report after checking the manifest schema/run
-identity and the same path/registration/file checks as actual HTTP delivery.
+identity and that the report has both a registration path and an entry.
 Upgrade/rebuild the diagnostics image together with Handler. An old image that
 does not register a matching report results in an actionable partial job, rather
 than an invented success.
 
 A diagnostic failure leaves stored Forecasts available. The run is `partial`,
 with the operation's failure and log visible; other successful diagnostic content
-remains available in the unified result. The report's native radio group provides
-**Visualization** and **Metrics** views, keyboard arrow navigation and visible
-focus without JavaScript or a relaxed CSP. Viewing or switching views is read-only.
-Unselected, partially available and failed diagnostics have different messages.
-Historical attempts/reports and unselected forecast registrations survive an
-explicit inference rerun of the same sample/model configuration.
+remains available in the unified result. The single diagnostics result viewer
+serves **Visualization** and **Metrics** in one document with real tabs; the
+Metrics view is the merged verification page and its interactive query, not a
+second static report. Viewing or switching views is read-only. Unselected,
+partially available and failed diagnostics have different messages. Historical
+attempts/reports and unselected forecast registrations survive an explicit
+inference rerun of the same sample/model configuration.
 
-The first shell displays existing images/GIFs/SVGs from the diagnostic packages.
-It does not claim to implement the metrics colleague's future interactive web
-application. Per-model labels remain attached to each visualization and the
-metrics' stored output includes all selected model results.
+The Visualization view displays existing images/GIFs/SVGs from the diagnostic
+packages. Per-model labels remain attached to each image and the metrics' stored
+output includes all selected model results.
 
 ## Crash and cleanup recovery
 

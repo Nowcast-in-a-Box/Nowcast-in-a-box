@@ -86,6 +86,7 @@ def create_app(
     host: HostConfig | None = None,
     access=None,
     access_error: str | None = None,
+    result_visualization=None,
 ):
     """Build the app around a verification root, a config directory and a provider."""
     if not HAS_FASTAPI:  # pragma: no cover
@@ -101,7 +102,7 @@ def create_app(
     host = host or HostConfig()
 
     app = FastAPI(
-        title="NiB verification",
+        title="NiB diagnostics",
         version="0.1.0",
         description="Metrics from saved prediction and truth. Thresholds change "
                     "without rerunning inference.",
@@ -297,7 +298,13 @@ def create_app(
                 "SELECT min(init_time), max(init_time) FROM task WHERE group_id = ?",
                 (cfg.group_id,),
             ).fetchone()
+            days = s.conn.execute(
+                "SELECT DISTINCT substr(init_time, 1, 10) FROM task "
+                "WHERE group_id = ? AND init_time IS NOT NULL ORDER BY 1",
+                (cfg.group_id,),
+            ).fetchall()
         payload["init_span"] = [row[0], row[1]] if row and row[0] else None
+        payload["init_days"] = [day[0] for day in days if day[0]]
         return payload
 
     @app.post("/api/configs", status_code=201)
@@ -580,6 +587,12 @@ def create_app(
         @app.get("/")
         def index_missing():
             return JSONResponse({"error": "the static files are missing"})
+
+    @app.get("/visualization")
+    def visualization():
+        if result_visualization is not None:
+            return result_visualization()
+        return {"models": [], "message": "No visualization was selected for this run."}
 
     app.state.library = library
     app.state.jobs = jobs

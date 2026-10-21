@@ -33,11 +33,14 @@ that data source's manifest; no path is invented when it is missing. Weights
 stay under `artifacts/<data-id>/<model-id>/...` and are checked against the model
 manifest's SHA256 before offline inference. A missing weight is copied from
 `paths.weight_source` (a folder laid out like `artifacts/`) and verified; the
-Handler does not download it over the network. Image layers are expected to be
-present in Docker's local cache: `GET /v1/resources?data_id=<id>` reports each
-selected image as ready or missing, and `POST /v1/resources/prepare` copies
-missing weights and re-checks the selected images. Compose definitions use
-`pull_policy: never` so execution never hides a download.
+Handler does not download it over the network. Image layers are bootstrapped from `runtime.image_registry` when missing:
+the diagnostics image is pulled in the background at Handler startup, and
+Validate pulls the diagnostics, selected data-reader and selected model images
+before admitting a window. The Handler tags pulled images under the short local
+manifest names; Compose still uses `pull_policy: never` so execution never hides
+a download. `GET /v1/resources?data_id=<id>` reports each image as ready or
+missing, and `POST /v1/resources/prepare` copies missing weights and re-checks
+the selected images.
 The initial reader requires six context and twenty target 128x128 frames. It
 rejects event/time ambiguity and events with missing pixels that the processed
 file can no longer mask reliably. Sample listings show this limitation.
@@ -97,10 +100,12 @@ provenance, SQLite or rendering manifest, summary, logs and webpage. Adding a ne
 threshold supplements quantities from stored Forecasts; it never invokes ONNX.
 Existing threshold queries use SQLite only.
 
-Go exposes registered HTML/SVG/PNG/GIF result files on loopback, with containment
-checks and a restrictive content policy. Runs is an independent Hub destination,
-not merely a link from an order. Its diagnostic retry starts a new attempt from
-saved Forecasts, never overwrites previous report output and never reruns models.
+Handler starts one diagnostics result viewer on a loopback address from
+`config.yaml`; the viewer serves Visualization and Metrics in one document and
+Handler proxies it through the existing result listener. There is no second
+metrics container and no iframe. Runs is an independent Hub destination, not
+merely a link from an order. Its diagnostic retry starts a new attempt from
+saved Forecasts, never overwrites previous attempts and never reruns models.
 
 ## Validation status
 
@@ -108,3 +113,12 @@ This feature is still in integration. See the actual verification record and PR
 for completed container/browser checks; library tests or successful image builds
 alone do not prove a real inference run. Public HTTPS Hub deployment, other host
 platform execution and unavailable input cases must be reported separately.
+
+## Batch sample windows
+
+A package may put `sample_starts` on its single data item. The Handler keeps
+the one-window layout when exactly one start is present and uses a batch run
+with `samples/<index>` children when more are selected. Children are ingested
+and inferred independently; only verification aggregates their init times.
+Visualization is rendered for every selected child and the result page exposes
+them as a Case selector; verification aggregates every selected init time.

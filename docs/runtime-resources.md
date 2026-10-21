@@ -169,8 +169,17 @@ The Hub chooses a folder per data source. The Handler stores it in
 - `GET /v1/datasets/<data-id>/samples` uses the data manifest's reader
   container.
 
-Image layers are considered cached. The Handler reports missing images and
-never pulls or builds automatically.
+Image layers are bootstrapped from `runtime.image_registry` when missing. The
+Handler pulls and tags the diagnostics image in the background after startup;
+Validate pulls the diagnostics, selected data-reader and selected model images
+before admitting a window. An empty `image_registry` keeps the local-cache-only
+behavior. A failed pull is reported as a Validate failure.
+
+For the reference deployment the registry is `ghcr.io/nowcast-in-a-box`.
+`scripts/publish-images.sh` builds `nib-diagnostics:automatic-flow`,
+`nib-ingestion:cma-demo` and `nib-nowcastnet:cma-demo` under that prefix. GHCR
+packages must be public, or the Docker daemon must already be logged in to
+GHCR, for a fresh machine to pull them without credentials.
 
 ## Adding a data source or model
 

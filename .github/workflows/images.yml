@@ -1,0 +1,32 @@
+name: publish images
+
+# Manual bootstrap for the GHCR images used by the Handler. The first Handler
+# startup pulls the diagnostics image; Validate pulls the selected data/model
+# image when the local tag is absent.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cma:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and publish CMA images
+        run: |
+          set -euo pipefail
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          docker build -f diagnostics/Dockerfile -t "ghcr.io/$owner/nib-diagnostics:automatic-flow" .
+          docker build -f adapters/cma_radar/Dockerfile -t "ghcr.io/$owner/nib-ingestion:cma-demo" .
+          docker build -f adapters/cma_radar/nowcastnet/Dockerfile -t "ghcr.io/$owner/nib-nowcastnet:cma-demo" .
+          docker push "ghcr.io/$owner/nib-diagnostics:automatic-flow"
+          docker push "ghcr.io/$owner/nib-ingestion:cma-demo"
+          docker push "ghcr.io/$owner/nib-nowcastnet:cma-demo"

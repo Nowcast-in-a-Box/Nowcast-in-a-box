@@ -330,3 +330,96 @@ pre.log {
   font-size: 12px; color: #6b7785;
 }
 @keyframes nib-spin { to { transform: rotate(360deg); } }
+
+/* ---- result shell: Visualization and Metrics share one page ------------- */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.page-head h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.15;
+  letter-spacing: -.025em;
+}
+.page-head p { margin: 5px 0 0; font-size: 12.5px; }
+.result-tabs { display: flex; gap: 4px; margin: 0; }
+.result-tabs button {
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.result-tabs button:hover { color: var(--ink); border-color: #c6d6e6; }
+.result-tabs button[aria-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.result-tabs button:focus-visible {
+  outline: 3px solid #9dbbff;
+  outline-offset: 2px;
+}
+.result-view { margin-top: 0; }
+.visualization-body { min-height: 220px; }
+.visualization-body > .card { margin-bottom: 16px; }
+.viz-artifacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+.viz-shot {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f7fafd;
+}
+.viz-shot img { display: block; width: 100%; height: auto; }
+.viz-shot figcaption {
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.viz-model + .viz-model { margin-top: 16px; }
+.viz-model > h2 { margin-bottom: 2px; }
+.viz-note { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+@media (max-width: 900px) {
+  .page-head { align-items: flex-start; flex-direction: column; }
+  .result-tabs { width: 100%; }
+  .result-tabs button { flex: 1 1 0; }
+}
+
+.viz-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.viz-picker > label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.viz-picker > select {
+  min-width: 240px;
+  max-width: 100%;
+}
+@media (max-width: 680px) {
+  .viz-picker { align-items: stretch; flex-direction: column; }
+  .viz-picker > select { min-width: 0; width: 100%; }
+}

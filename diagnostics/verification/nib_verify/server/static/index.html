@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NiB verification</title>
+<title>NiB diagnostics</title>
 <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAm0lEQVR42mNkwAK0cr/8Z6ABuDaZhxFdjJEeFuNzCBO9LUe3i4nelqM7golhgAHjQPgeGQx4CAy4A1go0Xx1EjecrZ33lb4hgGw5Nv5oGhh1wPDKhtTIbmSHALWy2/AsCakRZUy0tJyYKBvNhqMOIOgA9FQM45MqPtomxOkAbN0leoFrk3kYB0ciHIhQgNnJhK/nSo/OKeNAd88Bl8o/Qv8ybkgAAAAASUVORK5CYII=">
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -12,6 +12,29 @@
 
 
 <main>
+<header class="page-head">
+  <div>
+    <h1>Diagnostics</h1>
+    <p class="muted" id="result-meta">Current run</p>
+  </div>
+  <nav class="result-tabs" role="tablist" aria-label="Diagnostic result views">
+    <button type="button" role="tab" data-view="visualization" aria-controls="view-visualization" aria-selected="true">Visualization</button>
+    <button type="button" role="tab" data-view="metrics" aria-controls="view-metrics" aria-selected="false">Metrics</button>
+  </nav>
+</header>
+
+<section id="view-visualization" class="result-view" data-view="visualization" role="tabpanel">
+  <div id="visualization-picker" class="viz-picker" hidden>
+    <label for="viz-sample">Case</label>
+    <select id="viz-sample" aria-label="Visualization case"></select>
+    <span class="muted tiny" id="viz-case-meta"></span>
+  </div>
+  <div id="visualization-body" class="visualization-body">
+    <div class="empty">Loading visualization…</div>
+  </div>
+</section>
+
+<section id="view-metrics" class="result-view" data-view="metrics" role="tabpanel" hidden>
 <!-- ==================================================== results -->
 <section id="tab-results">
   <div class="split">
@@ -19,7 +42,8 @@
     <!-- left: what to ask -->
     <div class="ask">
       <div class="card">
-        <h2>Query</h2>
+        <h2>Query</h2>
+
 
         <div class="row" style="gap:10px; margin-bottom:10px">
           <div class="field" style="flex:1 1 0; min-width:0">
@@ -35,8 +59,14 @@
         <label class="tiny muted">Parameters</label>
         <div id="q-params"></div>
 
-        <label class="tiny muted" style="display:block; margin-top:12px">Init time</label>
-        <div class="chips" id="q-init-quick"></div>
+        <label class="tiny muted" style="display:block; margin-top:12px">Time range (defaults to all stored data)</label>
+        <div class="row" style="gap:10px; align-items:center; margin-top:6px">
+          <div class="field" style="flex:1 1 0; min-width:0">
+            <label class="tiny" for="q-init-day">Day</label>
+            <select id="q-init-day" aria-label="Stored day"></select>
+          </div>
+          <div class="chips" id="q-init-quick"></div>
+        </div>
         <!-- The browser's own date picker cannot be changed: it draws its own
              footer, with Today and Clear on it and no way to say done. So the
              value lives in hidden fields and the panel is ours, with the one
@@ -109,6 +139,7 @@
       <div id="query-result"></div>
 
   </div>
+</section>
 </section>
 
 </main>

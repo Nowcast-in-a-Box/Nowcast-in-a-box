@@ -1,17 +1,16 @@
 """CMA demo contract: July-only windows, honest masks and a metric grid."""
 
 import datetime as dt
-from dataclasses import replace
 
 import numpy as np
 import pytest
 import xarray as xr
 
-from ingestion import cma_radar as cma
 from adapters.cma_radar.nowcastnet.adapter import ADAPTER
 from adapters.sevir.nowcastnet.adapter import NowcastNetAdapter as SEVIR
+from ingestion import cma_radar as cma
 from interfaces.model import Forecast, PreparedInput
-from utils.stored_fields import create_run, StoredFields
+from utils.stored_fields import StoredFields, create_run
 
 
 def test_july_index_latest_generation_and_nested_files(tmp_path):
@@ -28,6 +27,28 @@ def test_july_index_latest_generation_and_nested_files(tmp_path):
     index = cma.file_index(tmp_path)
     assert len(index) == 1
     assert next(iter(index.values())).generation_time.minute == 10
+
+
+def test_samples_expose_days_and_filter_by_day(monkeypatch):
+    starts = [
+        dt.datetime(2026, 7, 1, 0, 0, tzinfo=dt.timezone.utc),
+        dt.datetime(2026, 7, 2, 0, 0, tzinfo=dt.timezone.utc),
+        dt.datetime(2026, 7, 3, 0, 0, tzinfo=dt.timezone.utc),
+    ]
+    index = {}
+    for start in starts:
+        for step in range(cma.CONTEXT + cma.TARGET):
+            index[start + dt.timedelta(minutes=cma.CADENCE * step)] = object()
+    monkeypatch.setattr(cma, "file_index", lambda _path: index)
+
+    all_days = cma.list_samples("data", limit=1)
+    assert all_days["days"] == ["20260701", "20260702", "20260703"]
+    assert all_days["total"] == 3
+
+    second_day = cma.list_samples("data", day="20260702", limit=10)
+    assert second_day["day"] == "20260702"
+    assert second_day["total"] == 1
+    assert second_day["samples"][0]["event_id"] == "20260702"
 
 
 def test_grid_is_128_square_at_three_km():
@@ -129,9 +150,10 @@ def test_stored_cma_roundtrip(tmp_path):
         )["unit"]
         == "dBZ"
     )
-    from utils.stored_fields import add_forecast
-    from diagnostics.cma_visualization import visualization
     from PIL import Image
+
+    from diagnostics.cma_visualization import visualization
+    from utils.stored_fields import add_forecast
 
     add_forecast(
         directory,

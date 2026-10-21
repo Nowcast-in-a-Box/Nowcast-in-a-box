@@ -71,7 +71,7 @@ def test_health_names_the_root_and_the_host(client):
 def test_the_review_page_is_served(client):
     page = client.get("/")
     assert page.status_code == 200
-    assert "NiB verification" in page.text
+    assert "NiB diagnostics" in page.text
     assert "app.js" in page.text
 
 

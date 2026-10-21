@@ -90,23 +90,85 @@ const state = {
   poll: null,
   job: null,
   chartUrl: null,
+  visualization: null,
+  initDates: [],
   kind: "line",
   hidden: [],            // members the legend has been clicked off
 };
 
-// ---------------------------------------------------------------- tabs
-function showTab(name) {
-  if (state.poll && name !== "configs") { clearTimeout(state.poll); state.poll = null; }
-  for (const button of $$("#tabs button")) {
-    button.setAttribute("aria-selected", String(button.dataset.tab === name));
+// ---------------------------------------------------------------- result views
+function showView(name) {
+  for (const section of $$(".result-view")) {
+    section.hidden = section.dataset.view !== name;
   }
-  for (const section of $$("main > section")) {
-    section.hidden = section.id !== `tab-${name}`;
+  for (const button of $$(".result-tabs button")) {
+    button.setAttribute("aria-selected", String(button.dataset.view === name));
   }
-  if (name === "results") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
+  if (name === "metrics") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
 }
 
-$$("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+$$(".result-tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
+
+async function loadVisualization() {
+  const host = $("#visualization-body");
+  if (!host) { return; }
+  try {
+    const res = await fetch("/visualization", { cache: "no-store", credentials: "omit" });
+    if (!res.ok) { throw new Error(`visualization returned ${res.status}`); }
+    const data = await res.json();
+    state.visualization = data;
+    const samples = Array.isArray(data.samples) ? data.samples : [];
+    const picker = $("#visualization-picker");
+    const select = $("#viz-sample");
+    if (picker && select) {
+      const previous = select.value;
+      mount(select, samples.map(sample => h("option", {
+        value: sample.sample_id,
+        text: [sample.event_id, sample.init_time || sample.sample_id].filter(Boolean).join(" · "),
+      })));
+      const chosen = samples.some(sample => sample.sample_id === previous)
+        ? previous
+        : (data.sample_id || samples[0]?.sample_id || "");
+      select.value = chosen;
+      select.onchange = () => renderVisualization(data, select.value);
+      picker.hidden = samples.length <= 1;
+    }
+    if ($("#result-meta") && data.run_id) {
+      $("#result-meta").textContent = data.sample_id || data.run_id;
+    }
+    renderVisualization(data, (select && select.value) || data.sample_id);
+  } catch (error) {
+    mount(host, notice("bad", `Could not load visualization: ${error.message}`));
+  }
+}
+
+function renderVisualization(data, sampleId) {
+  const host = $("#visualization-body");
+  if (!host) { return; }
+  const models = data.models || [];
+  if (!models.length) {
+    mount(host, empty(data.message || "No visualization was selected for this run."));
+    return;
+  }
+  const meta = $("#viz-case-meta");
+  const sample = (data.samples || []).find(item => item.sample_id === sampleId);
+  if (meta) meta.textContent = sample ? (sample.init_time || sample.sample_id) : "";
+  if ($("#result-meta") && sample) $("#result-meta").textContent = sample.sample_id;
+  mount(host, models.map(model => {
+    const cases = model.cases || [];
+    const selected = cases.find(item => item.sample_id === sampleId) || cases[0];
+    const images = selected ? selected.images || [] : [];
+    return h("section", { class: "card viz-model" },
+      h("h2", { text: model.name || model.id }),
+      model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
+      images.length
+        ? h("div", { class: "viz-artifacts" }, images.map(image =>
+            h("figure", { class: "viz-shot" },
+              h("img", { src: image.url, alt: image.alt || image.caption || "" }),
+              h("figcaption", { text: image.caption || "" }))))
+        : empty("No visualization is available for this case."));
+  }));
+}
 
 // ==================================================================
 // Configs
@@ -1014,11 +1076,11 @@ async function onConfigPicked() {
     try { cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`); } catch (_) { return; }
   }
   state.selected = cfg;
-  // Defaults come off the config, not off the clock. "The last week" read from
-  // the wall clock is right for a live system and an empty page for a replayed
-  // one, and the page has no way to tell the two apart -- so the window opens on
-  // the most recent week this config was actually verified over.
+  // Defaults come off the config, not off the clock. The full stored span is
+  // the useful default for a metric average; a day picker narrows it when the
+  // question is about one case.
   state.initSpan = cfg.init_span || null;
+  state.initDates = cfg.init_days || [];
   state.leads = cfg.leads || [];
   fillInitDefaults();
   fillLeadDefaults();
@@ -1031,11 +1093,8 @@ async function onConfigPicked() {
   if (available.length) await onMethodPicked();
 }
 
-//: The default window: seven days.
-const WEEK = 7 * 24 * 3600 * 1000;
-
 //: What the quick picks offer, in days. ``null`` is everything that was stored.
-const INIT_PICKS = [[1, "1 d"], [3, "3 d"], [7, "7 d"], [30, "30 d"]];
+const INIT_PICKS = [[null, "All"], [1, "1 d"], [3, "3 d"], [7, "7 d"], [30, "30 d"]];
 
 function initDays() {
   const from = $("#q-init-from").value, to = $("#q-init-to").value;
@@ -1118,30 +1177,60 @@ function closeInitPanel() { $("#init-panel").hidden = true; }
 
 function renderInitQuick() {
   const days = initDays();
+  const span = state.initSpan;
+  const allActive = Boolean(span && $("#q-init-from").value === localStamp(new Date(span[0]))
+    && $("#q-init-to").value === localStamp(new Date(span[1])));
   const near = (one, other) => one !== null && other !== null && Math.abs(one - other) < 0.2;
   const chips = INIT_PICKS.map(([count, label]) => h("button", {
     class: "chip", type: "button", text: label,
-    "aria-pressed": String(near(days, count)),
+    "aria-pressed": String(count === null ? allActive : near(days, count)),
     onclick: () => setInitDays(count),
   }));
   // Custom does not set a range, it opens the thing that does. It lights up when
   // the range is none of the presets, which is what custom means.
   chips.push(h("button", {
     class: "chip", type: "button", text: "Custom",
-    "aria-pressed": String(!INIT_PICKS.some(([count]) => near(days, count))),
+    "aria-pressed": String(!allActive && !INIT_PICKS.some(([count]) => count !== null && near(days, count))),
     onclick: () => openInitPanel(),
   }));
   mount($("#q-init-quick"), chips);
+  const daySelect = $("#q-init-day");
+  if (daySelect) {
+    const previous = daySelect.value;
+    mount(daySelect, h("option", { value: "", text: "All data" }),
+      state.initDates.map(day => h("option", { value: day, text: day })));
+    if (state.initDates.includes(previous)) daySelect.value = previous;
+    daySelect.onchange = onInitDay;
+  }
 }
 
 function setInitDays(count) {
-  const end = new Date();
-  const start = new Date(end.getTime() - count * 86400000);
+  const span = state.initSpan;
+  const end = span ? new Date(span[1]) : new Date();
+  const start = count === null
+    ? (span ? new Date(span[0]) : end)
+    : new Date(end.getTime() - count * 86400000);
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
+  const daySelect = $("#q-init-day");
+  if (daySelect) daySelect.value = "";
   closeInitPanel();
   sayInit();
   renderInitQuick();
+}
+
+function onInitDay() {
+  const day = $("#q-init-day").value;
+  if (!day) {
+    setInitDays(null);
+  } else {
+    $("#q-init-from").value = localStamp(new Date(`${day}T00:00:00Z`));
+    $("#q-init-to").value = localStamp(new Date(`${day}T23:59:00Z`));
+    closeInitPanel();
+    sayInit();
+    renderInitQuick();
+  }
+  if (state.lastQuery) runQuery();
 }
 
 /** The button the browser's own picker does not have. It is on the panel, where
@@ -1157,14 +1246,10 @@ function applyInit() {
 
 function fillInitDefaults() {
   const span = state.initSpan;
-  // The window ends now: it follows the clock on a live system. It starts a week
-  // before the data ends rather than a week before now, because on a replayed
-  // dataset those are months apart and a week before now is an empty page -- and
-  // the page cannot tell a replay from a live feed.
-  const end = new Date();
-  const anchor = span ? new Date(span[1]) : end;
-  const start = new Date(Math.max(span ? new Date(span[0]).getTime() : 0,
-                                  anchor.getTime() - WEEK));
+  // A metric is an average over the stored period. Open on the full stored
+  // span; a day picker or a quick range narrows it when needed.
+  const end = span ? new Date(span[1]) : new Date();
+  const start = span ? new Date(span[0]) : end;
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
   closeInitPanel();
@@ -1305,6 +1390,10 @@ function queryParams() {
 
 async function runQuery() {
   const host = $("#query-result");
+  if (!$("#q-method").value) {
+    mount(host, notice("bad", "No metric is available for this run. Re-run diagnostics with a metric selection."));
+    return;
+  }
   // Every parameter has to keep at least one value. An empty list is not "no
   // filter" -- it is a question with no answer, and sending nothing would quietly
   // widen the query to every threshold the config ever stored, which is the
@@ -1531,7 +1620,7 @@ function renderScores(result) {
   const head = h("tr", {},
     dims.map(d => h("th", { text: d })),
     h("th", { class: "num", text: result.meta.label }),
-    h("th", { class: "num", text: "samples" }));
+    h("th", { class: "num", title: "valid grid cells in this aggregate, not the number of forecast cases", text: "valid cells" }));
   const body = usable.map(r => h("tr", {},
     dims.map(d => h("td", { class: d === "valid_time" || d === "init_time" ? "mono" : "", text: r[d] == null ? "—" : String(r[d]) })),
     h("td", { class: "num", text: r.value == null ? "—" : Number(r.value).toFixed(4) }),
@@ -1540,7 +1629,7 @@ function renderScores(result) {
   return h("div", {},
     h("div", { class: "row", style: "margin-top:12px" },
       pill(`${usable.length} record(s)`),
-      pill(`${num(usable.reduce((a, r) => a + r.n_valid, 0))} valid samples`),
+      pill(`${num(usable.reduce((a, r) => a + r.n_valid, 0))} valid cells`),
       pill(`ruler ${result.meta.group ? result.meta.group.ruler.fingerprint : "—"}`),
       h("span", { class: "spacer" }),
       // Beside the table and not in the chart card: this is the table, saved.
@@ -1549,7 +1638,7 @@ function renderScores(result) {
         title: "Save the rows below as a CSV file",
         onclick: () => saveCsv(result) })),
     dropped ? h("p", { class: "tiny muted" },
-      `${dropped} group(s) had no samples and are not shown.`) : null,
+      `${dropped} group(s) had no valid cells and are not shown.`) : null,
     h("div", { class: "scroll", style: "margin-top:10px" },
       h("table", {}, h("thead", {}, head), h("tbody", {}, body))));
 }
@@ -1568,7 +1657,7 @@ function saveCsv(result) {
     `# config ${(meta.group || {}).id || "?"}, `
       + `ruler ${((meta.group || {}).ruler || {}).fingerprint || "?"}`,
     `# filters ${JSON.stringify(meta.s || {})}`,
-    ["method", ...dims, "value", "samples"].join(","),
+    ["method", ...dims, "value", "valid_cells"].join(","),
   ];
   for (const row of result.records) {
     const cells = [meta.method, ...dims.map(d => row[d]), row.value, row.n_valid];
@@ -1652,10 +1741,10 @@ function syncMethodChips() {
 
 
 async function boot() {
-  await Promise.all([loadConfigs(), loadCatalog(), loadMetrics()]);
+  await Promise.all([loadConfigs(), loadCatalog(), loadMetrics(), loadVisualization()]);
   // renderMembers is the roster editor of the removed New config panel.
   renderMetricGroups();
-  showTab("results");
+  showView("visualization");
 }
 
 boot();

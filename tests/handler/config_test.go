@@ -12,7 +12,7 @@ import (
 func TestLoadConfigFile(t *testing.T) {
 	t.Setenv("NIB_DATA_ROOT", "")
 	dir := t.TempDir()
-	path := writeConfig(t, dir, "handler:\n  host: 127.0.0.1\n  port: 9001\nreview:\n  host: 127.0.0.1\n  port: 9002\npaths:\n  artifacts: blobs\n")
+	path := writeConfig(t, dir, "handler:\n  host: 127.0.0.1\n  port: 9001\nreview:\n  host: 127.0.0.1\n  port: 9002\ndiagnostics:\n  host: 127.0.0.1\n  port: 9003\npaths:\n  artifacts: blobs\n")
 	cfg, err := handler.Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -22,6 +22,9 @@ func TestLoadConfigFile(t *testing.T) {
 	}
 	if cfg.Review.Port != 9002 {
 		t.Fatalf("review.port=%d", cfg.Review.Port)
+	}
+	if cfg.Diagnostics.Port != 9003 {
+		t.Fatalf("diagnostics.port=%d", cfg.Diagnostics.Port)
 	}
 	wantArtifacts, err := filepath.Abs(filepath.Join(dir, "blobs"))
 	if err != nil {
@@ -59,6 +62,9 @@ func TestLoadConfigDefaultsFillGaps(t *testing.T) {
 	}
 	if cfg.Review.Port != d.Review.Port {
 		t.Fatalf("review.port=%d", cfg.Review.Port)
+	}
+	if cfg.Diagnostics.Port != d.Diagnostics.Port {
+		t.Fatalf("diagnostics.port=%d", cfg.Diagnostics.Port)
 	}
 }
 
@@ -151,6 +157,9 @@ func TestRepoRootConfigYAML(t *testing.T) {
 	if cfg.Review.Port != 8766 {
 		t.Fatalf("review.port=%d", cfg.Review.Port)
 	}
+	if cfg.Diagnostics.Port != 8767 {
+		t.Fatalf("diagnostics.port=%d", cfg.Diagnostics.Port)
+	}
 	if !filepath.IsAbs(cfg.Paths.Artifacts) {
 		t.Fatalf("artifacts should be absolute, got %q", cfg.Paths.Artifacts)
 	}
@@ -176,6 +185,9 @@ func TestApplyOverrides(t *testing.T) {
 	}
 	if got.Review.Port != cfg.Review.Port {
 		t.Fatalf("review.port=%d", got.Review.Port)
+	}
+	if got.Diagnostics.Port != cfg.Diagnostics.Port {
+		t.Fatalf("diagnostics.port=%d", got.Diagnostics.Port)
 	}
 }
 

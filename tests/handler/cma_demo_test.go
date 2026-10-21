@@ -23,7 +23,7 @@ func TestCMASamplesUseControlledReadOnlyDirectory(t *testing.T) {
 	server := handler.NewServer(cfg)
 	calls := [][]string{}
 	server.Runner = cmaSampleRunner{&calls}
-	req := httptest.NewRequest("GET", "http://127.0.0.1/v1/datasets/cma_radar/samples?limit=20", nil)
+	req := httptest.NewRequest("GET", "http://127.0.0.1/v1/datasets/cma_radar/samples?limit=20&day=20260702", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, req)
@@ -34,7 +34,7 @@ func TestCMASamplesUseControlledReadOnlyDirectory(t *testing.T) {
 		t.Fatal(calls)
 	}
 	args := strings.Join(calls[0], " ")
-	if !strings.Contains(args, "--dataset cma_radar") || !strings.Contains(args, ":/inputs/data:ro") || strings.Contains(args, "CATALOG.csv") || strings.Contains(args, "data.h5") {
+	if !strings.Contains(args, "--dataset cma_radar") || !strings.Contains(args, "--day 20260702") || !strings.Contains(args, ":/inputs/data:ro") || strings.Contains(args, "CATALOG.csv") || strings.Contains(args, "data.h5") {
 		t.Fatal(args)
 	}
 	req = httptest.NewRequest("GET", "http://127.0.0.1/v1/datasets/sevir/samples", nil)

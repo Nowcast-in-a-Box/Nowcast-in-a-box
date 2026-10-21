@@ -226,20 +226,15 @@ func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) Diagno
 	raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, id, "manifest.json"))
 	var manifest struct {
 		Diagnostics []struct {
-			Kind, Status, Entry string
-			OperationID         string `json:"operation_id"`
+			Kind, Status, Entry, Path string
+			OperationID               string `json:"operation_id"`
 		}
 	}
 	var identity struct{ Schema, ID string }
 	if readErr == nil && json.Unmarshal(raw, &manifest) == nil && json.Unmarshal(raw, &identity) == nil && identity.Schema == "nib.run.v1" && identity.ID == id {
 		for _, item := range manifest.Diagnostics {
-			if item.Kind == "report" && item.OperationID == state.ID && (item.Status == "succeeded" || item.Status == "partial") && item.Entry != "" {
-				var recorded map[string]any
-				if json.Unmarshal(raw, &recorded) == nil {
-					if _, _, artifactErr := s.resultFilePath(id, item.Entry, recorded); artifactErr == nil {
-						state.Status, state.ReportEntry = item.Status, item.Entry
-					}
-				}
+			if item.Kind == "report" && item.OperationID == state.ID && (item.Status == "succeeded" || item.Status == "partial") && item.Entry != "" && item.Path != "" {
+				state.Status, state.ReportEntry = item.Status, item.Entry
 			}
 		}
 	}

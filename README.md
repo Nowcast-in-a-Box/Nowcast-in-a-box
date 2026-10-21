@@ -24,6 +24,9 @@ Follow the step-by-step guidance down below:
 3. Go to the Release page and download the latest version of NiB
    - [Releases](https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/releases)
 4. Start the handler from the downloaded folder. No terminal command or environment variable is needed.
+   The Handler pulls missing images from the configured GHCR registry; set
+   `runtime.image_registry` in `config.yaml` and make the packages public, or
+   pre-pull/build the images locally.
    - macOS: double-click `Start NiB.command`.
    - Windows: double-click `Start NiB.cmd`.
    - Linux: run `Start NiB.sh`.
@@ -75,9 +78,10 @@ It keeps `runs/`, `artifacts/`, and your data folder for inspection. Add
 artifacts, resources, logs, and downloaded Handler binaries as well. `--purge`
 never removes the external data folder.
 
-The root `config.yaml` holds host settings only: ports, paths, trusted Hub
-origins and the Atlas revision. It never selects a dataset or container. The
-Hub chooses the dataset from the packaged `runtime.yaml` manifests.
+The root `config.yaml` holds host settings only: handler, review and diagnostics
+viewer addresses, paths, trusted Hub origins and the Atlas revision. It never
+selects a dataset or container. The Hub chooses the dataset from the packaged
+`runtime.yaml` manifests.
 
 
 

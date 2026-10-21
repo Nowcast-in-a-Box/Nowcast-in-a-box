@@ -12,15 +12,18 @@ import (
 )
 
 const (
-	defaultHandlerHost = "127.0.0.1"
-	defaultHandlerPort = 8765
-	defaultReviewHost  = "127.0.0.1"
-	defaultReviewPort  = 8766
-	defaultArtifacts   = "artifacts"
-	defaultRuns        = "runs"
-	defaultResources   = "."
-	configFileName     = "config.yaml"
-	settingsFileName   = "nib-settings.json"
+	defaultHandlerHost     = "127.0.0.1"
+	defaultHandlerPort     = 8765
+	defaultReviewHost      = "127.0.0.1"
+	defaultReviewPort      = 8766
+	defaultDiagnosticsHost = "127.0.0.1"
+	defaultDiagnosticsPort = 8767
+	defaultMaxBatchSamples = 32
+	defaultArtifacts       = "artifacts"
+	defaultRuns            = "runs"
+	defaultResources       = "."
+	configFileName         = "config.yaml"
+	settingsFileName       = "nib-settings.json"
 )
 
 // Addr is a loopback bind address from config.yaml.
@@ -40,10 +43,12 @@ type Paths struct {
 
 // Runtime configures host-side container control; browser requests cannot set these values.
 type Runtime struct {
-	DockerContext  string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
-	AllowedOrigins []string `yaml:"allowed_origins" json:"allowed_origins"`
-	Token          string   `yaml:"token,omitempty" json:"-"`
-	AtlasRevision  string   `yaml:"atlas_revision" json:"atlas_revision"`
+	DockerContext   string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
+	ImageRegistry   string   `yaml:"image_registry,omitempty" json:"image_registry,omitempty"`
+	AllowedOrigins  []string `yaml:"allowed_origins" json:"allowed_origins"`
+	Token           string   `yaml:"token,omitempty" json:"-"`
+	AtlasRevision   string   `yaml:"atlas_revision" json:"atlas_revision"`
+	MaxBatchSamples int      `yaml:"max_batch_samples,omitempty" json:"max_batch_samples,omitempty"`
 }
 
 // Config is the host runtime settings loaded from config.yaml.
@@ -52,6 +57,7 @@ type Config struct {
 	Source           string            `yaml:"-" json:"-"`
 	Handler          Addr              `yaml:"handler"`
 	Review           Addr              `yaml:"review"`
+	Diagnostics      Addr              `yaml:"diagnostics"`
 	Paths            Paths             `yaml:"paths"`
 	Runtime          Runtime           `yaml:"runtime"`
 	DataRoots        map[string]string `yaml:"-" json:"-"`
@@ -62,9 +68,10 @@ type Config struct {
 // no config file is found.
 func DefaultConfig() Config {
 	return Config{
-		Handler: Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
-		Review:  Addr{Host: defaultReviewHost, Port: defaultReviewPort},
-		Paths:   Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Resources: defaultResources},
+		Handler:     Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
+		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
+		Diagnostics: Addr{Host: defaultDiagnosticsHost, Port: defaultDiagnosticsPort},
+		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Resources: defaultResources},
 	}
 }
 
@@ -114,6 +121,7 @@ func Load(explicit string) (Config, error) {
 
 func (c *Config) applyDefaults() {
 	d := DefaultConfig()
+	c.Runtime.ImageRegistry = strings.TrimSpace(c.Runtime.ImageRegistry)
 	if c.Handler.Host == "" {
 		c.Handler.Host = d.Handler.Host
 	}
@@ -126,6 +134,12 @@ func (c *Config) applyDefaults() {
 	if c.Review.Port == 0 {
 		c.Review.Port = d.Review.Port
 	}
+	if c.Diagnostics.Host == "" {
+		c.Diagnostics.Host = d.Diagnostics.Host
+	}
+	if c.Diagnostics.Port == 0 {
+		c.Diagnostics.Port = d.Diagnostics.Port
+	}
 	if c.Paths.Artifacts == "" {
 		c.Paths.Artifacts = d.Paths.Artifacts
 	}
@@ -134,6 +148,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Paths.Resources == "" {
 		c.Paths.Resources = d.Paths.Resources
+	}
+	if c.Runtime.MaxBatchSamples == 0 {
+		c.Runtime.MaxBatchSamples = defaultMaxBatchSamples
 	}
 }
 

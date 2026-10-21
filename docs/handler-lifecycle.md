@@ -36,8 +36,11 @@ configuration selected by the latest registration; it is not a profile chooser.
 For a contributor-provided executable, set `NIB_HANDLER_BIN` before launching.
 
 The default API and results addresses are `http://127.0.0.1:8765` and
-`http://127.0.0.1:8766`. Both come from `config.yaml`; the Hub website's port is
-unrelated. Startup does not select another port or kill a conflicting program.
+`http://127.0.0.1:8766`. The diagnostics result viewer is published at the
+loopback address in `config.yaml` (`diagnostics.host` / `diagnostics.port`) and
+proxied through the results listener. All three come from `config.yaml`; the Hub
+website's port is unrelated. Startup does not select another port or kill a
+conflicting program.
 An old Handler without the identity protocol needs an explicit upgrade/stop,
 not silent adoption.
 

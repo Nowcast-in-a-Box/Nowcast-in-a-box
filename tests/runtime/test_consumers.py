@@ -71,12 +71,12 @@ def test_verification_attempts_preserve_previous_reports(run):
     )
     first = verification(run, [{"family": "continuous", "items": ["mae", "rmse"]}])
     assert first["status"] == "succeeded"
-    report = (run / first["entry"]).read_bytes()
+    first_summary = (run / first["path"] / "summary.json").read_bytes()
     second = verification(
         run, [{"family": "yes_or_no", "items": ["ts"], "levels": [1, 2]}]
     )
     assert first["id"] != second["id"]
-    assert (run / first["entry"]).read_bytes() == report
+    assert (run / first["path"] / "summary.json").read_bytes() == first_summary
     summary = json.loads((run / second["path"] / "summary.json").read_text())
     assert summary["ran"] == 20
     assert len(summary["scores"]["ts"]["records"]) == 40

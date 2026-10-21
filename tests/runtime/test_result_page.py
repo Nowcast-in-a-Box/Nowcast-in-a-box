@@ -1,73 +1,192 @@
 import json
 
-from diagnostics.__main__ import write_report
+from fastapi.testclient import TestClient
+
+from diagnostics.diagnostics_server import build_app
 
 
-def test_combined_report_keeps_map_and_scores_in_one_directory(tmp_path):
+def make_run(tmp_path):
     run = tmp_path / "run"
-    pictures = run / "diagnostics" / "visualization" / "picture"
-    scores = run / "diagnostics" / "verification" / "score"
-    pictures.mkdir(parents=True)
-    scores.mkdir(parents=True)
-    (pictures / "map.png").write_bytes(b"png")
-    (scores / "mae.svg").write_text("<svg></svg>")
-    report = write_report(
-        run,
-        [
-            {
-                "kind": "visualization",
-                "entry": "diagnostics/visualization/picture/index.html",
-            },
-            {
-                "kind": "verification",
-                "entry": "diagnostics/verification/score/index.html",
-            },
-        ],
-    )
-    page = (run / report["entry"]).read_text()
-    assert 'src="0-map.png"' in page and 'src="1-mae.svg"' in page
-    assert 'name="view"' in page and "Visualization" in page and "Metrics" in page
-    assert "<script" not in page and 'role="tab"' not in page
-    assert 'type="radio"' in page and ":focus-visible" in page
-    assert (run / report["path"] / "0-map.png").samefile(pictures / "map.png")
-
-
-def test_combined_report_keeps_all_model_maps_without_name_collisions(tmp_path):
-    (tmp_path / "manifest.json").write_text(
+    picture = run / "diagnostics" / "visualization" / "picture"
+    picture.mkdir(parents=True)
+    (picture / "map.png").write_bytes(b"png")
+    (picture / "animation.gif").write_bytes(b"gif")
+    (run / "manifest.json").write_text(
         json.dumps(
             {
-                "model_names": {
-                    "nowcastnet": "NowcastNet",
-                    "exprecast": "exPreCast",
-                    "wadepre": "WADEPre",
-                }
+                "schema": "nib.run.v1",
+                "id": "run-one",
+                "sample": {"sample_id": "S700003"},
+                "model_names": {"wadepre": "WADEPre"},
+                "diagnostics": [
+                    {
+                        "kind": "visualization",
+                        "status": "succeeded",
+                        "model_id": "wadepre",
+                        "path": "diagnostics/visualization/picture",
+                    }
+                ],
             }
         )
     )
-    results = []
-    for model in ("nowcastnet", "exprecast", "wadepre"):
-        source = tmp_path / "diagnostics" / "visualization" / model
-        source.mkdir(parents=True)
-        (source / "map.png").write_bytes(model.encode())
-        (source / "animation.gif").write_bytes(model.encode())
-        results.append(
+    return run
+
+
+def add_verification(run):
+    attempt = run / "diagnostics" / "verification" / "attempt"
+    attempt.mkdir(parents=True)
+    (attempt / "config.json").write_text(
+        json.dumps(
             {
-                "kind": "visualization",
-                "model_id": model,
-                "entry": f"diagnostics/visualization/{model}/index.html",
+                "group": {"id": "run-one", "name": "20260701@2026-07-01T00:00:00Z"},
+                "ruler": {
+                    "ground_truth": "cma_radar",
+                    "unit": "dBZ",
+                    "time_step_minutes": 6,
+                    "extent": [-190500, -190500, 190500, 190500],
+                    "resolution": 3000,
+                },
+                "members": [
+                    {
+                        "name": "nowcastnet",
+                        "variable": "CREF",
+                        "unit": "dBZ",
+                        "leads": [6, 12],
+                    }
+                ],
+                "metrics": [
+                    {"family": "continuous", "items": ["mae"]},
+                    {"family": "yes_or_no", "items": ["ets"], "levels": [20]},
+                ],
             }
         )
-    report = write_report(tmp_path, results)
-    out = tmp_path / report["path"]
-    page = (tmp_path / report["entry"]).read_text()
-    for index, (model, name) in enumerate(
-        (
-            ("nowcastnet", "NowcastNet"),
-            ("exprecast", "exPreCast"),
-            ("wadepre", "WADEPre"),
-        )
+    )
+    manifest_path = run / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["diagnostics"].append(
+        {
+            "kind": "verification",
+            "status": "succeeded",
+            "path": "diagnostics/verification/attempt",
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    return attempt
+
+
+def test_the_result_page_has_both_views_in_one_document(tmp_path):
+    run = make_run(tmp_path)
+    with TestClient(build_app(run)) as client:
+        page = client.get("/")
+        assert page.status_code == 200
+        assert "NiB diagnostics" in page.text
+        assert 'data-view="visualization"' in page.text
+        assert 'data-view="metrics"' in page.text
+        assert "iframe" not in page.text
+        assert 'id="viz-sample"' in page.text
+        assert "Content-Security-Policy" in page.headers
+        assert "frame-ancestors 'none'" in page.headers["Content-Security-Policy"]
+
+
+def test_visualization_is_a_same_origin_artifact_list(tmp_path):
+    run = make_run(tmp_path)
+    with TestClient(build_app(run)) as client:
+        body = client.get("/visualization").json()
+        assert body["run_id"] == "run-one"
+        assert body["sample_id"] == "S700003"
+        assert body["models"][0]["name"] == "WADEPre"
+        urls = {image["url"] for image in body["models"][0]["images"]}
+        assert "/visualization/diagnostics/visualization/picture/map.png" in urls
+        assert client.get(next(iter(urls))).content in (b"png", b"gif")
+
+
+
+def test_a_batch_result_exposes_each_sample_as_a_visualization_case(tmp_path):
+    run = tmp_path / "run"
+    samples = []
+    for index, init_time in enumerate(
+        ("2026-07-01T00:00:00Z", "2026-07-01T00:06:00Z")
     ):
-        assert name in page
-        for filename in ("map.png", "animation.gif"):
-            assert (out / f"{index}-{filename}").read_bytes() == model.encode()
-            assert f'src="{index}-{filename}"' in page
+        sample_id = f"20260701@{init_time}"
+        path = f"samples/{index:03d}"
+        picture = run / path / "diagnostics" / "visualization" / "picture"
+        picture.mkdir(parents=True)
+        (picture / "map.png").write_bytes(b"png")
+        samples.append(
+            {
+                "sample_id": sample_id,
+                "event_id": "20260701",
+                "init_time": init_time,
+                "path": path,
+            }
+        )
+    run.mkdir(exist_ok=True)
+    (run / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "nib.run.v1",
+                "id": "run-batch",
+                "batch": True,
+                "samples": samples,
+                "sample_count": 2,
+                "sample": samples[0],
+                "model_names": {"wadepre": "WADEPre"},
+                "diagnostics": [
+                    {
+                        "kind": "visualization",
+                        "status": "succeeded",
+                        "model_id": "wadepre",
+                        "sample_id": sample["sample_id"],
+                        "path": f"{sample['path']}/diagnostics/visualization/picture",
+                    }
+                    for sample in samples
+                ],
+            }
+        )
+    )
+    with TestClient(build_app(run)) as client:
+        body = client.get("/visualization").json()
+        assert [sample["sample_id"] for sample in body["samples"]] == [
+            sample["sample_id"] for sample in samples
+        ]
+        assert len(body["models"][0]["cases"]) == 2
+        first = body["models"][0]["cases"][0]
+        second = body["models"][0]["cases"][1]
+        assert first["sample_id"] == samples[0]["sample_id"]
+        assert second["sample_id"] == samples[1]["sample_id"]
+        assert "/visualization/samples/000/" in first["images"][0]["url"]
+        assert "/visualization/samples/001/" in second["images"][0]["url"]
+        image = client.get(second["images"][0]["url"])
+        assert image.content == b"png"
+
+def test_a_result_config_is_queryable_with_a_metric(tmp_path):
+    run = make_run(tmp_path)
+    add_verification(run)
+    with TestClient(build_app(run)) as client:
+        configs = client.get("/api/configs")
+        assert configs.status_code == 200
+        assert configs.json()["configs"][0]["group_id"] == "run-one"
+        detail = client.get("/api/configs/run-one")
+        assert detail.status_code == 200
+        methods = {item["method"] for item in detail.json()["metrics_available"]}
+        assert {"mae", "ets"} <= methods
+        result = client.get(
+            "/api/scores",
+            params={
+                "config": "run-one",
+                "method": "mae",
+                "init_from": "2026-07-01T00:30:00Z",
+                "init_to": "2026-07-01T00:30:00Z",
+            },
+        )
+        assert result.status_code == 200
+
+
+def test_a_result_url_serves_the_same_page(tmp_path):
+    run = make_run(tmp_path)
+    with TestClient(build_app(run)) as client:
+        page = client.get(
+            "/v1/runs/run-one/files/diagnostics/report/current/index.html"
+        )
+        assert page.status_code == 200
+        assert "NiB diagnostics" in page.text

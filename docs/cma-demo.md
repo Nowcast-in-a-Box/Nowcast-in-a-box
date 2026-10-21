@@ -80,9 +80,12 @@ run offline, and all output stays under `runs/<unique ID>/`.
    whether Docker or the local data directory is ready yet.
 3. Choose **NowcastNet · CMA demo**. Optionally choose **CREF verification** and
    **CREF comparison and animation**. SEVIR products have their own pairings.
-4. In Checkout, confirm the data directory, load/select a sample if needed, and
-   confirm its date/time and region center. Thresholds use dBZ (defaults 10, 20,
-   30, 40, 50). Validate, check local data and weights, then Start.
+4. In Checkout, confirm the data directory and load samples from the day picker.
+   Select one or more windows (up to `runtime.max_batch_samples`; default 32).
+   Each selected window gets its own Visualization case; Metrics aggregates
+   every selected init time. Confirm the region center. Thresholds use dBZ
+   (defaults 10, 20, 30, 40, 50). Validate, check local data and weights, then
+   Start.
 5. Start freezes/submits once and moves observation to Runs. Handler executes
    the selected diagnostics automatically after inference, even when the browser
    closes. **Open result** only reads the local Visualization / Metrics page.
