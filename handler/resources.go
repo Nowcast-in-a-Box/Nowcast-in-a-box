@@ -151,7 +151,11 @@ func (s *Server) checkDiagnosticsLocked() resourceGroup {
 		return resourceGroup{Status: "failed", Message: err.Error(), Items: []resourceItem{item}}
 	}
 	item.Status = "missing"
-	item.Message = fmt.Sprintf("image %s is not present locally; build it with docker build -f %s .", image, buildHint(s.Resources.Diagnostics.Container.Build, "diagnostics/Dockerfile"))
+	if s.currentConfig().Runtime.ImageRegistry != "" {
+		item.Message = fmt.Sprintf("image %s is not present locally; Handler will pull it from %s", image, s.currentConfig().Runtime.ImageRegistry)
+	} else {
+		item.Message = fmt.Sprintf("image %s is not present locally; build it with docker build -f %s .", image, buildHint(s.Resources.Diagnostics.Container.Build, "diagnostics/Dockerfile"))
+	}
 	return resourceGroup{Status: "missing", Message: item.Message, Items: []resourceItem{item}}
 }
 
@@ -198,7 +202,7 @@ func (s *Server) imageItem(image string) resourceItem {
 		return item
 	}
 	item.Status = "missing"
-	item.Message = fmt.Sprintf("image %s is not present locally; build or pull it before running", image)
+	item.Message = fmt.Sprintf("image %s is not present locally; start Handler or Validate to pull it from the configured registry", image)
 	return item
 }
 

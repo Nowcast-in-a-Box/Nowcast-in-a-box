@@ -44,6 +44,7 @@ type Paths struct {
 // Runtime configures host-side container control; browser requests cannot set these values.
 type Runtime struct {
 	DockerContext   string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
+	ImageRegistry   string   `yaml:"image_registry,omitempty" json:"image_registry,omitempty"`
 	AllowedOrigins  []string `yaml:"allowed_origins" json:"allowed_origins"`
 	Token           string   `yaml:"token,omitempty" json:"-"`
 	AtlasRevision   string   `yaml:"atlas_revision" json:"atlas_revision"`
@@ -120,6 +121,7 @@ func Load(explicit string) (Config, error) {
 
 func (c *Config) applyDefaults() {
 	d := DefaultConfig()
+	c.Runtime.ImageRegistry = strings.TrimSpace(c.Runtime.ImageRegistry)
 	if c.Handler.Host == "" {
 		c.Handler.Host = d.Handler.Host
 	}

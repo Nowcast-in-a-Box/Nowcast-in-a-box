@@ -26,6 +26,7 @@ type Server struct {
 	executionMu                sync.Mutex
 	recoveryMu                 sync.Mutex
 	resourcesMu                sync.Mutex
+	imageMu                    sync.Mutex
 	currentResources           resourceSnapshot
 	preparingResources         bool
 	resourcesLoaded            bool

@@ -33,11 +33,14 @@ that data source's manifest; no path is invented when it is missing. Weights
 stay under `artifacts/<data-id>/<model-id>/...` and are checked against the model
 manifest's SHA256 before offline inference. A missing weight is copied from
 `paths.weight_source` (a folder laid out like `artifacts/`) and verified; the
-Handler does not download it over the network. Image layers are expected to be
-present in Docker's local cache: `GET /v1/resources?data_id=<id>` reports each
-selected image as ready or missing, and `POST /v1/resources/prepare` copies
-missing weights and re-checks the selected images. Compose definitions use
-`pull_policy: never` so execution never hides a download.
+Handler does not download it over the network. Image layers are bootstrapped from `runtime.image_registry` when missing:
+the diagnostics image is pulled in the background at Handler startup, and
+Validate pulls the diagnostics, selected data-reader and selected model images
+before admitting a window. The Handler tags pulled images under the short local
+manifest names; Compose still uses `pull_policy: never` so execution never hides
+a download. `GET /v1/resources?data_id=<id>` reports each image as ready or
+missing, and `POST /v1/resources/prepare` copies missing weights and re-checks
+the selected images.
 The initial reader requires six context and twenty target 128x128 frames. It
 rejects event/time ambiguity and events with missing pixels that the processed
 file can no longer mask reliably. Sample listings show this limitation.

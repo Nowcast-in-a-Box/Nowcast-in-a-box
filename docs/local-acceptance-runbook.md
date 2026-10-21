@@ -8,9 +8,10 @@ check with Docker.
 
 ## 1. Prerequisites
 
-- Docker is running and the three CMA images are present locally:
-  `nib-ingestion:cma-demo`, `nib-nowcastnet:cma-demo`,
-  `nib-diagnostics:automatic-flow`.
+- Docker is running. With `runtime.image_registry` set, the Handler pulls the
+  diagnostics image at startup and the data/model images during Validate.
+  Local tags `nib-ingestion:cma-demo`, `nib-nowcastnet:cma-demo` and
+  `nib-diagnostics:automatic-flow` are also accepted when prebuilt.
 - A CMA Radar data folder, for example `/Users/you/data/cma-radar`.
 - `artifacts/cma_radar/nowcastnet/NowcastNet.onnx` exists (135 MB, pinned
   SHA-256), or `paths.weight_source` points at an artifacts-like folder
@@ -18,9 +19,8 @@ check with Docker.
 - A built Handler binary and the Hub checkout (or a published Hub) on this
   machine. No GitHub Release is required for this runbook.
 
-The first start does not pull image layers: Docker's local layer cache is the
-expected source. Missing images are reported with the exact image name so they
-can be built or pulled before the run.
+The first start pulls missed image layers from `runtime.image_registry`; a
+missing image is reported with the exact image name if the pull fails.
 
 ## 2. Start the Handler
 

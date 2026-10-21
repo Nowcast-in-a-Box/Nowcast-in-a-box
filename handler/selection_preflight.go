@@ -36,11 +36,24 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	checks := []Check{}
+	checkContext, cancelChecks := context.WithTimeout(r.Context(), imagePullTimeout)
+	defer cancelChecks()
 	data, catalog, err := s.dataPaths(dataID)
 	if err != nil {
 		checks = append(checks, Check{ID: "data", OK: false, Message: err.Error()})
 	} else {
 		checks = append(checks, Check{ID: "data", OK: true, Message: "selected data files are present"})
+		if s.Resources != nil && s.Resources.Diagnostics != nil {
+			checks = append(checks, s.imageCheck(checkContext, s.Resources.Diagnostics.Container.Image, "image:diagnostics", "diagnostics"))
+		}
+		if resource, resourceErr := s.dataResource(dataID); resourceErr == nil {
+			checks = append(checks, s.imageCheck(checkContext, resource.Container.Image, "image:data", "data reader"))
+			for _, modelID := range request.Models {
+				if model, modelErr := s.modelResource(dataID, modelID); modelErr == nil {
+					checks = append(checks, s.imageCheck(checkContext, model.Container.Image, "image:model:"+modelID, modelID))
+				}
+			}
+		}
 		if request.EventID != "" || request.StartTime != "" {
 			starts := request.SampleStarts
 			if len(starts) == 0 {

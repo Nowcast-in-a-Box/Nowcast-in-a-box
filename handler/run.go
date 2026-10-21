@@ -221,6 +221,7 @@ func serve(cfg Config) int {
 	go func() { errs <- reviewServer.Serve(reviewListener) }()
 	srv.note("handler ready at " + addressURL(cfg.Handler))
 	go srv.RefreshResources()
+	go srv.ensureDiagnosticsImage()
 	fmt.Fprintf(os.Stderr, "nib-handler %s ready on %s (config %s); results %s\n", Version, addressURL(cfg.Handler), sourceName(cfg), addressURL(cfg.Review))
 
 	signals := make(chan os.Signal, 1)
