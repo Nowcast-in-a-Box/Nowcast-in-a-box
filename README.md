@@ -21,12 +21,15 @@ Follow the step-by-step guidance down below:
 2. Install the Docker engine.
    - Follow Docker's [official documentation](https://docs.docker.com/engine/install/).
    - If you encounter any problems, feel free to open an issue or contact contributors.
-3. Go to the Release page and download the latest `Nowcast-in-a-Box-*.zip`.
+3. Go to the Release page and download the package for your OS:
    - [Releases](https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/releases)
+   - macOS: `Nowcast-in-a-Box-<version>-macos.zip`
+   - Linux: `Nowcast-in-a-Box-<version>-linux.zip`
+   - Windows: `Nowcast-in-a-Box-<version>-windows.zip`
 4. Extract the zip and start the handler from that folder. No terminal command or
-   environment variable is needed. The zip contains the launchers, `config.yaml`,
-   compiled binaries and the generated runtime `resources/`; it contains no Go
-   source or tests.
+   environment variable is needed. Each package contains only its own OS
+   launchers and amd64/arm64 binaries, plus `config.yaml` and the generated runtime
+   `resources/`; it contains no Go source or tests.
    The Handler pulls missing images from GHCR. International users use the
    official registry by default; users in China can select the NJU mirror in
    the Hub's Local page. The mirror is optional and configurable in `config.yaml`.

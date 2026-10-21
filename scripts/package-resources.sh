@@ -14,6 +14,8 @@ cp -R containers resources/containers
 cp -R ingestion resources/ingestion
 cp -R interfaces resources/interfaces
 cp -R utils resources/utils
+# Visualization caches are local build data, not a runtime resource.
+rm -rf resources/diagnostics/visualization/data
 find resources -name '.DS_Store' -delete
 find resources -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} +
 find resources -name '*.pyc' -delete
