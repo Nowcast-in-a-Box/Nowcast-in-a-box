@@ -1,41 +1,88 @@
 name: release
 
-# Parked. Does not run on tags until we turn it on.
-# Restore the trigger below when the first real release is ready:
-#   push:
-#     tags:
-#       - "v*"
+# Publish the user-facing runtime zip from a tag on main.
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
   release:
-    if: false
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require tag on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME is not on main."
+            exit 1
+          fi
 
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
 
-      - name: Cross-compile
-        run: scripts/cross-build.sh
+      - name: Test
+        run: go test ./...
+
+      - name: Build and package
+        run: scripts/package-release.sh "$GITHUB_REF_NAME"
+
+      - name: Verify release archive
+        run: |
+          set -euo pipefail
+          archive="dist/Nowcast-in-a-Box-${GITHUB_REF_NAME}.zip"
+          unzip -t "$archive"
+          entries="$(unzip -Z1 "$archive")"
+          for forbidden in tests handler go.mod go.sum launchers .github scripts docs; do
+            if printf '%s\n' "$entries" | awk -v p="$forbidden" '$0 == p || index($0, p "/") == 1 { found = 1 } END { exit !found }'; then
+              echo "::error::Release archive contains forbidden top-level entry: $forbidden"
+              exit 1
+            fi
+          done
+          for required in "Start NiB.command" "Start NiB.cmd" "Start NiB.sh" "Uninstall NiB.command" "Uninstall NiB.cmd" "Uninstall NiB.sh" config.yaml; do
+            printf '%s\n' "$entries" | grep -qx "$required" || {
+              echo "::error::Release archive is missing $required"
+              exit 1
+            }
+          done
+          printf '%s\n' "$entries" | grep -q '^resources/adapters/' || {
+            echo "::error::Release archive is missing resources/adapters/"
+            exit 1
+          }
+          printf '%s\n' "$entries" | grep -q '^bin/macos/nib-handler-darwin-' || {
+            echo "::error::Release archive is missing macOS binaries"
+            exit 1
+          }
+          printf '%s\n' "$entries" | grep -q '^bin/linux/nib-handler-linux-' || {
+            echo "::error::Release archive is missing Linux binaries"
+            exit 1
+          }
+          printf '%s\n' "$entries" | grep -q '^bin/windows/nib-handler-windows-.*\.exe$' || {
+            echo "::error::Release archive is missing Windows binaries"
+            exit 1
+          }
+          unzip -l "$archive"
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          assets=(bin/linux/nib-handler-* bin/macos/nib-handler-* bin/windows/nib-handler-*)
+          archive="dist/Nowcast-in-a-Box-${GITHUB_REF_NAME}.zip"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+            gh release upload "$GITHUB_REF_NAME" "$archive" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            gh release create "$GITHUB_REF_NAME" "$archive" \
               --title "$GITHUB_REF_NAME" \
               --generate-notes
           fi

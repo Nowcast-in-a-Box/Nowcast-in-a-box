@@ -14,6 +14,8 @@ cp -R containers resources/containers
 cp -R ingestion resources/ingestion
 cp -R interfaces resources/interfaces
 cp -R utils resources/utils
-find resources -type d -name __pycache__ -prune -exec rm -rf {} +
+find resources -name '.DS_Store' -delete
+find resources -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} +
+find resources -name '*.pyc' -delete
 
 echo "resources/ ready at $root/resources"
