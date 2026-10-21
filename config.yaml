@@ -36,6 +36,10 @@ runtime:
   # Keep the short local tag in runtime.yaml; the Handler tags the pulled image
   # under that local name before Docker Compose runs.
   image_registry: ghcr.io/nowcast-in-a-box
+  # Optional read-only acceleration mirror. Users can override the source from
+  # the Hub's Local page; auto tries official first, then this mirror.
+  image_mirror: ghcr.nju.edu.cn/nowcast-in-a-box
+  image_source: auto
   # Exact trusted Hub origins, including scheme and port; never use '*'.
   # These are the documented local Hub entry points. For a remote deployment,
   # the maintainer adds its actual origin here before distributing the config.

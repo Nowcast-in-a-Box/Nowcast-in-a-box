@@ -17,8 +17,9 @@ import (
 type localSettings struct {
 	// DataRoot is the pre-multi-dataset shape. It becomes a fallback for any
 	// data source without an explicit entry; the next save writes DataRoots.
-	DataRoot  string            `json:"data_root,omitempty"`
-	DataRoots map[string]string `json:"data_roots,omitempty"`
+	DataRoot    string            `json:"data_root,omitempty"`
+	DataRoots   map[string]string `json:"data_roots,omitempty"`
+	ImageSource string            `json:"image_source,omitempty"`
 }
 
 func settingsPath(cfg Config) (string, error) {
@@ -112,6 +113,17 @@ func (c *Config) applySettings() error {
 	if settings.DataRoot != "" {
 		c.DataRootFallback = resolve(settings.DataRoot)
 	}
+	source, err := normalizeImageSource(c.Runtime.ImageSource)
+	if err != nil {
+		return err
+	}
+	if settings.ImageSource != "" {
+		source, err = normalizeImageSource(settings.ImageSource)
+		if err != nil {
+			return fmt.Errorf("nib-settings.json image_source: %w", err)
+		}
+	}
+	c.Runtime.ImageSource = source
 	return nil
 }
 
@@ -145,12 +157,19 @@ func (s *Server) effectiveDataRoots() map[string]string {
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		writeJSON(w, 200, map[string]any{"data_roots": s.effectiveDataRoots()})
+		config := s.currentConfig()
+		writeJSON(w, 200, map[string]any{
+			"data_roots":    s.effectiveDataRoots(),
+			"image_source":  config.Runtime.ImageSource,
+			"image_mirror":  config.Runtime.ImageMirror,
+			"image_sources": []string{"official", "mirror", "auto"},
+		})
 		return
 	}
 	var update struct {
-		DataID   string `json:"data_id"`
-		DataRoot string `json:"data_root"`
+		DataID      string `json:"data_id"`
+		DataRoot    string `json:"data_root"`
+		ImageSource string `json:"image_source"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 	decoder.DisallowUnknownFields()
@@ -158,8 +177,16 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, err)
 		return
 	}
-	if decoder.Decode(&struct{}{}) != io.EOF || update.DataID == "" || update.DataRoot == "" {
-		runtimeError(w, 400, fmt.Errorf("data_id and data_root are required"))
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		runtimeError(w, 400, fmt.Errorf("one request object required"))
+		return
+	}
+	if update.ImageSource != "" {
+		s.saveImageSource(w, update.ImageSource)
+		return
+	}
+	if update.DataID == "" || update.DataRoot == "" {
+		runtimeError(w, 400, fmt.Errorf("data_id and data_root, or image_source, are required"))
 		return
 	}
 	s.saveDataRoot(w, update.DataID, update.DataRoot)
@@ -203,6 +230,31 @@ func (s *Server) handlePickDataRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.saveDataRoot(w, update.DataID, chosen)
+}
+
+func (s *Server) saveImageSource(w http.ResponseWriter, requested string) {
+	source, err := normalizeImageSource(requested)
+	if err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+	settings, err := readSettings(s.Config)
+	if err != nil {
+		runtimeError(w, 500, err)
+		return
+	}
+	settings.ImageSource = source
+	if err := writeSettings(s.Config, settings); err != nil {
+		runtimeError(w, 500, fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err))
+		return
+	}
+	s.Config.Runtime.ImageSource = source
+	writeJSON(w, 200, map[string]any{
+		"image_source":  source,
+		"image_sources": []string{"official", "mirror", "auto"},
+	})
 }
 
 func (s *Server) saveDataRoot(w http.ResponseWriter, dataID, requested string) {

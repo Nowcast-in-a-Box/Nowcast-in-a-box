@@ -45,6 +45,8 @@ type Paths struct {
 type Runtime struct {
 	DockerContext   string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
 	ImageRegistry   string   `yaml:"image_registry,omitempty" json:"image_registry,omitempty"`
+	ImageMirror     string   `yaml:"image_mirror,omitempty" json:"image_mirror,omitempty"`
+	ImageSource     string   `yaml:"image_source,omitempty" json:"image_source,omitempty"`
 	AllowedOrigins  []string `yaml:"allowed_origins" json:"allowed_origins"`
 	Token           string   `yaml:"token,omitempty" json:"-"`
 	AtlasRevision   string   `yaml:"atlas_revision" json:"atlas_revision"`
@@ -72,6 +74,7 @@ func DefaultConfig() Config {
 		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
 		Diagnostics: Addr{Host: defaultDiagnosticsHost, Port: defaultDiagnosticsPort},
 		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Resources: defaultResources},
+		Runtime:     Runtime{ImageSource: "auto"},
 	}
 }
 
@@ -119,9 +122,26 @@ func Load(explicit string) (Config, error) {
 	return cfg, nil
 }
 
+func normalizeImageSource(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "auto", nil
+	}
+	switch value {
+	case "official", "mirror", "auto":
+		return value, nil
+	default:
+		return "", fmt.Errorf("runtime.image_source must be official, mirror or auto, got %q", value)
+	}
+}
+
 func (c *Config) applyDefaults() {
 	d := DefaultConfig()
 	c.Runtime.ImageRegistry = strings.TrimSpace(c.Runtime.ImageRegistry)
+	c.Runtime.ImageMirror = strings.TrimSpace(c.Runtime.ImageMirror)
+	if c.Runtime.ImageSource == "" {
+		c.Runtime.ImageSource = "auto"
+	}
 	if c.Handler.Host == "" {
 		c.Handler.Host = d.Handler.Host
 	}

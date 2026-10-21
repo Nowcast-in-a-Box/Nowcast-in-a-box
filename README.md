@@ -24,9 +24,9 @@ Follow the step-by-step guidance down below:
 3. Go to the Release page and download the latest version of NiB
    - [Releases](https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/releases)
 4. Start the handler from the downloaded folder. No terminal command or environment variable is needed.
-   The Handler pulls missing images from the configured GHCR registry; set
-   `runtime.image_registry` in `config.yaml` and make the packages public, or
-   pre-pull/build the images locally.
+   The Handler pulls missing images from GHCR. International users use the
+   official registry by default; users in China can select the NJU mirror in
+   the Hub's Local page. The mirror is optional and configurable in `config.yaml`.
    - macOS: double-click `Start NiB.command`.
    - Windows: double-click `Start NiB.cmd`.
    - Linux: run `Start NiB.sh`.
