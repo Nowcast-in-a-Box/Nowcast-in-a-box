@@ -76,6 +76,46 @@ func TestSettingsSavesDataRootPerDataIDAndPreservesConfig(t *testing.T) {
 	}
 }
 
+func TestImageSourceSettingPersistsAndIsValidated(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := settingsConfig(t)
+	cfg, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Runtime.Token = "token"
+	server := handler.NewServer(cfg)
+	request := func(method, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "http://127.0.0.1/v1/settings", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer token")
+		result := httptest.NewRecorder()
+		server.Routes().ServeHTTP(result, req)
+		return result
+	}
+
+	initial := request("GET", "")
+	if initial.Code != 200 || !strings.Contains(initial.Body.String(), `"image_source":"auto"`) {
+		t.Fatalf("initial settings: %d %s", initial.Code, initial.Body.String())
+	}
+	if response := request("PATCH", `{"image_source":"mirror"}`); response.Code != 200 {
+		t.Fatalf("save mirror: %d %s", response.Code, response.Body.String())
+	}
+	updated := request("GET", "")
+	if !strings.Contains(updated.Body.String(), `"image_source":"mirror"`) {
+		t.Fatalf("updated settings: %s", updated.Body.String())
+	}
+	reloaded, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Runtime.ImageSource != "mirror" {
+		t.Fatalf("reloaded image source = %q", reloaded.Runtime.ImageSource)
+	}
+	if response := request("PATCH", `{"image_source":"invalid"}`); response.Code != 422 {
+		t.Fatalf("invalid source: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestPickDataRootSavesPerDataIDWithoutAcceptingABrowserPath(t *testing.T) {
 	t.Setenv("NIB_DATA_ROOT", "")
 	source := settingsConfig(t)

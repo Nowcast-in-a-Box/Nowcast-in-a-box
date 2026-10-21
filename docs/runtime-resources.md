@@ -175,10 +175,20 @@ Validate pulls the diagnostics, selected data-reader and selected model images
 before admitting a window. An empty `image_registry` keeps the local-cache-only
 behavior. A failed pull is reported as a Validate failure.
 
-For the reference deployment the registry is `ghcr.io/nowcast-in-a-box`.
+For the reference deployment the official registry is
+`ghcr.io/nowcast-in-a-box` and the optional acceleration mirror is
+`ghcr.nju.edu.cn/nowcast-in-a-box`. `runtime.image_source` accepts:
+
+- `official` — use the official registry only
+- `mirror` — use the configured mirror only
+- `auto` — try official first, then the mirror
+
+The Hub's Local page saves the same choice in `nib-settings.json`, so the
+selection is per user and does not need a restart. `auto` is the first-start
+default; a user in China can select `China mirror (NJU)` for subsequent pulls.
 `scripts/publish-images.sh` builds `nib-diagnostics:automatic-flow`,
-`nib-ingestion:cma-demo` and `nib-nowcastnet:cma-demo` under that prefix. GHCR
-packages must be public, or the Docker daemon must already be logged in to
+`nib-ingestion:cma-demo` and `nib-nowcastnet:cma-demo` under a registry prefix.
+GHCR packages must be public, or the Docker daemon must already be logged in to
 GHCR, for a fresh machine to pull them without credentials.
 
 ## Adding a data source or model
