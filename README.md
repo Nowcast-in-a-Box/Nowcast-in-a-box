@@ -1,6 +1,7 @@
 <p align="center">
-  <img src="docs/logo.jpg" alt="Nowcast-in-a-Box logo" width="200">
+  <img src="docs/logo.jpg" alt="Nowcast-in-a-Box logo" width="300">
 </p>
+
 
 
 <h1 align="center">Nowcast-in-a-Box</h1>
