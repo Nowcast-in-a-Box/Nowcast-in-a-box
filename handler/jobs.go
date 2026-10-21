@@ -506,6 +506,11 @@ func (s *Server) executeJob(id string) {
 		return
 	}
 	// Ingestion creates a child run inside the job workspace, then publishes its contents.
+	// A retry reuses the run ID; clear the previous child before starting again.
+	if removeErr := os.RemoveAll(filepath.Join(directory, id)); removeErr != nil {
+		s.updateJob(id, "failed", "ingestion", removeErr)
+		return
+	}
 	args, err := s.dataCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 	if err != nil {
 		s.updateJob(id, "failed", "preflight", err)
@@ -754,6 +759,12 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 			args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 		}
 		args = append([]string{"-v", volumeSpec(samplesRoot, "/workspace", false)}, args...)
+		// A retry reuses the run ID, so a previous ingestion attempt may have
+		// left its sample directory behind. Remove it before recreating it.
+		if err := os.RemoveAll(childDir); err != nil {
+			failures = append(failures, childID+": reset sample directory: "+err.Error())
+			continue
+		}
 		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-ingestion", args...); err != nil {
 			failures = append(failures, childID+": ingestion: "+err.Error())
 			continue
