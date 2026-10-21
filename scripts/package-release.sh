@@ -33,7 +33,12 @@ done
 
 mkdir -p "$ROOT/dist"
 stage=""
-cleanup() { [[ -n "$stage" ]] && rm -rf "$stage"; }
+cleanup() {
+  if [[ -n "$stage" ]]; then
+    rm -rf "$stage"
+  fi
+  return 0
+}
 trap cleanup EXIT
 
 for os in "${oses[@]}"; do
