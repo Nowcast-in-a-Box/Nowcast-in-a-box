@@ -53,6 +53,8 @@ for os in "${oses[@]}"; do
   esac
   cp -R "$ROOT/bin/$os/." "$stage/bin/$os/"
   cp -R "$ROOT/resources/." "$stage/resources/"
+  mkdir -p "$stage/docs"
+  cp "$ROOT/docs/logo.jpg" "$stage/docs/logo.jpg"
   cp "$ROOT/artifacts/.gitkeep" "$stage/artifacts/.gitkeep"
   cp "$ROOT/runs/.gitkeep" "$stage/runs/.gitkeep"
 
