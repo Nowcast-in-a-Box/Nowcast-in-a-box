@@ -1,6 +1,6 @@
 name: release
 
-# Publish the user-facing runtime zip from a tag on main.
+# Publish one user-facing runtime zip per OS from a tag on main.
 on:
   push:
     tags:
@@ -38,52 +38,91 @@ jobs:
       - name: Build and package
         run: scripts/package-release.sh "$GITHUB_REF_NAME"
 
-      - name: Verify release archive
+      - name: Verify release archives
         run: |
           set -euo pipefail
-          archive="dist/Nowcast-in-a-Box-${GITHUB_REF_NAME}.zip"
-          unzip -t "$archive"
-          entries="$(unzip -Z1 "$archive")"
-          for forbidden in tests handler go.mod go.sum launchers .github scripts docs; do
-            if printf '%s\n' "$entries" | awk -v p="$forbidden" '$0 == p || index($0, p "/") == 1 { found = 1 } END { exit !found }'; then
-              echo "::error::Release archive contains forbidden top-level entry: $forbidden"
+          for os in macos linux windows; do
+            archive="dist/Nowcast-in-a-Box-${GITHUB_REF_NAME}-${os}.zip"
+            test -f "$archive"
+            unzip -t "$archive"
+            entries="$(unzip -Z1 "$archive")"
+            for forbidden in tests handler go.mod go.sum launchers .github scripts; do
+              if printf '%s\n' "$entries" | awk -v p="$forbidden" '$0 == p || index($0, p "/") == 1 { found = 1 } END { exit !found }'; then
+                echo "::error::$os archive contains forbidden top-level entry: $forbidden"
+                exit 1
+              fi
+            done
+            if [[ -n "$(grep '^docs/' <<< "$entries" | grep -vE '^docs/?$|^docs/logo.jpg$' || true)" ]]; then
+              echo "::error::$os archive contains unexpected docs entries"
               exit 1
             fi
-          done
-          for required in "Start NiB.command" "Start NiB.cmd" "Start NiB.sh" "Uninstall NiB.command" "Uninstall NiB.cmd" "Uninstall NiB.sh" config.yaml; do
-            printf '%s\n' "$entries" | grep -qx "$required" || {
-              echo "::error::Release archive is missing $required"
+            grep -Fxq 'docs/logo.jpg' <<< "$entries" || {
+              echo "::error::$os archive is missing docs/logo.jpg"
               exit 1
             }
+            case "$os" in
+              macos)
+                start="Start NiB.command"
+                uninstall="Uninstall NiB.command"
+                launcher="bin/macos/start.command"
+                uninstaller="bin/macos/uninstall.command"
+                ;;
+              linux)
+                start="Start NiB.sh"
+                uninstall="Uninstall NiB.sh"
+                launcher="bin/linux/run.sh"
+                uninstaller="bin/linux/uninstall.sh"
+                ;;
+              windows)
+                start="Start NiB.cmd"
+                uninstall="Uninstall NiB.cmd"
+                launcher="bin/windows/run.ps1"
+                uninstaller="bin/windows/uninstall.ps1"
+                ;;
+            esac
+            for required in "$start" "$uninstall" config.yaml "$launcher" "$uninstaller"; do
+              grep -Fxq -- "$required" <<< "$entries" || {
+                echo "::error::$os archive is missing $required"
+                exit 1
+              }
+            done
+            grep -q '^resources/adapters/' <<< "$entries" || {
+              echo "::error::$os archive is missing resources/adapters/"
+              exit 1
+            }
+            grep -Fxq 'artifacts/.gitkeep' <<< "$entries" || exit 1
+            grep -Fxq 'runs/.gitkeep' <<< "$entries" || exit 1
+            case "$os" in
+              macos) binaries=("bin/macos/nib-handler-darwin-amd64" "bin/macos/nib-handler-darwin-arm64") ;;
+              linux) binaries=("bin/linux/nib-handler-linux-amd64" "bin/linux/nib-handler-linux-arm64") ;;
+              windows) binaries=("bin/windows/nib-handler-windows-amd64.exe" "bin/windows/nib-handler-windows-arm64.exe") ;;
+            esac
+            for binary in "${binaries[@]}"; do
+              grep -Fxq -- "$binary" <<< "$entries" || {
+                echo "::error::$os archive is missing $binary"
+                exit 1
+              }
+            done
+            for other in macos linux windows; do
+              [[ "$other" == "$os" ]] && continue
+              if grep -q "^bin/$other/" <<< "$entries"; then
+                echo "::error::$os archive contains binaries for $other"
+                exit 1
+              fi
+            done
+            unzip -l "$archive"
           done
-          printf '%s\n' "$entries" | grep -q '^resources/adapters/' || {
-            echo "::error::Release archive is missing resources/adapters/"
-            exit 1
-          }
-          printf '%s\n' "$entries" | grep -q '^bin/macos/nib-handler-darwin-' || {
-            echo "::error::Release archive is missing macOS binaries"
-            exit 1
-          }
-          printf '%s\n' "$entries" | grep -q '^bin/linux/nib-handler-linux-' || {
-            echo "::error::Release archive is missing Linux binaries"
-            exit 1
-          }
-          printf '%s\n' "$entries" | grep -q '^bin/windows/nib-handler-windows-.*\.exe$' || {
-            echo "::error::Release archive is missing Windows binaries"
-            exit 1
-          }
-          unzip -l "$archive"
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          archive="dist/Nowcast-in-a-Box-${GITHUB_REF_NAME}.zip"
+          assets=(dist/Nowcast-in-a-Box-${GITHUB_REF_NAME}-*.zip)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$archive" --clobber
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$archive" \
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
               --title "$GITHUB_REF_NAME" \
               --generate-notes
           fi
