@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.jpg" alt="Nowcast-in-a-Box logo" width="300">
+  <img src="docs/logo.jpg" alt="Nowcast-in-a-Box logo" width="350">
 </p>
 
 <h1 align="center">Nowcast-in-a-Box</h1>
@@ -8,18 +8,17 @@
   Run AI precipitation nowcasting models on your computer (or in the cloud).<br>
   Install Docker, start a launcher, and select a model in the browser.
 </p>
-
-
-
 <p align="center">
   <a href="https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/releases"><img src="https://img.shields.io/github/v/release/Nowcast-in-a-Box/Nowcast-in-a-box?style=flat" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue?style=flat" alt="Supported platforms">
   <img src="https://img.shields.io/badge/Go-1.22-00ADD8?style=flat&logo=go" alt="Go 1.22">
   <img src="https://img.shields.io/badge/Docker-required-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker required">
+  <br />
   <img src="https://img.shields.io/badge/weights-pinned%20by%20sha256-success?style=flat" alt="Weights pinned by sha256">
   <a href="https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/stargazers"><img src="https://img.shields.io/github/stars/Nowcast-in-a-Box/Nowcast-in-a-box?style=flat&color=yellow" alt="GitHub stars"></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat" alt="Pull requests welcome"></a>
 </p>
+
 **Nowcast-in-a-Box (NiB)** is a local runtime for AI precipitation nowcasting. It connects your radar or satellite files to models, runs them in Docker, and saves the forecasts. You don't write code, and you don't install Python.
 
 The Hub webpage makes the selection. The Handler, a small local program, does the work.
