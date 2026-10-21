@@ -13,3 +13,18 @@ export function drawLayerCanvas(ctx: CanvasRenderingContext2D, element: HTMLElem
   ctx.drawImage(canvas, 0, 0);
   ctx.restore();
 }
+
+/**
+ * Composite the layers the user currently sees, in map order. Callers pass
+ * exactly one weather layer — the presented buffer — so a frame preparing on
+ * the hidden buffer is never composited alongside the displayed one.
+ */
+export function compositeLayers(ctx: CanvasRenderingContext2D,
+  layers: {selector: string; visible: boolean}[],
+  findElement: (selector: string) => HTMLElement | null, size: number[]) {
+  for (const layer of layers) {
+    if (!layer.visible) continue;
+    const element = findElement(layer.selector);
+    if (element) drawLayerCanvas(ctx, element, size);
+  }
+}

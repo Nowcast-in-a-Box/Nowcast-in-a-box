@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState, type CSSProperties} from 'react';
 import {ArrowLineLeft, ArrowLineRight, CaretDown, CaretLeft, CaretRight, DownloadSimple, Info, Minus, Pause, Play, Plus, CornersOut, X, CloudSun, Mountains, GlobeHemisphereEast, SlidersHorizontal, Database} from '@phosphor-icons/react';
 import {MapController, rgb} from './map';
-import {nextFrame} from './playback';
+import {nextFrame, PlaybackPacer} from './playback';
 import type {Bundle, LayerName, LayerSetting} from './types';
 
 const layerRows: {name: LayerName; title: string; subtitle: string; icon: typeof CloudSun}[] = [
@@ -52,6 +52,17 @@ function Workspace({bundle}:{bundle:Bundle}) {
   const [showSources,setShowSources]=useState(false);
   const [error,setError]=useState('');
   const [retry,setRetry]=useState(0);
+  const [beat,setBeat]=useState(0);
+  // The auto-playback beat: commits anchor the next frame's deadline, and
+  // start/resume/speed switches restart it from "now" instead of catching up.
+  const pacer=useRef(new PlaybackPacer());
+  // Marks the selection the playback advance is about to start as automatic;
+  // read and cleared once by the selection effect.
+  const autoAdvance=useRef(false);
+  // Origin of the selection currently in flight, kept for its whole
+  // lifecycle: pausing may only cancel automatic frames, never an explicit
+  // manual choice. Cleared when that selection commits or fails.
+  const pendingOrigin=useRef<'automatic'|'manual'|null>(null);
   const frame=bundle.frames[displayed];
 
   useEffect(()=>{
@@ -70,33 +81,77 @@ function Workspace({bundle}:{bundle:Bundle}) {
   useEffect(()=>{controller.current?.setThreshold(threshold)},[threshold,ready]);
   useEffect(()=>{
     if(!ready)return;
+    // Re-selecting the frame already on screen is a no-op — unless an error
+    // needs recovering from: the explicit retry (or a late failure of the
+    // displayed frame's own tiles) must re-enter the real selection path.
+    if(selected===displayed&&!loading&&!error)return;
+    const auto=autoAdvance.current;autoAdvance.current=false;
+    pendingOrigin.current=auto?'automatic':'manual';
     let active=true;setLoading(true);setError('');
-    void controller.current!.select(selected,()=>{if(active){setDisplayed(selected);setLoading(false)}})
-      .catch(e=>{if(active){setError(e.message);setPlaying(false)}});
+    // Auto frames carry the pacer's deadline; manual and initial selections
+    // commit as soon as their preparation is complete. `speed` is only read
+    // for auto selections, which always re-run this effect with a fresh
+    // closure (the advance or the speed switch triggers it in the same flush).
+    void controller.current!.select(selected,()=>{
+      if(active){pendingOrigin.current=null;pacer.current.noteCommit();setDisplayed(selected);setLoading(false)}
+    },{delayMs:auto?pacer.current.commitDelay(speed):undefined})
+      .catch(e=>{if(active){pendingOrigin.current=null;setError(e.message);setPlaying(false)}});
     return ()=>{active=false};
-  },[selected,ready,retry]);
+  },[selected,ready,retry,beat]);
   useEffect(()=>{
     if(!playing||loading||error||bundle.frames.length<2)return;
-    const timer=setTimeout(()=>setSelected(nextFrame(displayed,bundle.frames.length)),800/speed);
-    return ()=>clearTimeout(timer);
-  },[playing,loading,displayed,speed,error,bundle.frames.length]);
+    // Advance at once: preparation of the next frame begins immediately and
+    // its commit is held to the deadline computed from the last actual commit
+    // (preparation time counts inside the target interval).
+    const next=nextFrame(displayed,bundle.frames.length);
+    if(selected===next)return;   // that frame's auto selection is already in flight
+    autoAdvance.current=true;
+    setSelected(next);
+  },[playing,loading,displayed,selected,speed,error,bundle.frames.length]);
   useEffect(()=>{
     const onKey=(event:KeyboardEvent)=>{
       if(showSources||(event.target instanceof HTMLElement&&/INPUT|SELECT|BUTTON/.test(event.target.tagName)))return;
-      if(event.code==='Space'){event.preventDefault();setPlaying(v=>!v)}
+      if(event.code==='Space'){event.preventDefault();togglePlay()}
       if(event.code==='ArrowRight'||event.code==='ArrowLeft'){
-        event.preventDefault();setPlaying(false);
+        event.preventDefault();autoAdvance.current=false;setPlaying(false);
         setSelected(i=>Math.max(0,Math.min(bundle.frames.length-1,i+(event.code==='ArrowRight'?1:-1))));
       }
     };
     window.addEventListener('keydown',onKey);return ()=>window.removeEventListener('keydown',onKey);
-  },[showSources,bundle.frames.length]);
+  });
   useEffect(()=>{
     const canvas=legend.current!,ctx=canvas.getContext('2d')!,colors=bundle.weather_style.colors;
     colors.forEach((c,i)=>{ctx.fillStyle='rgb('+rgb(c).join(',')+')';ctx.fillRect(i*canvas.width/colors.length,0,canvas.width/colors.length+1,canvas.height)});
   },[bundle]);
   const updateLayer=(name:LayerName,change:Partial<LayerSetting>)=>setLayers(p=>({...p,[name]:{...p[name],...change}}));
-  const jump=(index:number)=>{setPlaying(false);setSelected(index)};
+  const togglePlay=()=>{
+    if(!playing){pacer.current.restart();setPlaying(true);return}
+    // Pausing invalidates the pending AUTOMATIC frame in both stages — still
+    // preparing, or fully ready and waiting for its deadline. An explicit
+    // manual selection is never cancelled: it keeps its selected/loading and
+    // may still commit while paused. The displayed frame stays as-is either way.
+    if(loading&&pendingOrigin.current==='automatic'){
+      controller.current?.cancelPending();
+      pendingOrigin.current=null;
+      setLoading(false);
+      setSelected(displayed);
+    }
+    setPlaying(false);
+  };
+  const changeSpeed=(value:number)=>{
+    setSpeed(value);
+    if(!playing)return;
+    // A speed switch keeps exactly one beat: the pending auto frame is
+    // re-issued with a deadline anchored at the switch, chasing neither the
+    // old interval nor deadlines from before the switch. A pending MANUAL
+    // selection is never re-issued: it keeps its request and origin (no
+    // deadline, nothing superseded), and the new speed takes over from that
+    // frame's actual commit — noteCommit anchors the next beat, and the
+    // restart above already dropped pre-switch deadlines.
+    pacer.current.restart();
+    if(loading&&pendingOrigin.current==='automatic'){autoAdvance.current=true;setBeat(b=>b+1)}
+  };
+  const jump=(index:number)=>{autoAdvance.current=false;setPlaying(false);setSelected(index)};
   const ticks=Array.from(new Set([0,...[.2,.4,.6,.8,1].map(f=>Math.round(f*(bundle.frames.length-1)))]));
 
   return <main className={'workspace '+(collapsed?'sidebar-collapsed':'')}>
@@ -122,7 +177,7 @@ function Workspace({bundle}:{bundle:Bundle}) {
       </div>
     </aside>
     <section className="map-column" aria-label="天气地图与时间控制">
-      <div className={'map-shell '+(loading||error?'frame-loading':'')}>
+      <div className="map-shell">
         <div className="map" ref={target} aria-label="天气地图：拖动平移，滚轮缩放" tabIndex={0}/>
         <div className="map-controls"><div className="zoom-group"><button aria-label="放大地图" title="放大地图" onClick={()=>controller.current?.zoom(1)}><Plus/></button><button aria-label="缩小地图" title="缩小地图" onClick={()=>controller.current?.zoom(-1)}><Minus/></button></div><button className="fit-button" aria-label="回到数据范围" onClick={()=>controller.current?.fit()}><CornersOut/><span>数据范围</span></button><button className="fit-button" aria-label="查看全球范围" onClick={()=>controller.current?.fitWorld()}><GlobeHemisphereEast/><span>全球范围</span></button></div>
         {error&&<div className="map-status error" role="alert">{error}<button onClick={()=>setRetry(n=>n+1)}>重试</button></div>}
@@ -131,9 +186,9 @@ function Workspace({bundle}:{bundle:Bundle}) {
       </div>
       <footer className="timeline" aria-label="时间控制">
         <div className="time-heading"><strong><span className="time-label">当前时刻</span> <time dateTime={frame.valid_time}>{time(frame.valid_time)}</time></strong><span className="lead">+{(frame.lead_seconds/60).toString().padStart(3,'0')} min · 回放偏移</span><span className="frame-count">{displayed+1} / {bundle.frames.length} 帧</span></div>
-        <div className="playback-row"><div className="playback-buttons"><button className="step" aria-label="上一帧" disabled={selected===0} onClick={()=>jump(selected-1)}><ArrowLineLeft size={20}/></button><button className="play-button" aria-label={playing?'暂停':'播放'} disabled={bundle.frames.length<2||Boolean(error)} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause weight="fill"/>:<Play weight="fill"/>}{playing?'暂停':'播放'}</button><button className="step" aria-label="下一帧" disabled={selected===bundle.frames.length-1} onClick={()=>jump(selected+1)}><ArrowLineRight size={20}/></button></div>
+        <div className="playback-row"><div className="playback-buttons"><button className="step" aria-label="上一帧" disabled={selected===0} onClick={()=>jump(selected-1)}><ArrowLineLeft size={20}/></button><button className="play-button" aria-label={playing?'暂停':'播放'} disabled={bundle.frames.length<2||Boolean(error)} onClick={togglePlay}>{playing?<Pause weight="fill"/>:<Play weight="fill"/>}{playing?'暂停':'播放'}</button><button className="step" aria-label="下一帧" disabled={selected===bundle.frames.length-1} onClick={()=>jump(selected+1)}><ArrowLineRight size={20}/></button></div>
           <div className="scrubber"><input type="range" aria-label="时间轴" aria-valuetext={time(bundle.frames[selected].valid_time)} min="0" max={bundle.frames.length-1} value={selected} style={rangeStyle(selected,0,bundle.frames.length-1)} onChange={e=>jump(Number(e.target.value))}/><div className="time-ticks">{ticks.map(i=><span key={i} style={{left:`${i/Math.max(1,bundle.frames.length-1)*100}%`}}>{shortTime(bundle.frames[i].valid_time)}</span>)}</div></div>
-          <select aria-label="播放速度" value={speed} onChange={e=>setSpeed(Number(e.target.value))}>{[.5,1,2,4].map(s=><option key={s} value={s}>{s}×</option>)}</select>
+          <select aria-label="播放速度" value={speed} onChange={e=>changeSpeed(Number(e.target.value))}>{[.5,1,2,4].map(s=><option key={s} value={s}>{s}×</option>)}</select>
         </div>
         <div className="time-caption"><span>回放基准&nbsp; {time(bundle.init_time)}<span className="loading-hint" role="status">{loading&&slowLoading&&!error?'正在缓冲…':''}</span></span><span>显示取样 {bundle.shape[1]} × {bundle.shape[0]}<span className="keyboard-hint"> · 空格播放，← → 逐帧</span></span></div>
       </footer>

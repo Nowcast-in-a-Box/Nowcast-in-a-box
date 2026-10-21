@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {drawLayerCanvas} from '../src/map-export.ts';
+import {compositeLayers, drawLayerCanvas} from '../src/map-export.ts';
 
 function context() {
   return {draws:[], transforms:[], save(){}, restore(){},
@@ -28,4 +28,33 @@ test('exports wrapped vector canvases using CSS opacity and pixel transform', ()
   drawLayerCanvas(ctx,container,[600,400]);
   assert.deepEqual(ctx.draws,[{canvas:boundary,alpha:.35}]);
   assert.deepEqual(ctx.transforms,[[.5,0,0,.5,12,8]]);
+});
+
+const exportScene = () => {
+  const terrain=canvas(), presented=canvas(), preparing=canvas(), boundaries=canvas();
+  const elements={'.terrain-layer':terrain,'.weather-buffer-a':preparing,
+    '.weather-buffer-b':presented,'.boundary-layer':boundaries};
+  const ctx=context();
+  const find=cls=>elements[cls]??null;
+  return {ctx,find,presented,preparing,terrain,boundaries};
+};
+
+test('export composites exactly the presented weather buffer, never the preparing one', () => {
+  const scene=exportScene();
+  compositeLayers(scene.ctx,[
+    {selector:'.terrain-layer',visible:true},
+    {selector:'.weather-buffer-b',visible:true},
+    {selector:'.boundary-layer',visible:true},
+  ],scene.find,[600,400]);
+  assert.deepEqual(scene.ctx.draws.map(d=>d.canvas),[scene.terrain,scene.presented,scene.boundaries]);
+});
+
+test('export with weather hidden omits both weather buffers', () => {
+  const scene=exportScene();
+  compositeLayers(scene.ctx,[
+    {selector:'.terrain-layer',visible:true},
+    {selector:'.weather-buffer-b',visible:false},
+    {selector:'.boundary-layer',visible:true},
+  ],scene.find,[600,400]);
+  assert.deepEqual(scene.ctx.draws.map(d=>d.canvas),[scene.terrain,scene.boundaries]);
 });
