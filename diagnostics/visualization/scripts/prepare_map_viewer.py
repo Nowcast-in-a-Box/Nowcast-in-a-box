@@ -15,9 +15,14 @@ from nib_visualization.cma_demo import (
     reflectivity_colormap,
 )
 from nib_visualization.render import _WMO_BOUNDARY_STYLES
-from nib_visualization.terrain import ETOPO_COLORS, load_etopo
+from nib_visualization.terrain import load_etopo
+from nib_visualization.viewer_basemap import (
+    LAND_TERRAIN_COLORS,
+    export_wmo_tiles,
+    land_only_terrain,
+)
 from nib_visualization.viewer_bundle import export_field_cogs, export_terrain_cog
-from nib_visualization.wmo_basemap import crop_wmo_basemap, load_wmo_basemap
+from nib_visualization.wmo_basemap import load_wmo_basemap
 
 WORLD = (-180., 180., -90., 90.)  # Adapter extent order: west, east, south, north.
 
@@ -25,44 +30,47 @@ WORLD = (-180., 180., -90., 90.)  # Adapter extent order: west, east, south, nor
 def prepare_basemaps(bundle, output, terrain_width=7200):
     """Global static context is independent of the weather footprint and frames."""
     output.mkdir(parents=True, exist_ok=True)
+    wmo = load_wmo_basemap(Path("data/cache/basemap/wmo"), Path("basemap_sources/wmo-source.json"))
+    checksum = verify_wmo_checksum_manifest(wmo.path)
+    if checksum["mismatched"]:
+        raise ValueError("WMO cache checksum mismatch")
     acquisition = json.loads(Path("basemap_sources/etopo2022-acquisition.json").read_text())
     terrain = load_etopo(
         acquisition["local_path"], "basemap_sources/etopo2022-source.json",
         expected_sha256=acquisition["verification"]["sha256"], max_width=terrain_width,
     )
-    terrain_path = output / "terrain-world.tif"
-    cache_path = output / "terrain-world-cache.json"
+    terrain_path = output / "terrain-land.tif"
+    cache_path = output / "terrain-land-cache.json"
     cache_key = {"source_sha256": terrain.metadata["sha256"], "extent": list(WORLD),
-                 "max_width": terrain_width, "overview": "nearest", "version": 1}
+                 "max_width": terrain_width, "overview": "nearest", "version": 3,
+                 "land_mask": checksum["manifest_sha256"], "mask_max_lod": 7}
     cached = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     if (cached.get("key") == cache_key and terrain_path.exists()
             and sha256_file(terrain_path) == cached.get("info", {}).get("sha256")):
         print("Reusing global terrain COG", flush=True)
         info = cached["info"]
     else:
-        print(f"Preparing global terrain ({terrain_width} columns)...", flush=True)
-        info = export_terrain_cog(terrain.crop(WORLD), terrain_path)
+        print(f"Preparing land-only terrain ({terrain_width} columns)...", flush=True)
+        view = land_only_terrain(terrain.crop(WORLD), wmo)
+        info = export_terrain_cog(view, terrain_path)
         np.testing.assert_allclose(info["bounds"], [-180, -90, 180, 90], atol=1e-8)
         cache_path.write_text(json.dumps({"key": cache_key, "info": info}))
     bundle["map_extent"] = [-180, -90, 180, 90]
     bundle["terrain"] = {
-        "url": terrain_path.name, "colors": ETOPO_COLORS,
+        "url": terrain_path.name,
+        "colors": LAND_TERRAIN_COLORS,
         "attribution": terrain.attribution, "disclaimer": terrain.disclaimer,
         "source_sha256": terrain.metadata["sha256"], **info,
         "sampling": terrain.metadata["sampling"],
+        "land_only": True, "mask_source": "WMO BNDA; physical LOD 0–7; cell centres",
+        "mask_source_manifest_sha256": checksum["manifest_sha256"],
     }
-    wmo = load_wmo_basemap(Path("data/cache/basemap/wmo"), Path("basemap_sources/wmo-source.json"))
-    checksum = verify_wmo_checksum_manifest(wmo.path)
-    if checksum["mismatched"]:
-        raise ValueError("WMO cache checksum mismatch")
-    vectors = crop_wmo_basemap(wmo, WORLD)
-    vector_path = output / "boundaries-world.geojson"
-    vector_path.write_text(vectors.layers["boundary_lines"].to_json(separators=(",", ":")))
+    tiles = export_wmo_tiles(wmo, output / "wmo")
     bundle["boundaries"] = {
-        "url": vector_path.name, "attribution": wmo.attribution,
+        "url": "wmo", "tiles": tiles, "attribution": wmo.attribution,
         "disclaimer": wmo.disclaimer, "styles": _WMO_BOUNDARY_STYLES,
-        "sha256": sha256_file(vector_path), "extent": bundle["map_extent"],
-        "detail": "WMO global overview (LOD 1); fixed geometry, no place labels",
+        "extent": bundle["map_extent"],
+        "detail": "WMO local vector tiles LOD 0–9; view-dependent with parent fallback; no labels",
         "source_manifest_sha256": checksum["manifest_sha256"],
     }
 
@@ -100,8 +108,8 @@ def main():
                         valid_time=field.valid_time[indices])
     bundle = export_field_cogs(field, args.output)
     bundle.update(
-        mock=True, is_real_forecast=False, title="CMA CREF · 雷达反射率",
-        notice="实况回放 · 非真实预报", native_shape=field.provenance["native_shape"],
+        mock=True, is_real_forecast=False, title="CMA CREF · Radar reflectivity",
+        notice="Observation replay · Not a forecast", native_shape=field.provenance["native_shape"],
         spatial_sampling=field.provenance["spatial_sampling"],
         special_codes=field.provenance["special_codes"],
         input_files=field.provenance["input_files"],

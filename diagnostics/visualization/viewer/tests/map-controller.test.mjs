@@ -19,6 +19,7 @@ const ts = require('typescript');
 const src = new URL('../src/', import.meta.url);
 const toFileUrl = name => pathToFileURL(new URL(name, src).pathname).href;
 const rewriteSpecifiers = code => code
+  .replace(/(from\s*['"])\.\/boundary-layer\.ts(['"])/g, `$1${toFileUrl('boundary-layer.ts')}$2`)
   .replace(/(from\s*['"])\.\/playback(['"])/g, `$1${toFileUrl('playback.ts')}$2`)
   .replace(/(from\s*['"])\.\/map-view(['"])/g, `$1${toFileUrl('map-view.ts')}$2`)
   .replace(/(from\s*['"])\.\/map-export(['"])/g, `$1${toFileUrl('map-export.ts')}$2`);
@@ -131,7 +132,7 @@ test('F-02: repeated failed selections leave no rendercomplete listeners and rel
     const failed = c.select(5, () => assert.fail('failed selection committed')).catch(error => error.message);
     await settle();
     fireTimer([...timers.keys()].at(-1));
-    assert.equal(await failed, '地图加载超时，请重试');
+    assert.equal(await failed, 'Map loading timed out. Please retry.');
     assert.equal(map.getListeners('rendercomplete')?.length ?? 0, 0,
       `rendercomplete listeners survived failure #${round + 1}`);
   }
@@ -153,7 +154,7 @@ test('a superseded selection’s end never disarms the current selection’s tim
   fireTimer(oldTimer);      // the old selection times out first
   assert.equal(await old, 'old-settled');
   fireTimer(currentTimer);  // the current selection's own timeout must still work
-  assert.equal(await current, '地图加载超时，请重试');
+  assert.equal(await current, 'Map loading timed out. Please retry.');
   assert.equal(timers.size, 0);
 });
 
@@ -452,7 +453,7 @@ test('02: a failure while waiting for the deadline is a real error for the curre
   await settle();
   assert.equal(commits, 0);
   made[0].dispatchEvent('tileloaderror');   // the source genuinely fails before the deadline
-  assert.equal(await done, '天气帧读取失败');
+  assert.equal(await done, 'Failed to load the weather frame');
   assert.equal(commits, 0);
   assert.equal(c.sources.has(7), false);
   assert.equal(made[0].disposeCalls, 1);
@@ -499,7 +500,7 @@ test('fix SP-02: a cancelled auto frame’s late tile error stays silent (produc
   assert.deepEqual(errors, [], 'the cancelled frame’s late error reached the UI through the permanent source handler');
   // The frame still on screen keeps its real error reporting.
   c.getSource(0).dispatchEvent('tileloaderror');
-  assert.deepEqual(errors, ['地图数据读取失败；当前画面尚未完成加载。']);
+  assert.deepEqual(errors, ['Failed to load map data. The current view is not fully loaded.']);
   assert.equal(timers.size, 0);
 });
 
@@ -525,7 +526,7 @@ test('fix: a cancelled selection’s cleanup never strips a newer selection’s 
   assert.deepEqual(commits, []);
   // The current selection owns the source: its late tile error must report.
   c.getSource(1).dispatchEvent('tileloaderror');
-  assert.deepEqual(errors, ['地图数据读取失败；当前画面尚未完成加载。']);
-  await assert.rejects(bounded(current), /天气帧读取失败/);
+  assert.deepEqual(errors, ['Failed to load map data. The current view is not fully loaded.']);
+  await assert.rejects(bounded(current), /Failed to load the weather frame/);
   assert.equal(timers.size, 0);
 });

@@ -5,9 +5,9 @@ import {nextFrame, PlaybackPacer} from './playback';
 import type {Bundle, LayerName, LayerSetting} from './types';
 
 const layerRows: {name: LayerName; title: string; subtitle: string; icon: typeof CloudSun}[] = [
-  {name:'weather',title:'天气场',subtitle:'雷达反射率 · dBZ',icon:CloudSun},
-  {name:'terrain',title:'地形',subtitle:'ETOPO',icon:Mountains},
-  {name:'boundaries',title:'边界',subtitle:'WMO',icon:GlobeHemisphereEast},
+  {name:'weather',title:'Weather',subtitle:'Radar reflectivity · dBZ',icon:CloudSun},
+  {name:'terrain',title:'Terrain',subtitle:'ETOPO',icon:Mountains},
+  {name:'boundaries',title:'Boundaries',subtitle:'WMO',icon:GlobeHemisphereEast},
 ];
 const time = (iso:string) => iso.replace('T',' ').replace(':00Z',' UTC').replace('Z',' UTC');
 const shortTime = (iso:string) => iso.slice(11,16);
@@ -19,16 +19,16 @@ export function App() {
   useEffect(()=>{
     const abort=new AbortController();
     fetch('/data/viewer.json',{signal:abort.signal}).then(r=>{
-      if(!r.ok) throw new Error('地图数据包尚未准备完成。');
+      if(!r.ok) throw new Error('The map data bundle is not ready.');
       return r.json();
     }).then((b:Bundle)=>{
       if(b.viewer_bundle_version!==1 || !b.frames?.length || !b.mock || b.is_real_forecast)
-        throw new Error('当前页面仅支持已标记的 CMA 实况回放数据包。');
+        throw new Error('This viewer only supports CMA bundles marked as observation replay.');
       setBundle(b);
     }).catch(e=>{if(e.name!=='AbortError')setFatal(e.message)});
     return ()=>abort.abort();
   },[]);
-  if(!bundle)return <main className="startup"><strong>NiB Visualization</strong><p role="status">{fatal||'正在打开本地地图…'}</p>{fatal&&<button onClick={()=>location.reload()}>重新加载</button>}</main>;
+  if(!bundle)return <main className="startup"><strong>NiB Visualization</strong><p role="status">{fatal||'Opening the local map…'}</p>{fatal&&<button onClick={()=>location.reload()}>Reload</button>}</main>;
   return <Workspace bundle={bundle}/>;
 }
 
@@ -158,39 +158,39 @@ function Workspace({bundle}:{bundle:Bundle}) {
     <header className="toolbar">
       <div className="brand"><strong>NiB</strong><span>Visualization</span></div>
       <h1>{bundle.title}</h1><span className="mock-badge">{bundle.notice}</span>
-      <button className="export" disabled={playing||loading||Boolean(error)} title={playing?'请先暂停播放，再导出当前视图':undefined} onClick={()=>{const link=download.current!;link.href=controller.current!.exportPng(displayed);link.click()}}><DownloadSimple size={20}/>导出当前视图</button>
-      <a ref={download} hidden download={`nib-map-${displayed.toString().padStart(4,'0')}.png`}>下载地图 PNG</a>
+      <button className="export" disabled={playing||loading||Boolean(error)} title={playing?'Pause playback to export the current view':undefined} onClick={()=>{const link=download.current!;link.href=controller.current!.exportPng(displayed);link.click()}}><DownloadSimple size={20}/>Export view</button>
+      <a ref={download} hidden download={`nib-map-${displayed.toString().padStart(4,'0')}.png`}>Download map PNG</a>
     </header>
-    <aside className="sidebar" aria-label="地图设置">
-      <div className="sidebar-heading"><h2>图层</h2><button className="icon-button" aria-label={collapsed?'展开图层面板':'收起图层面板'} title={collapsed?'展开图层面板':'收起图层面板'} onClick={()=>setCollapsed(v=>!v)}>{collapsed?<CaretRight/>:<CaretLeft/>}</button></div>
+    <aside className="sidebar" aria-label="Map settings">
+      <div className="sidebar-heading"><h2>Layers</h2><button className="icon-button" aria-label={collapsed?'Expand layer panel':'Collapse layer panel'} title={collapsed?'Expand layer panel':'Collapse layer panel'} onClick={()=>setCollapsed(v=>!v)}>{collapsed?<CaretRight/>:<CaretLeft/>}</button></div>
       <div className="sidebar-content">
         {layerRows.map(({name,title,subtitle,icon:LayerIcon})=><section className={'layer-row '+(layers[name].visible?'':'layer-off')} key={name}>
-          <div className="layer-title"><h3><LayerIcon size={17} aria-hidden="true"/>{title}</h3><button className="switch" role="switch" aria-label={title+'图层'} aria-checked={layers[name].visible} onClick={()=>updateLayer(name,{visible:!layers[name].visible})}><span/></button></div>
+          <div className="layer-title"><h3><LayerIcon size={17} aria-hidden="true"/>{title}</h3><button className="switch" role="switch" aria-label={title+' layer'} aria-checked={layers[name].visible} onClick={()=>updateLayer(name,{visible:!layers[name].visible})}><span/></button></div>
           <p className="layer-subtitle">{subtitle}</p>
-          <label className="opacity"><span>不透明度</span><input aria-label={title+'不透明度'} type="range" min="0" max="100" value={Math.round(layers[name].opacity*100)} style={rangeStyle(layers[name].opacity*100)} disabled={!layers[name].visible} onChange={e=>updateLayer(name,{opacity:Number(e.target.value)/100})}/><output>{Math.round(layers[name].opacity*100)}%</output></label>
+          <label className="opacity"><span>Opacity</span><input aria-label={title+' opacity'} type="range" min="0" max="100" value={Math.round(layers[name].opacity*100)} style={rangeStyle(layers[name].opacity*100)} disabled={!layers[name].visible} onChange={e=>updateLayer(name,{opacity:Number(e.target.value)/100})}/><output>{Math.round(layers[name].opacity*100)}%</output></label>
         </section>)}
-        <p className="layer-help"><Info size={18}/>图层可独立关闭</p>
+        <p className="layer-help"><Info size={18}/>Toggle each layer independently</p>
         <div className="sidebar-bottom">
-          <details className="color-settings"><summary><span><SlidersHorizontal size={16} aria-hidden="true"/>色标设置</span><CaretDown/></summary><p>固定范围 10–75 dBZ，播放时保持一致。</p><label>最低显示值 <output>{threshold} dBZ</output><input aria-label="最低显示值" type="range" min="10" max="50" step=".5" value={threshold} style={rangeStyle(threshold,10,50)} onChange={e=>setThreshold(Number(e.target.value))}/></label><button className="text-button" onClick={()=>setThreshold(10)}>恢复默认色标</button></details>
-          <button className="sources-button" onClick={()=>setShowSources(true)}><span><Database size={16} aria-hidden="true"/>数据与来源</span><CaretRight/></button>
+          <details className="color-settings"><summary><span><SlidersHorizontal size={16} aria-hidden="true"/>Color scale</span><CaretDown/></summary><p>Fixed at 10–75 dBZ throughout playback.</p><label>Display threshold <output>{threshold} dBZ</output><input aria-label="Display threshold" type="range" min="10" max="50" step=".5" value={threshold} style={rangeStyle(threshold,10,50)} onChange={e=>setThreshold(Number(e.target.value))}/></label><button className="text-button" onClick={()=>setThreshold(10)}>Reset color scale</button></details>
+          <button className="sources-button" onClick={()=>setShowSources(true)}><span><Database size={16} aria-hidden="true"/>Data & sources</span><CaretRight/></button>
         </div>
       </div>
     </aside>
-    <section className="map-column" aria-label="天气地图与时间控制">
+    <section className="map-column" aria-label="Weather map and time controls">
       <div className="map-shell">
-        <div className="map" ref={target} aria-label="天气地图：拖动平移，滚轮缩放" tabIndex={0}/>
-        <div className="map-controls"><div className="zoom-group"><button aria-label="放大地图" title="放大地图" onClick={()=>controller.current?.zoom(1)}><Plus/></button><button aria-label="缩小地图" title="缩小地图" onClick={()=>controller.current?.zoom(-1)}><Minus/></button></div><button className="fit-button" aria-label="回到数据范围" onClick={()=>controller.current?.fit()}><CornersOut/><span>数据范围</span></button><button className="fit-button" aria-label="查看全球范围" onClick={()=>controller.current?.fitWorld()}><GlobeHemisphereEast/><span>全球范围</span></button></div>
-        {error&&<div className="map-status error" role="alert">{error}<button onClick={()=>setRetry(n=>n+1)}>重试</button></div>}
-        <div className={'legend '+(layers.weather.visible?'':'hidden-weather')}><strong>反射率 <span className="legend-unit">dBZ</span>{!layers.weather.visible&&<span> · 已隐藏</span>}</strong><canvas width="520" height="28" ref={legend} aria-label="反射率色标，10到75 dBZ"/><div className="legend-ticks">{[10,20,30,40,50,60,75].map(v=><span key={v} style={{left:`${(v-10)/65*100}%`}}>{v}</span>)}</div></div>
-        <button className="attribution" onClick={()=>setShowSources(true)}>WMO · NOAA/NCEI ETOPO <span>| 来源与说明</span></button>
+        <div className="map" ref={target} aria-label="Weather map: drag to pan, scroll to zoom" tabIndex={0}/>
+        <div className="map-controls"><div className="zoom-group"><button aria-label="Zoom in" title="Zoom in" onClick={()=>controller.current?.zoom(1)}><Plus/></button><button aria-label="Zoom out" title="Zoom out" onClick={()=>controller.current?.zoom(-1)}><Minus/></button></div><button className="fit-button" aria-label="Fit to data extent" title="Fit to data extent" onClick={()=>controller.current?.fit()}><CornersOut/><span>Data</span></button><button className="fit-button" aria-label="View global extent" title="View global extent" onClick={()=>controller.current?.fitWorld()}><GlobeHemisphereEast/><span>World</span></button></div>
+        {error&&<div className="map-status error" role="alert">{error}<button onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
+        <div className={'legend '+(layers.weather.visible?'':'hidden-weather')}><strong>Reflectivity <span className="legend-unit">dBZ</span>{!layers.weather.visible&&<span> · Hidden</span>}</strong><canvas width="520" height="28" ref={legend} aria-label="Reflectivity color scale, 10 to 75 dBZ"/><div className="legend-ticks">{[10,20,30,40,50,60,75].map(v=><span key={v} style={{left:`${(v-10)/65*100}%`}}>{v}</span>)}</div></div>
+        <button className="attribution" onClick={()=>setShowSources(true)}>WMO · NOAA/NCEI ETOPO <span>| Sources & notes</span></button>
       </div>
-      <footer className="timeline" aria-label="时间控制">
-        <div className="time-heading"><strong><span className="time-label">当前时刻</span> <time dateTime={frame.valid_time}>{time(frame.valid_time)}</time></strong><span className="lead">+{(frame.lead_seconds/60).toString().padStart(3,'0')} min · 回放偏移</span><span className="frame-count">{displayed+1} / {bundle.frames.length} 帧</span></div>
-        <div className="playback-row"><div className="playback-buttons"><button className="step" aria-label="上一帧" disabled={selected===0} onClick={()=>jump(selected-1)}><ArrowLineLeft size={20}/></button><button className="play-button" aria-label={playing?'暂停':'播放'} disabled={bundle.frames.length<2||Boolean(error)} onClick={togglePlay}>{playing?<Pause weight="fill"/>:<Play weight="fill"/>}{playing?'暂停':'播放'}</button><button className="step" aria-label="下一帧" disabled={selected===bundle.frames.length-1} onClick={()=>jump(selected+1)}><ArrowLineRight size={20}/></button></div>
-          <div className="scrubber"><input type="range" aria-label="时间轴" aria-valuetext={time(bundle.frames[selected].valid_time)} min="0" max={bundle.frames.length-1} value={selected} style={rangeStyle(selected,0,bundle.frames.length-1)} onChange={e=>jump(Number(e.target.value))}/><div className="time-ticks">{ticks.map(i=><span key={i} style={{left:`${i/Math.max(1,bundle.frames.length-1)*100}%`}}>{shortTime(bundle.frames[i].valid_time)}</span>)}</div></div>
-          <select aria-label="播放速度" value={speed} onChange={e=>changeSpeed(Number(e.target.value))}>{[.5,1,2,4].map(s=><option key={s} value={s}>{s}×</option>)}</select>
+      <footer className="timeline" aria-label="Time controls">
+        <div className="time-heading"><strong><span className="time-label">Current time</span> <time dateTime={frame.valid_time}>{time(frame.valid_time)}</time></strong><span className="lead">+{(frame.lead_seconds/60).toString().padStart(3,'0')} min · Replay offset</span><span className="frame-count">{displayed+1} / {bundle.frames.length} frames</span></div>
+        <div className="playback-row"><div className="playback-buttons"><button className="step" aria-label="Previous frame" disabled={selected===0} onClick={()=>jump(selected-1)}><ArrowLineLeft size={20}/></button><button className="play-button" aria-label={playing?'Pause':'Play'} disabled={bundle.frames.length<2||Boolean(error)} onClick={togglePlay}>{playing?<Pause weight="fill"/>:<Play weight="fill"/>}{playing?'Pause':'Play'}</button><button className="step" aria-label="Next frame" disabled={selected===bundle.frames.length-1} onClick={()=>jump(selected+1)}><ArrowLineRight size={20}/></button></div>
+          <div className="scrubber"><input type="range" aria-label="Timeline" aria-valuetext={time(bundle.frames[selected].valid_time)} min="0" max={bundle.frames.length-1} value={selected} style={rangeStyle(selected,0,bundle.frames.length-1)} onChange={e=>jump(Number(e.target.value))}/><div className="time-ticks">{ticks.map(i=><span key={i} style={{left:`${i/Math.max(1,bundle.frames.length-1)*100}%`}}>{shortTime(bundle.frames[i].valid_time)}</span>)}</div></div>
+          <select aria-label="Playback speed" value={speed} onChange={e=>changeSpeed(Number(e.target.value))}>{[.5,1,2,4].map(s=><option key={s} value={s}>{s}×</option>)}</select>
         </div>
-        <div className="time-caption"><span>回放基准&nbsp; {time(bundle.init_time)}<span className="loading-hint" role="status">{loading&&slowLoading&&!error?'正在缓冲…':''}</span></span><span>显示取样 {bundle.shape[1]} × {bundle.shape[0]}<span className="keyboard-hint"> · 空格播放，← → 逐帧</span></span></div>
+        <div className="time-caption"><span>Replay reference&nbsp; {time(bundle.init_time)}<span className="loading-hint" role="status">{loading&&slowLoading&&!error?'Buffering…':''}</span></span><span>Display grid {bundle.shape[1]} × {bundle.shape[0]}<span className="keyboard-hint"> · Space to play/pause, ← → to step</span></span></div>
       </footer>
     </section>
     {showSources&&<Sources bundle={bundle} onClose={()=>setShowSources(false)}/>}
@@ -200,11 +200,11 @@ function Sources({bundle,onClose}:{bundle:Bundle;onClose:()=>void}){
   const dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{dialog.current?.showModal()},[]);
   return <dialog ref={dialog} className="source-dialog" onCancel={onClose} onClick={e=>{if(e.target===dialog.current)onClose()}}>
-    <div className="dialog-title"><h2>数据与来源</h2><button className="icon-button" aria-label="关闭来源说明" onClick={onClose}><X/></button></div>
-    <p className="source-notice">{bundle.notice}。将 CMA 历史雷达实况按时间顺序回放，不代表模型预报。</p>
-    <dl><dt>变量与单位</dt><dd>雷达反射率 · dBZ</dd><dt>时间范围</dt><dd>{time(bundle.frames[0].valid_time)} — {shortTime(bundle.frames.at(-1)!.valid_time)} UTC，{bundle.frames.length} 帧</dd><dt>显示网格 / 原生网格</dt><dd>{bundle.shape[1]} × {bundle.shape[0]} / {bundle.native_shape[1]} × {bundle.native_shape[0]}。空间取最近原格点，时间未抽样；缩放不会提高原始分辨率。缩小时的概览仅用于显示。</dd><dt>数值说明</dt><dd>低于当前显示阈值的回波透明；这不是质量控制。源数据特殊码尚未解码。播放速度只改变观看速度。</dd></dl>
-    <h3>WMO 边界</h3><p>{bundle.boundaries.attribution}</p><p>{bundle.boundaries.disclaimer}</p><p>全球边界使用本地概览数据，几何细节固定；缩放不会增加原始细节，不包含地名标签。</p>
-    <h3>ETOPO 地形</h3><p>{bundle.terrain.attribution}</p><p>{bundle.terrain.disclaimer}</p><p>原始地形为 30 arc-second；页面使用全球派生网格{bundle.terrain.shape ? `（${bundle.terrain.shape[1]} × ${bundle.terrain.shape[0]}）` : ""}和多级概览，天气数据仅覆盖实际观测区域。</p>
-    <button className="dialog-done" onClick={onClose}>知道了</button>
+    <div className="dialog-title"><h2>Data & sources</h2><button className="icon-button" aria-label="Close source notes" onClick={onClose}><X/></button></div>
+    <p className="source-notice">{bundle.notice}. Historical CMA radar observations are replayed in time order; these are not model forecasts.</p>
+    <dl><dt>Variable & unit</dt><dd>Radar reflectivity · dBZ</dd><dt>Time range</dt><dd>{time(bundle.frames[0].valid_time)} — {shortTime(bundle.frames.at(-1)!.valid_time)} UTC, {bundle.frames.length} frames</dd><dt>Display grid / native grid</dt><dd>{bundle.shape[1]} × {bundle.shape[0]} / {bundle.native_shape[1]} × {bundle.native_shape[0]}. Spatial sampling uses the nearest original grid points; all time steps are retained. Zooming does not increase the source resolution. Overviews at smaller scales are for display only.</dd><dt>Value notes</dt><dd>Echoes below the current display threshold are transparent; this is not quality control. Special source codes have not been decoded. Playback speed only changes the viewing rate.</dd></dl>
+    <h3>WMO boundaries</h3><p>{bundle.boundaries.attribution}</p><p>{bundle.boundaries.disclaimer}</p><p>{bundle.boundaries.tiles ? 'Local boundary detail levels are selected by zoom; areas without finer detail use available parent tiles. Place-name labels are not included.' : 'Global boundaries use a local overview with fixed geometry; zooming does not add source detail. Place-name labels are not included.'}</p>
+    <h3>ETOPO terrain</h3><p>{bundle.terrain.attribution}</p><p>{bundle.terrain.disclaimer}</p><p>The terrain source is 30 arc-second; this viewer uses a derived global grid{bundle.terrain.shape ? ` (${bundle.terrain.shape[1]} × ${bundle.terrain.shape[0]})` : ""} with multiple overview levels. {bundle.terrain.land_only ? 'Only land terrain is shown; the ocean is transparent over a uniform background. Land below sea level is retained. ' : ''}Weather data cover only the observed region.</p>
+    <button className="dialog-done" onClick={onClose}>Done</button>
   </dialog>;
 }

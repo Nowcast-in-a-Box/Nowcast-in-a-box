@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/playback.test.mjs tests/map-controller.test.mjs tests/app-workspace.test.mjs tests/map-view.test.mjs tests/map-export.test.mjs tests/local-viewer.test.mjs"
+    "test": "node --test tests/boundary-layer.test.mjs tests/playback.test.mjs tests/map-controller.test.mjs tests/app-workspace.test.mjs tests/map-view.test.mjs tests/map-export.test.mjs tests/local-viewer.test.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

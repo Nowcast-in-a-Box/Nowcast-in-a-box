@@ -28,7 +28,7 @@ async function probe() {
 }
 
 function describe(info) {
-  console.log(`运行中（生产构建）：${url}\nPID：${info.pid}；帧数：${info.frames}；启动：${info.startedAt}\n日志：${log}`);
+  console.log(`Running (production build): ${url}\nPID: ${info.pid}; frames: ${info.frames}; started: ${info.startedAt}\nLog: ${log}`);
 }
 
 async function ensurePortFree() {
@@ -42,10 +42,10 @@ async function ensurePortFree() {
 async function start() {
   const existing = await probe();
   if (existing && existing !== 'other') { describe(existing); return; }
-  if (existing === 'other') throw new Error(`端口 ${port} 已由其他服务使用；先停止原开发服务，或设置 NIB_VIEWER_PORT。不会自动终止其他进程。`);
+  if (existing === 'other') throw new Error(`Port ${port} is in use by another service. Stop the existing dev server or set NIB_VIEWER_PORT. Other processes will not be stopped automatically.`);
   await ensurePortFree();
   const bundle = await inspectViewerData(resolve(root, '../output/map-viewer/data'));
-  console.log(`数据检查通过（${bundle.frames.length}帧），正在构建地图…`);
+  console.log(`Data check passed (${bundle.frames.length} frames). Building the map…`);
   execFileSync('npm', ['run', 'build'], {cwd:root, stdio:'inherit'});
   await inspectViewerData(resolve(root, 'dist/client/data'));
   await mkdir(runtime, {recursive:true});
@@ -55,10 +55,10 @@ async function start() {
   });
   try {
     const info = await new Promise((done, fail) => {
-      const timer = setTimeout(() => { child.kill('SIGTERM'); fail(new Error(`启动超时；请查看 ${log}`)); }, 15000);
+      const timer = setTimeout(() => { child.kill('SIGTERM'); fail(new Error(`Startup timed out. See ${log}`)); }, 15000);
       child.once('message', message => { clearTimeout(timer); message.error ? fail(new Error(message.error)) : done(message); });
       child.once('error', error => { clearTimeout(timer); fail(error); });
-      child.once('exit', code => { clearTimeout(timer); fail(new Error(`预览服务退出（${code}）；请查看 ${log}`)); });
+      child.once('exit', code => { clearTimeout(timer); fail(new Error(`Preview server exited (${code}). See ${log}`)); });
     });
     child.disconnect(); child.unref();
     describe(info);
@@ -82,23 +82,23 @@ async function serve() {
   });
   const shutdown = () => server.httpServer.close(() => process.exit(0));
   process.once('SIGTERM', shutdown); process.once('SIGINT', shutdown);
-  console.log(`${info.startedAt} 生产构建预览 ${url}`);
+  console.log(`${info.startedAt} Production preview ${url}`);
   process.send?.(info);
 }
 
 async function stop() {
   const info = await probe();
-  if (!info || info === 'other') { console.log('未发现可停止的本项目生产预览；其他服务未改动。'); return; }
+  if (!info || info === 'other') { console.log('No production preview for this project is running. Other services were left unchanged.'); return; }
   process.kill(info.pid, 'SIGTERM');
   for (let i = 0; i < 30; i++) {
-    if (!(await probe())) { console.log(`已停止：${url}`); return; }
+    if (!(await probe())) { console.log(`Stopped: ${url}`); return; }
     await new Promise(done => setTimeout(done, 100));
   }
-  throw new Error('已发送停止请求，服务尚未退出；请稍后运行 npm run status。');
+  throw new Error('Stop requested, but the server has not exited yet. Run npm run status shortly.');
 }
 
 try {
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('NIB_VIEWER_PORT 必须是1–65535的端口号。');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('NIB_VIEWER_PORT must be an integer port number from 1 to 65535.');
   switch (process.argv[2] ?? 'start') {
     case 'start': await start(); break;
     case 'serve': await serve(); break;
@@ -106,13 +106,13 @@ try {
     case 'status': {
       const info = await probe();
       if (info && info !== 'other') describe(info);
-      else console.log(info === 'other' ? `${url} 由其他服务使用，非本项目生产预览。` : `本项目生产预览未运行：${url}`);
+      else console.log(info === 'other' ? `${url} is used by another service, not this project’s production preview.` : `This project’s production preview is not running: ${url}`);
       break;
     }
-    default: throw new Error('用法：npm start | npm stop | npm run status');
+    default: throw new Error('Usage: npm start | npm stop | npm run status');
   }
 } catch (error) {
-  console.error(`地图服务：${error.message}`);
+  console.error(`Map service: ${error.message}`);
   process.send?.({error:error.message});
   process.exitCode = 1;
 }

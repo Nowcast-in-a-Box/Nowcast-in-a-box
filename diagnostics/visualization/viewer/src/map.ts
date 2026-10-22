@@ -2,11 +2,8 @@ import Map from 'ol/Map.js';
 import {createMapView, WORLD_EXTENT} from './map-view';
 import GeoTIFF from 'ol/source/GeoTIFF.js';
 import WebGLTileLayer from 'ol/layer/WebGLTile.js';
-import VectorLayer from 'ol/layer/Vector.js';
-import VectorSource from 'ol/source/Vector.js';
-import GeoJSON from 'ol/format/GeoJSON.js';
+import {createBoundaryLayer} from './boundary-layer.ts';
 import {ScaleLine} from 'ol/control.js';
-import {Style, Stroke} from 'ol/style.js';
 import {unByKey} from 'ol/Observable.js';
 import type {ExpressionValue} from 'ol/expr/expression.js';
 import type {EventsKey} from 'ol/events.js';
@@ -20,7 +17,7 @@ export const rgb = (c: number[]) => c.map(v => Math.round(v * 255));
 export class MapController {
   readonly map: Map;
   readonly terrain: WebGLTileLayer;
-  readonly boundaries: VectorLayer;
+  readonly boundaries: ReturnType<typeof createBoundaryLayer>;
   /** Two weather buffers: one presents the displayed frame, the other prepares the next frame hidden. */
   readonly weatherLayers: [WebGLTileLayer, WebGLTileLayer];
   private sources = new globalThis.Map<number, GeoTIFF>();
@@ -54,14 +51,7 @@ export class MapController {
         'case', ['==', ['band', 2], 0], [0, 0, 0, 0],
         ['interpolate', ['linear'], ['band', 1], ...bundle.terrain.colors.flat()],
       ] as ExpressionValue}});
-    const vectors = new VectorSource({url: url(bundle.boundaries.url), format: new GeoJSON()});
-    vectors.on('featuresloaderror', () => onError('边界数据读取失败，请检查本地数据包。'));
-    this.boundaries = new VectorLayer({source: vectors, className: 'boundary-layer', style: feature => {
-      const s = bundle.boundaries.styles[feature.get('boundary_type')];
-      return new Style({stroke: new Stroke({color: s?.edgecolor ?? '#A9ABAD',
-        width: s?.linewidth ?? .6,
-        lineDash: s?.linestyle === '--' ? [6, 4] : s?.linestyle === ':' ? [2, 3] : undefined})});
-    }});
+    this.boundaries = createBoundaryLayer(bundle.boundaries, onError);
     this.map = new Map({target, layers: [this.terrain, ...this.weatherLayers, this.boundaries],
       controls: [new ScaleLine({units: 'metric', minWidth: 100})],
       view: createMapView(bundle.map_extent)});
@@ -76,7 +66,7 @@ export class MapController {
       // user-visible. Weather frames are only reported while being prepared
       // or presented; superseded in-flight requests must stay silent.
       if (role === 'terrain' || source === this.pendingSource || source === this.presentedWeather().getSource())
-        this.onError('地图数据读取失败；当前画面尚未完成加载。');
+        this.onError('Failed to load map data. The current view is not fully loaded.');
     });
     return source;
   }
@@ -163,8 +153,8 @@ export class MapController {
       // never disconnect the current selection's timer or rejection path.
       let failWait: (error: Error) => void = () => {};
       const failure = new Promise<never>((_, reject) => { failWait = reject; });
-      const errorKey = source.once('tileloaderror', () => failWait(new Error('天气帧读取失败')));
-      const timer = window.setTimeout(() => failWait(new Error('地图加载超时，请重试')), 30000);
+      const errorKey = source.once('tileloaderror', () => failWait(new Error('Failed to load the weather frame')));
+      const timer = window.setTimeout(() => failWait(new Error('Map loading timed out. Please retry.')), 30000);
       // Every live selection registers its hooks so dispose() can end all of
       // them, not only the latest one.
       const live = {timer, fail: failWait};
@@ -299,9 +289,15 @@ export class MapController {
     const frame = this.bundle.frames[index];
     const wrap = (text: string, width: number) => {
       const lines: string[] = []; let line = '';
-      for (const char of text) {
-        if (line && ctx.measureText(line + char).width > width) {lines.push(line); line = '';}
-        line += char;
+      for (const word of text.split(/\s+/)) {
+        if (line && ctx.measureText(`${line} ${word}`).width > width) {lines.push(line); line = '';}
+        if (line) line += ' ';
+        // Preserve words where possible; split only tokens wider than a line,
+        // such as a source URL in a narrow export.
+        for (const char of word) {
+          if (line && ctx.measureText(line + char).width > width) {lines.push(line); line = '';}
+          line += char;
+        }
       }
       if (line) lines.push(line);
       return lines;
@@ -310,8 +306,8 @@ export class MapController {
     ctx.font = 'bold 16px sans-serif';
     const title = wrap(`${this.bundle.title} | ${frame.valid_time} | ${this.bundle.notice}`, size[0] - 32);
     ctx.font = '12px sans-serif';
-    const layerNote = `图层：天气${weather.getVisible() ? '开启' : '关闭'} / 地形${this.terrain.getVisible() ? '开启' : '关闭'} / 边界${this.boundaries.getVisible() ? '开启' : '关闭'}；最低显示值 ${this.threshold} dBZ。`;
-    const notes = wrap(`${layerNote} 显示取样 ${this.bundle.shape[1]} × ${this.bundle.shape[0]}；当前视图截图。 ${this.bundle.boundaries.attribution} ${this.bundle.terrain.attribution} ${this.bundle.boundaries.disclaimer}`, size[0] - 32);
+    const layerNote = `Layers: weather ${weather.getVisible() ? 'on' : 'off'} / terrain ${this.terrain.getVisible() ? 'on' : 'off'} / boundaries ${this.boundaries.getVisible() ? 'on' : 'off'}; display threshold ${this.threshold} dBZ.`;
+    const notes = wrap(`${layerNote} Display grid ${this.bundle.shape[1]} × ${this.bundle.shape[0]}; current view screenshot. ${this.bundle.boundaries.attribution} ${this.bundle.terrain.attribution} ${this.bundle.boundaries.disclaimer}`, size[0] - 32);
     const legendHeight = weather.getVisible() ? 48 : 0;
     const footerHeight = 30 + title.length * 22 + legendHeight + notes.length * 17;
     canvas.width = size[0]; canvas.height = size[1] + footerHeight;
@@ -348,7 +344,7 @@ export class MapController {
     ++this.revision; this.gate.cancel();
     // End every live selection, not only the latest one: stale gate results
     // are already swallowed, so their late failures surface nowhere.
-    for (const live of this.pendingWaits) { window.clearTimeout(live.timer); live.fail(new Error('视图已关闭')); }
+    for (const live of this.pendingWaits) { window.clearTimeout(live.timer); live.fail(new Error('The view has been closed')); }
     this.pendingWaits.clear();
     this.pendingSource = null;
     this.map.setTarget(undefined); this.map.dispose(); this.sources.forEach(s => s.dispose());

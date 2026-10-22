@@ -34,3 +34,13 @@ test('startup requires the manifest instead of serving a broken map', async t =>
   await rm(join(directory,'viewer.json'));
   await assert.rejects(inspectViewerData(directory), /viewer\.json/);
 });
+
+test('startup checks each physical boundary tile in a tiled bundle', async t => {
+  const {directory, bundle} = await fixture(t);
+  bundle.boundaries = {url:'wmo', tiles:{keys:['0/0/0']}};
+  await writeFile(join(directory,'viewer.json'), JSON.stringify(bundle));
+  await assert.rejects(inspectViewerData(directory), /wmo\/0\/0\/0\.pbf/);
+  await mkdir(join(directory,'wmo/0/0'), {recursive:true});
+  await writeFile(join(directory,'wmo/0/0/0.pbf'), 'presence fixture');
+  assert.deepEqual(await inspectViewerData(directory), bundle);
+});

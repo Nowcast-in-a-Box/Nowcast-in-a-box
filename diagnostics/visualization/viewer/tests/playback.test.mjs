@@ -43,8 +43,8 @@ test('a superseded frame that fails never surfaces an error or pauses playback',
 
 test('the current selection still reports its own failure for retry', async () => {
   const gate = new SelectionGate();
-  await assert.rejects(gate.run(async () => {throw new Error('天气帧读取失败');}, () => {}),
-    /天气帧读取失败/);
+  await assert.rejects(gate.run(async () => {throw new Error('Failed to load the weather frame');}, () => {}),
+    /Failed to load the weather frame/);
 });
 
 test('a render is a commit point only when the view it rendered is still current', async () => {
@@ -73,7 +73,7 @@ test('a stop signal ends the render wait loop instead of leaving it suspended', 
   let rejectStop;
   const stop = new Promise((_, reject) => {rejectStop = reject;});
   const waiting = awaitStableRender(() => 'view', () => new Promise(() => {}), stop);
-  rejectStop(new Error('地图加载超时，请重试'));
+  rejectStop(new Error('Map loading timed out. Please retry.'));
   const outcome = await Promise.race([
     waiting.then(() => 'settled', () => 'settled'),
     new Promise(resolve => setTimeout(() => resolve('hung: loop left suspended'), 100)),

@@ -1,6 +1,8 @@
 # NiB 地图页面
 
-React + OpenLayers 本地交互地图，读取预生成的天气 COG、全球 ETOPO 地形和 WMO 矢量边界。
+React + OpenLayers 本地交互地图，读取预生成的天气 COG、全球陆地ETOPO地形和随缩放读取的WMO本地矢量边界。
+
+界面、来源说明、提示、无障碍标签与PNG注释使用英文。
 
 先按[使用与数据准备](../docs/map_viewer.md)准备依赖和本地数据，再在本目录运行：
 

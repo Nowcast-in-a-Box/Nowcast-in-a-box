@@ -63,9 +63,9 @@ const makeWorkspace = () => {
     assert.ok(found, 'UI control not found'); return found; };
   const button = label => find(n => n.type === 'button' && n.props['aria-label'] === label);
   const exportButton = () => find(n => n.type === 'button' && n.props.className === 'export');
-  const retryButton = () => find(n => n.type === 'button' && n.children?.[0] === '重试');
-  const slider = () => find(n => n.props['aria-label'] === '时间轴');
-  const speedControl = () => find(n => n.type === 'select' && n.props['aria-label'] === '播放速度');
+  const retryButton = () => find(n => n.type === 'button' && n.children?.[0] === 'Retry');
+  const slider = () => find(n => n.props['aria-label'] === 'Timeline');
+  const speedControl = () => find(n => n.type === 'select' && n.props['aria-label'] === 'Playback speed');
   const sliderValue = () => slider().props.value;
   const frameCount = () => find(n => n.props.className === 'frame-count').children[0];
   const alert = () => { let found; walk(tree, n => { if (n.props.role === 'alert') found = n; }); return found; };
@@ -77,13 +77,13 @@ test('SP-01: pausing keeps an explicit manual selection; it still commits while 
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();          // initial frame 0 committed, paused
   const base = c.requests.length;
-  w.button('下一帧').props.onClick(); w.flush();   // explicit manual B=1
+  w.button('Next frame').props.onClick(); w.flush();   // explicit manual B=1
   const manual = c.requests.at(-1);
   assert.equal(manual.index, 1);
   assert.equal(manual.opts?.delayMs, undefined, 'a manual selection carries no deadline');
-  w.button('播放').props.onClick(); w.flush();     // start: no new automatic request while loading
+  w.button('Play').props.onClick(); w.flush();     // start: no new automatic request while loading
   assert.equal(c.requests.length, base + 1);
-  w.button('暂停').props.onClick(); w.flush();     // pause must NOT cancel the manual selection
+  w.button('Pause').props.onClick(); w.flush();     // pause must NOT cancel the manual selection
   assert.equal(c.cancels, 0, 'pause cancelled an explicit manual selection');
   assert.equal(manual.revision, c.revision, 'pause invalidated the manual request');
   assert.equal(w.sliderValue(), 1, 'pause rolled the explicit selection back');
@@ -96,11 +96,11 @@ test('SP-01: pausing still cancels the pending AUTOMATIC frame and rolls back to
   const w = makeWorkspace();
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();
-  w.button('播放').props.onClick(); w.flush();
+  w.button('Play').props.onClick(); w.flush();
   const auto = c.requests.at(-1);
   assert.equal(auto.index, 1);
   assert.equal(typeof auto.opts?.delayMs, 'number', 'the automatic selection carries the pacer deadline');
-  w.button('暂停').props.onClick(); w.flush();
+  w.button('Pause').props.onClick(); w.flush();
   assert.equal(c.cancels, 1);
   assert.notEqual(auto.revision, c.revision, 'the auto frame stayed valid after pause');
   assert.equal(w.sliderValue(), 0);
@@ -111,15 +111,15 @@ test('SP-01: a manual step preempts the automatic frame; a later pause keeps the
   const w = makeWorkspace();
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();
-  w.button('播放').props.onClick(); w.flush();
+  w.button('Play').props.onClick(); w.flush();
   const auto = c.requests.at(-1);                  // automatic frame 1 preparing
-  w.button('下一帧').props.onClick(); w.flush();   // manual preempts it AND pauses
+  w.button('Next frame').props.onClick(); w.flush();   // manual preempts it AND pauses
   const manual = c.requests.at(-1);
   assert.equal(manual.index, 2);
   assert.notEqual(auto.revision, c.revision, 'the preempted auto selection stayed current');
-  w.button('播放').props.onClick(); w.flush();     // start again while the manual frame still prepares
+  w.button('Play').props.onClick(); w.flush();     // start again while the manual frame still prepares
   assert.equal(c.requests.length, 3, 'starting issued another automatic request over the manual one');
-  w.button('暂停').props.onClick(); w.flush();     // pause must keep the explicit manual selection
+  w.button('Pause').props.onClick(); w.flush();     // pause must keep the explicit manual selection
   assert.equal(c.cancels, 0, 'pause cancelled the manual selection that preempted the auto frame');
   c.finish(manual); w.flush();
   assert.equal(w.frameCount(), 3);
@@ -131,7 +131,7 @@ test('SP-03: an explicit retry re-enters the selection for the displayed frame a
   c.finish(c.requests.at(-1)); w.flush();          // frame 0 displayed, paused, not loading
   // A late failure of the displayed frame's own source raises the error with
   // selected===displayed and loading=false — the exact retry entry condition.
-  c.onError('地图数据读取失败；当前画面尚未完成加载。'); w.flush();
+  c.onError('Failed to load map data. The current view is not fully loaded.'); w.flush();
   assert.ok(w.alert(), 'the error did not surface');
   const before = c.requests.length;
   w.retryButton().props.onClick(); w.flush();
@@ -156,14 +156,14 @@ test('SP-01: a speed switch while a manual selection prepares keeps it manual; p
   const w = makeWorkspace();
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();          // frame 0 displayed, paused
-  w.button('下一帧').props.onClick(); w.flush();   // explicit manual B=1 preparing
+  w.button('Next frame').props.onClick(); w.flush();   // explicit manual B=1 preparing
   const manual = c.requests.at(-1);
-  w.button('播放').props.onClick(); w.flush();     // start; the manual frame stays in flight
+  w.button('Play').props.onClick(); w.flush();     // start; the manual frame stays in flight
   w.speedControl().props.onChange({target: {value: '2'}}); w.flush();   // 2× while the manual frame prepares
   assert.equal(c.requests.length, 2, 'the speed switch re-issued the explicit manual selection as an automatic beat');
   assert.equal(manual.revision, c.revision, 'the speed switch superseded the manual selection');
   assert.equal(manual.opts?.delayMs, undefined, 'the speed switch attached a deadline to the manual selection');
-  w.button('暂停').props.onClick(); w.flush();     // pause after the speed switch
+  w.button('Pause').props.onClick(); w.flush();     // pause after the speed switch
   assert.equal(c.cancels, 0, 'pause after a speed switch cancelled the manual selection');
   assert.equal(w.sliderValue(), 1, 'pause after a speed switch rolled the manual selection back');
   assert.equal(w.exportButton().props.disabled, true, 'export re-enabled while the manual frame was still pending');
@@ -176,9 +176,9 @@ test('SP-01: after a speed switch during a manual preparation, playback continue
   const w = makeWorkspace();
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();
-  w.button('下一帧').props.onClick(); w.flush();   // explicit manual B=1 preparing
+  w.button('Next frame').props.onClick(); w.flush();   // explicit manual B=1 preparing
   const manual = c.requests.at(-1);
-  w.button('播放').props.onClick(); w.flush();
+  w.button('Play').props.onClick(); w.flush();
   w.speedControl().props.onChange({target: {value: '2'}}); w.flush();   // 2× while the manual frame prepares
   assert.equal(c.requests.length, 2, 'the speed switch re-issued the pending manual selection');
   c.finish(manual); w.flush();                     // the manual frame commits while playing
@@ -192,7 +192,7 @@ test('SP-01: after a speed switch during a manual preparation, playback continue
   assert.equal(typeof auto.opts?.delayMs, 'number', 'the follow-up automatic selection carries no deadline');
   assert.ok(auto.opts.delayMs > 50 && auto.opts.delayMs <= 100,
     `the 2× follow-up was not a fresh full interval (delayMs=${auto.opts.delayMs})`);
-  w.button('暂停').props.onClick(); w.flush();     // that follow-up stays cancellable
+  w.button('Pause').props.onClick(); w.flush();     // that follow-up stays cancellable
   assert.equal(c.cancels, 1);
   assert.equal(w.sliderValue(), 1);
 });
@@ -201,7 +201,7 @@ test('a speed switch still re-issues and keeps cancellable a pending AUTOMATIC s
   const w = makeWorkspace();
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();
-  w.button('播放').props.onClick(); w.flush();     // automatic frame 1 preparing at 1×
+  w.button('Play').props.onClick(); w.flush();     // automatic frame 1 preparing at 1×
   const first = c.requests.at(-1);
   w.speedControl().props.onChange({target: {value: '4'}}); w.flush();
   assert.equal(c.requests.length, 3, 'the speed switch did not re-issue the automatic beat');
@@ -210,7 +210,7 @@ test('a speed switch still re-issues and keeps cancellable a pending AUTOMATIC s
   assert.notEqual(first.revision, c.revision, 'the superseded automatic selection stayed current');
   assert.equal(typeof reissued.opts?.delayMs, 'number');
   assert.ok(reissued.opts.delayMs <= 50, `the 4× re-issue did not adopt the new interval (delayMs=${reissued.opts.delayMs})`);
-  w.button('暂停').props.onClick(); w.flush();
+  w.button('Pause').props.onClick(); w.flush();
   assert.equal(c.cancels, 1);
   assert.equal(w.sliderValue(), 0);
   assert.equal(w.exportButton().props.disabled, false);
@@ -220,14 +220,14 @@ test('an old effect callback after a speed beat cannot clear the new automatic o
   const w = makeWorkspace();
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();
-  w.button('播放').props.onClick(); w.flush();
+  w.button('Play').props.onClick(); w.flush();
   const old = c.requests.at(-1);
   w.speedControl().props.onChange({target: {value: '4'}}); w.flush();
   const current = c.requests.at(-1);
   assert.equal(current.index, 1);
   old.commit(); w.flush();   // late delivery from the superseded effect; its active flag must ignore it
   assert.equal(w.frameCount(), 1, 'a cleaned-up effect still changed displayed');
-  w.button('暂停').props.onClick(); w.flush();
+  w.button('Pause').props.onClick(); w.flush();
   assert.equal(c.cancels, 1, 'the old callback stripped the current automatic origin');
   assert.notEqual(current.revision, c.revision);
 });
@@ -236,15 +236,15 @@ test('after a manual commit while playing, only the next automatic selection is 
   const w = makeWorkspace();
   w.flush(); const c = w.controller();
   c.finish(c.requests.at(-1)); w.flush();
-  w.button('下一帧').props.onClick(); w.flush();
+  w.button('Next frame').props.onClick(); w.flush();
   const manual = c.requests.at(-1);
-  w.button('播放').props.onClick(); w.flush();
+  w.button('Play').props.onClick(); w.flush();
   c.finish(manual); w.flush();                     // manual frame 1 commits while playing
   const auto = c.requests.at(-1);
   assert.equal(auto.index, 2);
   assert.equal(typeof auto.opts?.delayMs, 'number');
   assert.equal(w.frameCount(), 2);
-  w.button('暂停').props.onClick(); w.flush();
+  w.button('Pause').props.onClick(); w.flush();
   assert.equal(c.cancels, 1, 'the automatic follow-up after a manual commit was not cancellable');
   assert.equal(w.sliderValue(), 1);
 });

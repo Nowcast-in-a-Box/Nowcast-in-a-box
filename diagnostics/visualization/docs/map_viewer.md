@@ -22,7 +22,11 @@ cp resources/cma_ref_colormap.json 'data/02_雷达拼图读取_看输入输出�
 .venv/bin/python scripts/prepare_map_viewer.py --input data/cma-npz
 ```
 
-将 `data/cma-npz` 换成实际 NPZ 目录。准备脚本批量生成天气 COG、全球地形 COG、WMO 矢量及 `output/map-viewer/data/viewer.json`，逐格回读天气显示网格后写入 manifest。默认天气显示宽度1000、全球地形宽度7200；缩放不能恢复原生网格细节。WMO 为固定 LOD 1 概览，不含街道和动态地名。当前50帧场景是实况回放，不能标为真实预报。
+将 `data/cma-npz` 换成实际 NPZ 目录。准备脚本批量生成天气COG、全球陆地地形COG、WMO本地矢量瓦片及 `output/map-viewer/data/viewer.json`，逐格回读天气显示网格后写入 manifest。默认天气显示宽度1000、全球地形宽度7200；缩放不能恢复原生网格细节。WMO按缩放读取本地LOD 0–9；没有更细实体瓦片的区域回退到实际父级几何，不拉伸到子瓦片。它不包含街道或地名标签，继续放大不保证增加细节。当前50帧场景是实况回放，不能标为真实预报。
+
+地形按WMO陆地面掩膜，海洋透明露出统一浅蓝底色，低于海平面的陆地仍保留。默认柔和自然色由`src/nib_visualization/viewer_basemap.py::LAND_TERRAIN_COLORS`定义，不透明度56%；当前7200×3600派生网格为3 arc-minute显示格距，不是源30 arc-second或30米DEM。
+
+界面、来源说明、加载/错误、tooltips、无障碍标签和PNG注释统一英文。生成标题为`CMA CREF · Radar reflectivity`，标记为`Observation replay · Not a forecast`；`Data`和`World`分别恢复数据区及全球视野。
 
 只更新底图可用 `--basemap-only`；抽查首中末三帧可用 `--sample --output output/map-viewer-sample/data`，该独立目录不会替换默认页面数据。
 
@@ -51,10 +55,14 @@ npm --prefix viewer test
 npm --prefix viewer run typecheck
 npm --prefix viewer run build
 npm --prefix viewer run test:sites
-.venv/bin/python -m pytest tests/test_viewer_bundle.py -q
+.venv/bin/python -m pytest tests/test_viewer_bundle.py tests/test_viewer_basemap.py -q
 ```
 
-2026-10-21播放修复验收：53项前端测试、类型检查与构建通过；4项Sites检查按未变范围复用。真实浏览器已覆盖完整帧切换、慢帧、取消、重试、倍率切换及实际PNG；普通1×/2×播放后，稳定暂停画面的天气、时间和帧号与同帧静态参照逐像素一致。
+接收环境没有WMO cache时，真实PBF解码测试会跳过；仅单元测试通过不能代替实际底图和浏览器验证。
+
+2026-10-22本地英文/底图版本：57项前端测试、4项Sites、类型与构建已有通过证据；本次提交前陆地掩膜和COG定向Python检查7 passed。真实Chrome已检查桌面1440×900、窄屏390×844、来源/图层/播放与实际PNG下载；PNG文字使用英文并优先按单词换行。新增底图和英文界面为实施者自验，未取得新的独立功能verdict；既有favicon 404保留，窄屏检查不等于完整移动布局验收。
+
+2026-10-21播放修复验收（历史快照）：53项前端测试、类型检查与构建通过；4项Sites检查按未变范围复用。真实浏览器已覆盖完整帧切换、慢帧、取消、重试、倍率切换及实际PNG；普通1×/2×播放后，稳定暂停画面的天气、时间和帧号与同帧静态参照逐像素一致。
 
 O-01保留为用户接受的deferred观察项：旧异步合成截图曾出现新天气与旧时间标签，但缺少该图自身呈现身份，无法判断是否实际显示；后续正常样本不能证明旧图是捕获伪影。当前按本地mock MVP范围完成使用验收，原天气/时间一致性要求保持。若稳定暂停仍错配、实际导出错时或正常播放出现可重复可见错配，再重新处理。
 

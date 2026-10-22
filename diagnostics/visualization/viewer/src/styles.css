@@ -110,7 +110,7 @@ input[type=range]::-moz-range-thumb {
   box-shadow:0 1px 3px #20212430;
 }
 input[type=range]:disabled { --accent:#aeb4bb; }
-.map-shell { background:#e8eaed; }
+.map-shell { background:#e8f0f5; }
 .zoom-group,.fit-button,.legend {
   border-color:#dadce0;
   background:#fff;

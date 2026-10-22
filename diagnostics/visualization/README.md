@@ -73,8 +73,10 @@ backend. Matplotlib/Fontconfig cache directories must be writable by the run use
 ## Interactive map viewer
 
 The optional React/OpenLayers viewer reads prepared numeric COG layers and WMO
-vectors. It supports world navigation, independent layer controls, playback and
-PNG view export. See [map viewer setup and commands](docs/map_viewer.md).
+vector tiles. Land terrain uses the soft-natural palette; boundary detail follows
+zoom with sparse parent-tile fallback. It supports world navigation, independent
+layer controls, playback and PNG view export. All UI text and PNG annotations
+are in English. See [map viewer setup and commands](docs/map_viewer.md).
 The included example is CMA observation replay, not a real Forecast integration.
 
 ## Tests
