@@ -103,7 +103,7 @@ func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, even
 	var value struct {
 		Ready bool `json:"ready"`
 	}
-	if json.Unmarshal(out, &value) != nil || !value.Ready {
+	if json.Unmarshal(containerJSON(out), &value) != nil || !value.Ready {
 		return Check{ID: id, OK: false, Message: "selected window metadata was not ready"}
 	}
 	return Check{ID: id, OK: true, Message: "selected window exists and catalog integrity passed"}
