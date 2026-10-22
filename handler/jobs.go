@@ -151,7 +151,7 @@ func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var value any
-	if json.Unmarshal(out, &value) != nil {
+	if json.Unmarshal(containerJSON(out), &value) != nil {
 		runtimeError(w, 502, fmt.Errorf("invalid sample reader response"))
 		return
 	}

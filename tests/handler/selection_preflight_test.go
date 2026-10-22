@@ -93,6 +93,28 @@ func (readyRunner) Run(context.Context, ...string) (int, []byte, error) {
 	return 0, []byte(`{"ready":true}`), nil
 }
 
+// An arm64 host running an amd64 image makes Docker print a platform warning to
+// stderr; CombinedOutput merges it into the container reply.
+type noisyRunner struct{}
+
+func (noisyRunner) Run(context.Context, ...string) (int, []byte, error) {
+	return 0, []byte("WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested\n{\"ready\": true}\n"), nil
+}
+
+func TestPreflightIgnoresDockerPlatformWarning(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Runtime.Token = "token"
+	server := handler.NewServer(cfg)
+	writeSevirData(t, &cfg)
+	server.Config = cfg
+	server.Runner = noisyRunner{}
+	body := `{"data_id":"sevir","event_id":"S710140","context_start_time":"2017-06-16T21:15:00Z","models":["wadepre"]}`
+	joined := mustJSON(t, postPreflight(t, server, body))
+	if !strings.Contains(joined, "selected window exists and catalog integrity passed") {
+		t.Fatal(joined)
+	}
+}
+
 func postPreflight(t *testing.T, server *handler.Server, body string) map[string]any {
 	t.Helper()
 	request := httptest.NewRequest("POST", "http://127.0.0.1/v1/preflight", strings.NewReader(body))
