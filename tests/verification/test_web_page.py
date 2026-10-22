@@ -393,5 +393,11 @@ def test_the_quick_picks_are_the_windows_people_ask_for():
     picks = picks[: picks.index("];")]
     for days in ("[1,", "[3,", "[7,", "[30,"):
         assert days in picks, days
-    assert "Custom" in app, "the range that is not a preset is still a click"
+    assert "[null" not in picks, "All is not a quick pick: a year takes seconds"
+    assert 'text: "Custom"' in app, "the range that is not a preset is still a click"
     assert "function setInitDays" in app
+    assert "7 * 86400000" in app, "the page opens on a recent week by default"
+
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert 'id="q-init-day"' not in html
+    assert "All data" not in html

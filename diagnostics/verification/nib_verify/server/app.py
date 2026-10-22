@@ -288,23 +288,16 @@ def create_app(
         # handed over rather than re-derived: a key whose swatch is a different
         # colour from the line it names is worse than no key.
         payload["series_colours"] = series_colours(cfg)
-        # One number the panel cannot get anywhere else: the last week *of the data*
-        # it is about to ask questions of. Read as min/max it is one index probe; read
-        # as the list of init times it was 681 ms, and read as the whole store it was
-        # two seconds. Without it the window opens on the wall clock, which is right
-        # for a live system and an empty page for a replayed run.
+        # One number the panel cannot get anywhere else: the latest stored
+        # init time, and the earliest available for clamping a recent range.
+        # Without it the window opens on the wall clock, which is right for a
+        # live system and an empty page for a replayed run.
         with store() as s:
             row = s.conn.execute(
                 "SELECT min(init_time), max(init_time) FROM task WHERE group_id = ?",
                 (cfg.group_id,),
             ).fetchone()
-            days = s.conn.execute(
-                "SELECT DISTINCT substr(init_time, 1, 10) FROM task "
-                "WHERE group_id = ? AND init_time IS NOT NULL ORDER BY 1",
-                (cfg.group_id,),
-            ).fetchall()
         payload["init_span"] = [row[0], row[1]] if row and row[0] else None
-        payload["init_days"] = [day[0] for day in days if day[0]]
         return payload
 
     @app.post("/api/configs", status_code=201)
