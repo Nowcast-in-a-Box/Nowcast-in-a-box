@@ -91,7 +91,6 @@ const state = {
   job: null,
   chartUrl: null,
   visualization: null,
-  initDates: [],
   kind: "line",
   hidden: [],            // members the legend has been clicked off
 };
@@ -1076,11 +1075,10 @@ async function onConfigPicked() {
     try { cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`); } catch (_) { return; }
   }
   state.selected = cfg;
-  // Defaults come off the config, not off the clock. The full stored span is
-  // the useful default for a metric average; a day picker narrows it when the
-  // question is about one case.
+  // Defaults come off the config, not off the clock. Start with the latest
+  // seven days so a year of stored results does not run a full-span query
+  // before the user asks for it; presets and Custom can widen or narrow it.
   state.initSpan = cfg.init_span || null;
-  state.initDates = cfg.init_days || [];
   state.leads = cfg.leads || [];
   fillInitDefaults();
   fillLeadDefaults();
@@ -1093,8 +1091,10 @@ async function onConfigPicked() {
   if (available.length) await onMethodPicked();
 }
 
-//: What the quick picks offer, in days. ``null`` is everything that was stored.
-const INIT_PICKS = [[null, "All"], [1, "1 d"], [3, "3 d"], [7, "7 d"], [30, "30 d"]];
+//: What the quick picks offer, in days. The full stored span is not one of
+//: them: a year takes seconds to query, and a stale full-range click is not a
+//: useful shortcut. Custom still reaches any range.
+const INIT_PICKS = [[1, "1 d"], [3, "3 d"], [7, "7 d"], [30, "30 d"]];
 
 function initDays() {
   const from = $("#q-init-from").value, to = $("#q-init-to").value;
@@ -1177,60 +1177,32 @@ function closeInitPanel() { $("#init-panel").hidden = true; }
 
 function renderInitQuick() {
   const days = initDays();
-  const span = state.initSpan;
-  const allActive = Boolean(span && $("#q-init-from").value === localStamp(new Date(span[0]))
-    && $("#q-init-to").value === localStamp(new Date(span[1])));
   const near = (one, other) => one !== null && other !== null && Math.abs(one - other) < 0.2;
   const chips = INIT_PICKS.map(([count, label]) => h("button", {
     class: "chip", type: "button", text: label,
-    "aria-pressed": String(count === null ? allActive : near(days, count)),
+    "aria-pressed": String(near(days, count)),
     onclick: () => setInitDays(count),
   }));
   // Custom does not set a range, it opens the thing that does. It lights up when
   // the range is none of the presets, which is what custom means.
   chips.push(h("button", {
     class: "chip", type: "button", text: "Custom",
-    "aria-pressed": String(!allActive && !INIT_PICKS.some(([count]) => count !== null && near(days, count))),
+    "aria-pressed": String(!INIT_PICKS.some(([count]) => near(days, count))),
     onclick: () => openInitPanel(),
   }));
   mount($("#q-init-quick"), chips);
-  const daySelect = $("#q-init-day");
-  if (daySelect) {
-    const previous = daySelect.value;
-    mount(daySelect, h("option", { value: "", text: "All data" }),
-      state.initDates.map(day => h("option", { value: day, text: day })));
-    if (state.initDates.includes(previous)) daySelect.value = previous;
-    daySelect.onchange = onInitDay;
-  }
 }
 
 function setInitDays(count) {
   const span = state.initSpan;
   const end = span ? new Date(span[1]) : new Date();
-  const start = count === null
-    ? (span ? new Date(span[0]) : end)
-    : new Date(end.getTime() - count * 86400000);
+  const floor = span ? new Date(span[0]).getTime() : end.getTime();
+  const start = new Date(Math.max(floor, end.getTime() - count * 86400000));
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
-  const daySelect = $("#q-init-day");
-  if (daySelect) daySelect.value = "";
   closeInitPanel();
   sayInit();
   renderInitQuick();
-}
-
-function onInitDay() {
-  const day = $("#q-init-day").value;
-  if (!day) {
-    setInitDays(null);
-  } else {
-    $("#q-init-from").value = localStamp(new Date(`${day}T00:00:00Z`));
-    $("#q-init-to").value = localStamp(new Date(`${day}T23:59:00Z`));
-    closeInitPanel();
-    sayInit();
-    renderInitQuick();
-  }
-  if (state.lastQuery) runQuery();
 }
 
 /** The button the browser's own picker does not have. It is on the panel, where
@@ -1246,10 +1218,11 @@ function applyInit() {
 
 function fillInitDefaults() {
   const span = state.initSpan;
-  // A metric is an average over the stored period. Open on the full stored
-  // span; a day picker or a quick range narrows it when needed.
+  // A year of stored results is too expensive to query on every open. Start
+  // with the latest seven days; a preset or Custom widens it when needed.
   const end = span ? new Date(span[1]) : new Date();
-  const start = span ? new Date(span[0]) : end;
+  const floor = span ? new Date(span[0]).getTime() : end.getTime();
+  const start = new Date(Math.max(floor, end.getTime() - 7 * 86400000));
   $("#q-init-from").value = localStamp(start);
   $("#q-init-to").value = localStamp(end);
   closeInitPanel();

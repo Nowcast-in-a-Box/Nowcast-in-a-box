@@ -116,8 +116,9 @@ def test_a_config_can_be_created_listed_and_read(client):
     assert detail["name"] == "A config"
     assert detail["ruler"]["ground_truth"] == "radar-composite"
     assert detail["ruler_fingerprint"] == make_config().ruler_fingerprint
-    # The detail payload no longer opens the store: the panel is a form, and a form
-    # does not need a census of what has been verified. Assert only what it answers.
+    assert "init_days" not in detail
+    # Detail carries display-only fields (including the stored init span); it
+    # does not need a day census now that the page no longer has a Day picker.
 
 
 def test_creating_the_same_config_twice_is_refused(client):
