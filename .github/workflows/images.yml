@@ -3,6 +3,13 @@ name: publish images
 # Manual bootstrap for the GHCR images used by the Handler. The first Handler
 # startup pulls the diagnostics image; Validate pulls the selected data/model
 # image when the local tag is absent.
+#
+# The CMA data reader and its NowcastNet model are published as multi-arch
+# manifest lists: each platform builds on its own native runner, then a merge
+# job writes the short tag that the runtime manifests reference. `docker pull`
+# therefore returns the host architecture, so an Apple Silicon Mac stops
+# emulating linux/amd64 for the CMA demo. The diagnostics image is still
+# amd64-only.
 on:
   workflow_dispatch:
 
@@ -11,7 +18,7 @@ permissions:
   packages: write
 
 jobs:
-  cma:
+  diagnostics:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -20,13 +27,68 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Build and publish CMA images
+      - name: Build and publish the diagnostics image
         run: |
           set -euo pipefail
           owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
           docker build -f diagnostics/Dockerfile -t "ghcr.io/$owner/nib-diagnostics:automatic-flow" .
-          docker build -f adapters/cma_radar/Dockerfile -t "ghcr.io/$owner/nib-ingestion:cma-demo" .
-          docker build -f adapters/cma_radar/nowcastnet/Dockerfile -t "ghcr.io/$owner/nib-nowcastnet:cma-demo" .
           docker push "ghcr.io/$owner/nib-diagnostics:automatic-flow"
-          docker push "ghcr.io/$owner/nib-ingestion:cma-demo"
-          docker push "ghcr.io/$owner/nib-nowcastnet:cma-demo"
+
+  cma:
+    name: ${{ matrix.image.name }} (${{ matrix.platform.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: nib-ingestion
+            dockerfile: adapters/cma_radar/Dockerfile
+          - name: nib-nowcastnet
+            dockerfile: adapters/cma_radar/nowcastnet/Dockerfile
+        platform:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            suffix: arm64
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and publish ${{ matrix.platform.platform }}
+        run: |
+          set -euo pipefail
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          docker buildx build \
+            --platform "${{ matrix.platform.platform }}" \
+            -f "${{ matrix.image.dockerfile }}" \
+            -t "ghcr.io/$owner/${{ matrix.image.name }}:cma-demo-${{ matrix.platform.suffix }}" \
+            --push .
+
+  cma-merge:
+    needs: cma
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nib-ingestion, nib-nowcastnet]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Write the multi-arch cma-demo tag
+        run: |
+          set -euo pipefail
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          docker buildx imagetools create \
+            -t "ghcr.io/$owner/${{ matrix.image }}:cma-demo" \
+            "ghcr.io/$owner/${{ matrix.image }}:cma-demo-amd64" \
+            "ghcr.io/$owner/${{ matrix.image }}:cma-demo-arm64"
+          docker buildx imagetools inspect "ghcr.io/$owner/${{ matrix.image }}:cma-demo"
