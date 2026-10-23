@@ -21,41 +21,42 @@ const exitUsage = 2
 var errUsage = errors.New("usage")
 var errBackgroundUnavailable = errors.New("background startup unavailable")
 
-func commandConfig(args []string) (Config, []string, error) {
+func commandConfig(args []string) (Config, []string, bool, error) {
 	fs := flag.NewFlagSet("nib-handler", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	configPath := fs.String("config", "", "path to config.yaml")
 	host := fs.String("host", "", "bind address (overrides config; loopback only)")
 	port := fs.String("port", "", "listen port (overrides config)")
+	force := fs.Bool("force", false, "stop a Handler that cannot be authenticated through its session")
 	if err := fs.Parse(args); err != nil {
-		return Config{}, nil, errUsage
+		return Config{}, nil, false, errUsage
 	}
 	cfg, err := Load(*configPath)
 	if err != nil {
-		return Config{}, nil, err
+		return Config{}, nil, false, err
 	}
 	cfg, err = ApplyOverrides(cfg, *host, *port)
 	if err != nil {
-		return Config{}, nil, err
+		return Config{}, nil, false, err
 	}
 	if err := RequireLoopbackHost(cfg.Handler.Host); err != nil {
-		return Config{}, nil, err
+		return Config{}, nil, false, err
 	}
 	if err := RequireLoopbackHost(cfg.Review.Host); err != nil {
-		return Config{}, nil, fmt.Errorf("review host: %w", err)
+		return Config{}, nil, false, fmt.Errorf("review host: %w", err)
 	}
 	if err := RequireLoopbackHost(cfg.Diagnostics.Host); err != nil {
-		return Config{}, nil, fmt.Errorf("diagnostics host: %w", err)
+		return Config{}, nil, false, fmt.Errorf("diagnostics host: %w", err)
 	}
 	if cfg.Handler.Port < 1 || cfg.Handler.Port > 65535 || cfg.Review.Port < 1 || cfg.Review.Port > 65535 || cfg.Diagnostics.Port < 1 || cfg.Diagnostics.Port > 65535 {
-		return Config{}, nil, fmt.Errorf("handler, review and diagnostics ports must be in 1..65535")
+		return Config{}, nil, false, fmt.Errorf("handler, review and diagnostics ports must be in 1..65535")
 	}
-	return cfg, fs.Args(), nil
+	return cfg, fs.Args(), *force, nil
 }
 
 // Prepare loads config, applies flags, and checks loopback binds without listening.
 func Prepare(args []string) (*Server, string, error) {
-	cfg, remaining, err := commandConfig(args)
+	cfg, remaining, _, err := commandConfig(args)
 	if err != nil {
 		return nil, "", err
 	}
@@ -103,6 +104,7 @@ func prepareStart(cfg Config) (bool, error) {
 // Main is the process entry used by cmd/nib-handler. macOS launchers invoke start;
 // serve remains the explicit foreground entry and the Linux/Windows default.
 func Main(args []string) int {
+	force := false
 	if len(args) > 0 && args[0] == "diagnostics" {
 		return DiagnosticsCLI(args[1:])
 	}
@@ -117,7 +119,10 @@ func Main(args []string) int {
 			}
 		}
 	}
-	cfg, remaining, err := commandConfig(args)
+	var err error
+	var cfg Config
+	var remaining []string
+	cfg, remaining, force, err = commandConfig(args)
 	if err != nil {
 		if !errors.Is(err, errUsage) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -128,7 +133,7 @@ func Main(args []string) int {
 		command, uri, remaining = "connect", remaining[0], nil
 	}
 	if len(remaining) != 0 || (command == "connect" && uri == "") {
-		fmt.Fprintln(os.Stderr, "use: nib-handler [start|serve|status|stop|restart|connect] -config config.yaml [nib://connect?origin=...]")
+		fmt.Fprintln(os.Stderr, "use: nib-handler [start|serve|status|stop|restart|connect] -config config.yaml [-force] [nib://connect?origin=...]")
 		return exitUsage
 	}
 	if command == "serve" {
@@ -146,7 +151,7 @@ func Main(args []string) int {
 		}
 	}
 	if command == "stop" || command == "restart" {
-		if err = stopInstance(cfg); err == nil && command == "stop" {
+		if err = stopInstance(cfg, force); err == nil && command == "stop" {
 			fmt.Fprintf(os.Stdout, "Handler stopped (config %s)\n", sourceName(cfg))
 			return 0
 		}

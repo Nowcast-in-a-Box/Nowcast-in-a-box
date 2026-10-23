@@ -84,9 +84,9 @@ func profileID(cfg Config) string {
 }
 
 func configID(cfg Config) string {
-	// Data roots and trusted origins are reloaded without changing identity.
-	// Tokens stay private. Resource manifests are loaded at start; editing one
-	// requires an explicit restart.
+	// Data roots, trusted origins and the local image-source preference are
+	// reloaded without changing identity. Tokens stay private. Resource
+	// manifests are loaded at start; editing one requires an explicit restart.
 	handlerURL, reviewURL := addressURL(cfg.Handler), addressURL(cfg.Review)
 	cfg.Handler, cfg.Review = Addr{}, Addr{}
 	cfg.DataRoots = nil
@@ -96,6 +96,7 @@ func configID(cfg Config) string {
 	cfg.Paths.Resources = canonicalPath(cfg.Paths.Resources)
 	cfg.Paths.WeightSource = canonicalPath(cfg.Paths.WeightSource)
 	cfg.Runtime.AllowedOrigins = nil
+	cfg.Runtime.ImageSource = ""
 	if cfg.Runtime.MaxBatchSamples == 0 {
 		cfg.Runtime.MaxBatchSamples = defaultMaxBatchSamples
 	}
@@ -244,20 +245,17 @@ func waitBackgroundExit(cfg Config, pid int) error {
 	return fmt.Errorf("registered Handler is still completing shutdown; wait or inspect its log before restarting")
 }
 
-func stopInstance(cfg Config) error {
+func stopInstance(cfg Config, force bool) error {
 	session, err := readSession(cfg)
 	if err != nil {
-		if _, probeErr := probeInstance(context.Background(), cfg); errors.Is(probeErr, errNotRunning) && errors.Is(err, os.ErrNotExist) {
-			return waitBackgroundExit(cfg, 0)
-		}
-		return err
+		return stopUnidentified(cfg, err, force)
 	}
 	identity, err := probeAddress(context.Background(), session.URL)
 	if err != nil && !errors.Is(err, errNotRunning) {
 		return err
 	}
 	if err == nil && (session.InstanceID != identity.InstanceID || session.ConfigID != identity.ConfigID || session.URL != identity.URL || session.ReviewURL != identity.ReviewURL) {
-		return fmt.Errorf("local session is stale; do not stop an unidentified process")
+		return stopUnidentified(cfg, fmt.Errorf("local session is stale"), force)
 	}
 	if err == nil {
 		request, err := http.NewRequest(http.MethodPost, session.URL+"/v1/control/stop", bytes.NewReader(nil))
@@ -297,6 +295,57 @@ func stopInstance(cfg Config) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("Handler accepted stop but has not exited; inspect its log before retrying")
+}
+
+// stopUnidentified ends a Handler that still owns the configured loopback port
+// but cannot be controlled through its session: a different binary version, a
+// deleted settings file or a rebuilt config invalidates the recorded identity.
+// The address must identify as nib-handler, so no unrelated service is killed.
+// Plain stop reports such a Handler; -force ends it, which uninstall uses.
+func stopUnidentified(cfg Config, reason error, force bool) error {
+	address := addressURL(cfg.Handler)
+	identity, err := probeAddress(context.Background(), address)
+	if errors.Is(err, errNotRunning) {
+		if errors.Is(reason, os.ErrNotExist) {
+			return waitBackgroundExit(cfg, 0)
+		}
+		return reason
+	}
+	if err != nil {
+		return err
+	}
+	if !force {
+		return fmt.Errorf("%w; use stop -force to end the unidentified Handler at %s", reason, address)
+	}
+	pid, err := listenerPID(cfg.Handler.Port)
+	if err != nil {
+		return err
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "stopping unidentified Handler %s (PID %d) at %s: %v\n", identity.InstanceID, pid, address, reason)
+	if err := terminateProcess(process); err != nil && !processExited(pid) {
+		return err
+	}
+	deadline := time.Now().Add(12 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, probeErr := probeAddress(context.Background(), address); errors.Is(probeErr, errNotRunning) {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// shortcut: an uninstall accepts losing an in-flight job; the handler
+	// refuses SIGTERM while jobs run, so escalate instead of leaving a ghost.
+	if err := process.Kill(); err != nil {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
+	if _, probeErr := probeAddress(context.Background(), address); errors.Is(probeErr, errNotRunning) {
+		return nil
+	}
+	return fmt.Errorf("Handler at %s ignored stop; kill PID %d manually", address, pid)
 }
 
 func (s *Server) requestShutdown() error {

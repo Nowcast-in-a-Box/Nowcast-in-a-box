@@ -62,8 +62,12 @@ per-user Handler cache instead of a macOS application.
 Use `--dry-run` to inspect the planned paths, or `--purge` to additionally
 remove generated runs, artifacts, packaged resources, logs, and downloaded
 Handler binaries. `--purge` asks for a second confirmation and never deletes
-the external data folder. An active queued or running job blocks uninstall;
-wait for it to finish or stop it from the local CLI first.
+the external data folder. A queued or running job blocks a normal stop; wait
+for it to finish or stop it from the local CLI first. A Handler that cannot be
+authenticated through its session file (deleted cache, upgraded binary, edited
+`config.yaml`) is ended by process ID once the configured port identifies as
+`nib-handler`, escalating to `SIGKILL` after about 12 seconds, so uninstall
+does not leave a Handler serving that port.
 
 ## Configuration changes and local control
 
@@ -72,8 +76,8 @@ run/artifact locations, the runtime resources root, Docker context and Atlas
 revision. Images, data files, catalogs and mounts live in the resources
 manifests, so changing one of those manifests requires a Handler restart; the
 compatibility identity covers the resources root, not the manifest contents.
-Data-root and trusted-origin updates do not change that identity. Credentials
-are not part of the public identity response.
+Data-root, trusted-origin and local image-source updates do not change that
+identity. Credentials are not part of the public identity response.
 
 The Hub saves the selected folder per data source in `nib-settings.json` next to
 `config.yaml`. The file is gitignored, contains `data_roots` (and accepts the old
@@ -87,6 +91,10 @@ with the **same config file**. The CLI verifies the old instance against its
 private session before stopping it, then starts with the new settings. A plain
 `start` refuses to silently keep using old execution settings. Keep the config
 file valid and at its original path until its existing service is stopped.
+When that verification is impossible (edited `config.yaml`, a Handler started by
+an older release, a deleted cache), `stop` and `restart` report the instance
+instead of killing it; `stop -force` ends it by process ID, which the platform
+uninstallers use.
 
 Startup/status print actual addresses, the config source and local service-file
 location. On macOS the latter is under

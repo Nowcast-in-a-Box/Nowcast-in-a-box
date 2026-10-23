@@ -68,13 +68,10 @@ if ($Bin) {
     if ($DryRun) {
         Write-Host "would stop the Handler using $Bin if it is running"
     } else {
-        & $Bin status -config $Config *> $null
-        if ($LASTEXITCODE -eq 0) {
-            & $Bin stop -config $Config
-            if ($LASTEXITCODE -ne 0) {
-                Write-Error "the Handler is running and could not be stopped; an active job may still be running. Nothing was removed."
-                exit 1
-            }
+        & $Bin stop -force -config $Config
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "the Handler is still serving its port and could not be stopped. Nothing was removed."
+            exit 1
         }
     }
 } else {

@@ -106,11 +106,9 @@ fi
 if [[ -n "$BINARY" ]]; then
   if ((DRY_RUN)); then
     printf 'would stop the Handler using %s if it is running\n' "$BINARY"
-  elif "$BINARY" status -config "$CONFIG" >/dev/null 2>&1; then
-    if ! "$BINARY" stop -config "$CONFIG"; then
-      echo "ERROR: the Handler is running and could not be stopped; an active job may still be running. Nothing was removed." >&2
-      exit 1
-    fi
+  elif ! "$BINARY" stop -force -config "$CONFIG"; then
+    echo "ERROR: the Handler is still serving its port and could not be stopped. Nothing was removed." >&2
+    exit 1
   fi
 else
   echo "No local Handler binary found; removing registration and local state only."
