@@ -112,7 +112,9 @@ def _decode_layer(
     tile: Path, name: str, bounds: tuple[float, float, float, float]
 ) -> gpd.GeoDataFrame:
     """Decode MVT tile-local geometry and apply the WMO geographic grid."""
-    frame = pyogrio.read_dataframe(tile, layer=name, X=0, Y=0, Z=0, METADATA_FILE="", CLIP="YES")
+    # GDAL's MVT clipping can drop valid components of buffered MultiPolygons.
+    # Decode them intact, then clip in the actual WMO grid after mapping.
+    frame = pyogrio.read_dataframe(tile, layer=name, X=0, Y=0, Z=0, METADATA_FILE="", CLIP="NO")
     west, south, east, north = bounds
     scale_x = (east - west) / (2 * _MERCATOR_HALF_WORLD)
     scale_y = (north - south) / (2 * _MERCATOR_HALF_WORLD)
@@ -122,7 +124,8 @@ def _decode_layer(
             [scale_x, 0, 0, scale_y, (west + east) / 2, (south + north) / 2],
         )
     )
-    return frame.set_crs(WGS84, allow_override=True)
+    frame.geometry = frame.geometry.intersection(box(*bounds))
+    return frame.loc[~frame.geometry.is_empty].set_crs(WGS84, allow_override=True)
 
 
 def _choose_lod(basemap: WmoBasemap, width_degrees: float) -> int:

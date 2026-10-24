@@ -30,6 +30,20 @@ cp resources/cma_ref_colormap.json 'data/02_雷达拼图读取_看输入输出�
 
 只更新底图可用 `--basemap-only`；抽查首中末三帧可用 `--sample --output output/map-viewer-sample/data`，该独立目录不会替换默认页面数据。
 
+## 已有数据升级：地形空洞修复
+
+WMO瓦片现在先完整解码，再按真实地理瓦片范围裁剪，避免内置裁剪丢失部分陆地面。地形掩膜缓存版本已由3升为4；已有版本3的派生地形需重新准备，并重新构建本地预览：
+
+```bash
+.venv/bin/python scripts/prepare_map_viewer.py --basemap-only
+npm --prefix viewer stop
+npm --prefix viewer start
+```
+
+命令仍需已有的全球ETOPO原件和WMO缓存，来源及下载步骤不变。`--basemap-only`会重建旧版陆地COG，并逐文件核对天气帧hash保持一致。仅更新源码或刷新浏览器不会重写旧地形文件；重启会把新COG复制到运行时构建快照。
+
+该修复保留地形显示格距、陆地负高程、柔和自然色、图层不透明度和天气播放行为；不增加地形分辨率或边界源精度。
+
 ## 日常启动与停止
 
 ```bash
@@ -58,7 +72,15 @@ npm --prefix viewer run test:sites
 .venv/bin/python -m pytest tests/test_viewer_bundle.py tests/test_viewer_basemap.py -q
 ```
 
+验证真实WMO解码、瓦片缓冲裁剪和地形掩膜时，显式启用本地缓存：
+
+```bash
+NIB_WMO_BASEMAP_PATH=data/cache/basemap/wmo .venv/bin/python -m pytest tests/test_wmo_basemap.py tests/test_viewer_basemap.py -q
+```
+
 接收环境没有WMO cache时，真实PBF解码测试会跳过；仅单元测试通过不能代替实际底图和浏览器验证。
+
+2026-10-23地形空洞修复自验：相关WMO/掩膜/Core/render/COG测试58 passed、2项未启用OCHA缓存的既有集成测试跳过，Ruff、前端类型检查和生产构建通过。7200×3600全球地形与修复前逐格对比，恢复6,247格点，新增误删0，原有效高程不变；50天气文件hash不变。实际浏览器检查原缺口、另两处同类缺口、海岸和全球视图，主缺口周围260×280像素与实际下载PNG逐像素一致。此为绑定本地数据和环境的实施者验证，不是接收环境或新独立验收。
 
 2026-10-22本地英文/底图版本：57项前端测试、4项Sites、类型与构建已有通过证据；本次提交前陆地掩膜和COG定向Python检查7 passed。真实Chrome已检查桌面1440×900、窄屏390×844、来源/图层/播放与实际PNG下载；PNG文字使用英文并优先按单词换行。新增底图和英文界面为实施者自验，未取得新的独立功能verdict；既有favicon 404保留，窄屏检查不等于完整移动布局验收。
 

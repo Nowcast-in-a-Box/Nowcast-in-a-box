@@ -42,7 +42,7 @@ def prepare_basemaps(bundle, output, terrain_width=7200):
     terrain_path = output / "terrain-land.tif"
     cache_path = output / "terrain-land-cache.json"
     cache_key = {"source_sha256": terrain.metadata["sha256"], "extent": list(WORLD),
-                 "max_width": terrain_width, "overview": "nearest", "version": 3,
+                 "max_width": terrain_width, "overview": "nearest", "version": 4,
                  "land_mask": checksum["manifest_sha256"], "mask_max_lod": 7}
     cached = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     if (cached.get("key") == cache_key and terrain_path.exists()
