@@ -14,7 +14,12 @@ import (
 )
 
 func processExited(pid int) bool {
-	return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
+	if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+		return true
+	}
+	// A child can have exited before its supervising parent has reaped it.
+	output, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "stat=").Output()
+	return err == nil && strings.HasPrefix(strings.TrimSpace(string(output)), "Z")
 }
 
 func terminateProcess(process *os.Process) error {

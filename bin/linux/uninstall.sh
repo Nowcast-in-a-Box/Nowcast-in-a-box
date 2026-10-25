@@ -62,13 +62,17 @@ find_binary() {
     printf '%s' "${NIB_HANDLER_BIN}"
     return
   fi
-  local candidate
-  for candidate in "$ROOT/bin/linux/nib-handler-linux-"*; do
-    if [[ -x "$candidate" ]]; then
-      printf '%s' "$candidate"
-      return
-    fi
-  done
+  local arch candidate
+  case "$(uname -m)" in
+    arm64|aarch64) arch=arm64 ;;
+    x86_64|amd64) arch=amd64 ;;
+    *) return 0 ;;
+  esac
+  candidate="$ROOT/bin/linux/nib-handler-linux-$arch"
+  if [[ -x "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return
+  fi
   if [[ -x "$ROOT/bin/nib-handler" ]]; then
     printf '%s' "$ROOT/bin/nib-handler"
   fi
@@ -103,20 +107,23 @@ fi
 if [[ -n "$BINARY" ]]; then
   if ((DRY_RUN)); then
     printf 'would stop the Handler using %s if it is running\n' "$BINARY"
-  elif ! "$BINARY" stop -force -config "$CONFIG"; then
+  elif ! "$BINARY" uninstall -config "$CONFIG"; then
     echo "ERROR: the Handler is still serving its port and could not be stopped. Nothing was removed." >&2
     exit 1
   fi
 else
-  echo "No local Handler binary found; removing registration and local state only."
+  echo "ERROR: no Handler binary found; cannot verify shutdown. Nothing was removed." >&2
+  exit 1
 fi
 
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 DESKTOP_FILE="$DESKTOP_DIR/nib-handler.desktop"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/NiB/handler"
 
-remove_path "$DESKTOP_FILE"
-remove_path "$CACHE_DIR"
+if ((DRY_RUN)); then
+  remove_path "$DESKTOP_FILE"
+  remove_path "$CACHE_DIR"
+fi
 remove_path "$ROOT/nib-settings.json"
 remove_path "$ROOT/logs/handler.log"
 

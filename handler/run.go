@@ -73,33 +73,21 @@ func sourceName(cfg Config) string {
 	return cfg.Source
 }
 
-func prepareStart(cfg Config) (bool, error) {
-	if session, err := readSession(cfg); err == nil {
-		identity, probeErr := probeAddress(context.Background(), session.URL)
-		if probeErr == nil && (identity.InstanceID != session.InstanceID || identity.ConfigID != session.ConfigID) {
-			return false, fmt.Errorf("local control session is stale; inspect the running Handler before starting another")
-		}
-		if probeErr == nil && identity.ConfigID != configID(cfg) {
-			return false, fmt.Errorf("this config file changed while its Handler is running; use restart -config %s after its jobs finish", sourceName(cfg))
-		}
-		if probeErr != nil && !errors.Is(probeErr, errNotRunning) {
-			return false, probeErr
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+func prepareStartAddress(cfg Config) (bool, error) {
+	identity, err := probeAddress(context.Background(), addressURL(cfg.Handler))
+	if errors.Is(err, errNotRunning) {
+		return true, nil
+	}
+	if err != nil {
 		return false, err
 	}
-	identity, err := probeInstance(context.Background(), cfg)
-	if err == nil {
-		if identity.State != "running" {
-			return false, fmt.Errorf("Handler is stopping; wait before starting it again")
-		}
+	if identity.ConfigID == configID(cfg) && identity.State == "running" {
 		return false, nil
 	}
-	if !errors.Is(err, errNotRunning) {
-		return false, err
-	}
-	return true, nil
+	return false, fmt.Errorf("Handler %s is already running at %s without a verifiable control record; restore its session before upgrading", identity.InstanceID, identity.URL)
 }
+
+func prepareStart(cfg Config) (bool, error) { return ensureSingleton(cfg) }
 
 // Main is the process entry used by cmd/nib-handler. macOS launchers invoke start;
 // serve remains the explicit foreground entry and the Linux/Windows default.
@@ -111,7 +99,7 @@ func Main(args []string) int {
 	command, uri := "serve", ""
 	if len(args) > 0 {
 		switch args[0] {
-		case "serve", "start", "status", "stop", "restart", "connect":
+		case "serve", "serve-child", "start", "status", "stop", "restart", "connect", "uninstall":
 			command, args = args[0], args[1:]
 		default:
 			if strings.HasPrefix(args[0], "nib://") {
@@ -136,8 +124,32 @@ func Main(args []string) int {
 		fmt.Fprintln(os.Stderr, "use: nib-handler [start|serve|status|stop|restart|connect] -config config.yaml [-force] [nib://connect?origin=...]")
 		return exitUsage
 	}
-	if command == "serve" {
-		return serve(cfg)
+	release := func() {}
+	if command != "serve-child" {
+		unlock, lockErr := singletonLock("lifecycle")
+		if lockErr != nil {
+			fmt.Fprintln(os.Stderr, lockErr)
+			return 1
+		}
+		locked := true
+		release = func() {
+			if locked {
+				locked = false
+				unlock()
+			}
+		}
+		defer release()
+	}
+	if command == "uninstall" {
+		if uninstallErr := uninstallInstance(cfg); uninstallErr != nil {
+			fmt.Fprintln(os.Stderr, uninstallErr)
+			return 1
+		}
+		fmt.Fprintln(os.Stdout, "Handler stopped and local service registration removed; user data preserved")
+		return 0
+	}
+	if command == "serve" || command == "serve-child" {
+		return serve(cfg, release)
 	}
 	if command == "connect" {
 		origin, parseErr := ParseConnectURI(uri)
@@ -161,14 +173,18 @@ func Main(args []string) int {
 		needsStart, err = prepareStart(cfg)
 		if err == nil && needsStart {
 			if runtime.GOOS != "darwin" {
-				return serve(cfg)
+				return serve(cfg, release)
 			}
 			err = startBackground(cfg)
 		}
 	}
 	if err == nil {
 		var identity identityResponse
-		identity, err = probeInstance(context.Background(), cfg)
+		if session, sessionErr := discoverSession(cfg); sessionErr == nil {
+			identity, err = probeAddress(context.Background(), session.URL)
+		} else {
+			identity, err = probeInstance(context.Background(), cfg)
+		}
 		if err == nil {
 			fmt.Fprintf(os.Stdout, "Handler %s: %s; results %s; config %s\n", identity.State, identity.URL, identity.ReviewURL, sourceName(cfg))
 			if directory, dirErr := sessionDirectory(cfg); dirErr == nil {
@@ -185,7 +201,7 @@ func Main(args []string) int {
 	return 1
 }
 
-func serve(cfg Config) int {
+func serve(cfg Config, release func()) int {
 	needsStart, err := prepareStart(cfg)
 	if err == nil && !needsStart {
 		fmt.Fprintf(os.Stdout, "Using running Handler at %s (config %s)\n", addressURL(cfg.Handler), sourceName(cfg))
@@ -195,6 +211,12 @@ func serve(cfg Config) int {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
+	unlock, lockErr := singletonLock("running")
+	if lockErr != nil {
+		fmt.Fprintln(os.Stderr, lockErr)
+		return 1
+	}
+	defer unlock()
 	address := net.JoinHostPort(cfg.Handler.Host, strconv.Itoa(cfg.Handler.Port))
 	reviewAddress := net.JoinHostPort(cfg.Review.Host, strconv.Itoa(cfg.Review.Port))
 	apiListener, err := net.Listen("tcp", address)
@@ -212,11 +234,21 @@ func serve(cfg Config) int {
 
 	srv := NewServer(cfg)
 	defer srv.stopDiagnosticsViewer()
-	if err := saveSession(cfg, localSession{ConfigID: configID(cfg), InstanceID: srv.instanceID, URL: addressURL(cfg.Handler), ReviewURL: addressURL(cfg.Review), PID: os.Getpid(), Token: srv.Token}); err != nil {
+	digest, err := executableDigest()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if err := saveSession(cfg, localSession{ConfigID: configID(cfg), InstanceID: srv.instanceID, URL: addressURL(cfg.Handler), ReviewURL: addressURL(cfg.Review), PID: os.Getpid(), Token: srv.Token, BinarySHA256: digest, ConfigSource: cfg.Source}); err != nil {
 		fmt.Fprintf(os.Stderr, "error: cannot create private local control session: %v\n", err)
 		return 1
 	}
 	defer removeSession(cfg, srv.instanceID)
+	if err := registerInstall(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	release()
 	apiServer := &http.Server{Handler: srv.Routes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
 	reviewServer := &http.Server{Handler: srv.ReviewRoutes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
 	defer apiServer.Close()

@@ -20,8 +20,6 @@ func TestLinuxUninstallerPreservesRunsAndArtifacts(t *testing.T) {
 	root, home, script := uninstallFixture(t, bash)
 	out := runUninstall(t, bash, script, home, "--yes")
 	for _, path := range []string{
-		filepath.Join(home, ".local", "share", "applications", "nib-handler.desktop"),
-		filepath.Join(home, ".cache", "NiB", "handler", "session.json"),
 		filepath.Join(root, "nib-settings.json"),
 		filepath.Join(root, "logs", "handler.log"),
 	} {
@@ -172,7 +170,7 @@ func TestLinuxUninstallerRefusesWhenTheHandlerKeepsRunning(t *testing.T) {
 	if err != nil {
 		t.Skip("bash is not installed")
 	}
-	refusing := "#!/bin/bash\ncase \"$1\" in stop) echo 'Handler refused stop' >&2; exit 1 ;; *) exit 0 ;; esac\n"
+	refusing := "#!/bin/bash\ncase \"$1\" in uninstall) echo 'Handler refused stop' >&2; exit 1 ;; *) exit 0 ;; esac\n"
 	root, home, script := uninstallFixtureWithBinary(t, bash, refusing)
 	out, err := uninstallOutput(t, bash, script, home, "--yes")
 	if err == nil {
