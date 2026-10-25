@@ -10,7 +10,7 @@ import (
 
 func TestMain(m *testing.M) {
 	os.Setenv("NIB_SKIP_URI_REGISTRATION", "1")
-	if os.Getenv("NIB_TEST_SERVE_CHILD") == "1" {
+	if os.Getenv("NIB_TEST_SERVE_CHILD") == "1" || os.Getenv("NIB_TEST_CLI_CHILD") == "1" {
 		os.Exit(m.Run())
 	}
 	home, err := os.MkdirTemp("", "nib-handler-tests-")
