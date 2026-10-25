@@ -10,15 +10,13 @@ check with Docker.
 
 - Docker is running. With `runtime.image_registry` set, the Handler pulls the
   diagnostics image at startup and the data/model images during Validate.
-  Local tags `nib-ingestion:cma-demo`, `nib-nowcastnet:cma-demo` and
-  `nib-diagnostics:automatic-flow` are also accepted when prebuilt.
+  Local tags `nib-ingestion:cma-demo`, `nib-nowcastnet:cma-demo-embedded` and
+  `nib-diagnostics:automatic-flow-basemap-v1` are also accepted when prebuilt.
 - A CMA Radar data folder, for example `/Users/you/data/cma-radar`.
-- `artifacts/cma_radar/nowcastnet/NowcastNet.onnx` exists (135 MB, pinned
-  SHA-256), or `paths.weight_source` points at an artifacts-like folder
-  that contains it.
-- Visualization requires the offline global terrain/WMO viewer cache prepared
-  under `artifacts/basemap/wmo/viewer`; metrics-only does not. See
-  [map preparation](../diagnostics/visualization/docs/map_viewer.md).
+- The embedded NowcastNet model image includes the pinned ONNX weight; users
+  need no host weight file for this model.
+- The current diagnostics image includes the offline global terrain/WMO
+  display basemap; users need no `artifacts/basemap` directory.
 - A built Handler binary and the Hub checkout (or a published Hub) on this
   machine. No GitHub Release is required for this runbook.
 

@@ -10,7 +10,6 @@ verification:
   level_min: 0
   level_max: 75
   unit: dBZ
-visualization_basemap: true
 container:
   image: nib-ingestion:cma-demo
   build:

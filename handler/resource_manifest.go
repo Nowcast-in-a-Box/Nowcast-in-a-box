@@ -14,7 +14,7 @@ const resourceSchema = "nib.resource.v1"
 
 var resourceMountNames = map[string]bool{
 	"data": true, "catalog": true, "run": true, "inputs": true,
-	"forecasts": true, "weights": true, "basemap": true,
+	"forecasts": true, "weights": true,
 }
 
 type ResourceBuild struct {
@@ -58,15 +58,14 @@ type VerificationSpec struct {
 }
 
 type DataResource struct {
-	Schema               string            `yaml:"schema"`
-	Kind                 string            `yaml:"kind"`
-	ID                   string            `yaml:"id"`
-	ProductID            string            `yaml:"product_id"`
-	Name                 string            `yaml:"name"`
-	Data                 dataPathsSpec     `yaml:"data"`
-	Verification         VerificationSpec  `yaml:"verification"`
-	VisualizationBasemap bool              `yaml:"visualization_basemap"`
-	Container            ResourceContainer `yaml:"container"`
+	Schema       string            `yaml:"schema"`
+	Kind         string            `yaml:"kind"`
+	ID           string            `yaml:"id"`
+	ProductID    string            `yaml:"product_id"`
+	Name         string            `yaml:"name"`
+	Data         dataPathsSpec     `yaml:"data"`
+	Verification VerificationSpec  `yaml:"verification"`
+	Container    ResourceContainer `yaml:"container"`
 }
 
 type ModelWeights struct {

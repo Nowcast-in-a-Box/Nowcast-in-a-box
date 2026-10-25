@@ -236,7 +236,7 @@ def _safe_static_file(root: Path, path: str) -> Path:
     return candidate
 
 
-def build_app(run: Path, basemap: Path | None = None) -> FastAPI:
+def build_app(run: Path, basemap: Path | None = Path("/basemap")) -> FastAPI:
     verification = _verification_root(run)
     app = create_app(
         root=verification,
@@ -295,7 +295,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", required=True, type=Path)
     parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--basemap", type=Path)
+    parser.add_argument("--basemap", type=Path, default=Path("/basemap"))
     parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
 

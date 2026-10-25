@@ -240,14 +240,6 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	cfg.Runtime.Token = "token"
 	cfg.Runtime.AtlasRevision = strings.Repeat("b", 40)
 	writeSevirData(t, &cfg)
-	basemap := filepath.Join(cfg.Paths.Artifacts, "basemap", "wmo", "acquisition.json")
-	if err := os.MkdirAll(filepath.Dir(basemap), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(basemap, []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	writeViewerBasemap(t, filepath.Dir(basemap))
 	server := handler.NewServer(cfg)
 	server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
 	models := []string{"nowcastnet", "exprecast", "wadepre"}
@@ -359,14 +351,6 @@ func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(run, "manifest.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	basemap := filepath.Join(cfg.Paths.Artifacts, "basemap", "wmo", "acquisition.json")
-	if err := os.MkdirAll(filepath.Dir(basemap), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(basemap, []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	writeViewerBasemap(t, filepath.Dir(basemap))
 	server := handler.NewServer(cfg)
 	runner := &runtimeRunner{root: cfg.Paths.Runs}
 	server.Runner = runner
@@ -435,72 +419,5 @@ func TestRestartKeepsInterruptedRun(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(run, "manifest.json")); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func writeViewerBasemap(t *testing.T, basemap string) {
-	t.Helper()
-	viewer := filepath.Join(basemap, "viewer")
-	if err := os.MkdirAll(viewer, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for name, data := range map[string]string{
-		"basemap.json":       `{"terrain":{"url":"terrain.tif"},"boundaries":{"url":"boundaries.geojson"}}`,
-		"terrain.tif":        "terrain",
-		"boundaries.geojson": `{"type":"FeatureCollection","features":[]}`,
-	} {
-		if err := os.WriteFile(filepath.Join(viewer, name), []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func TestVisualizationRejectsMissingAndEscapingGlobalBasemap(t *testing.T) {
-	for _, state := range []string{"missing", "escape"} {
-		t.Run(state, func(t *testing.T) {
-			cfg := testConfig(t)
-			cfg.Paths.Runs, cfg.Paths.Artifacts = t.TempDir(), t.TempDir()
-			cfg.Runtime.Token = "token"
-			run := filepath.Join(cfg.Paths.Runs, "saved-run")
-			if err := os.MkdirAll(filepath.Join(run, "forecasts"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			manifest := `{"schema":"nib.run.v1","id":"saved-run","data":{"id":"sevir"},"forecasts":{"wadepre":{"path":"forecasts/wadepre.npz"}},"diagnostics":[]}`
-			if err := os.WriteFile(filepath.Join(run, "manifest.json"), []byte(manifest), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			root := filepath.Join(cfg.Paths.Artifacts, "basemap", "wmo")
-			if err := os.MkdirAll(root, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(root, "acquisition.json"), []byte("{}"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if state != "missing" {
-				writeViewerBasemap(t, root)
-			}
-			if state == "escape" {
-				outside := filepath.Join(cfg.Paths.Artifacts, "outside.tif")
-				if err := os.WriteFile(outside, []byte("outside"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-				terrain := filepath.Join(root, "viewer", "terrain.tif")
-				if err := os.Remove(terrain); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(outside, terrain); err != nil {
-					t.Skipf("symlink unavailable: %v", err)
-				}
-			}
-			server := handler.NewServer(cfg)
-			server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
-			req := httptest.NewRequest("POST", "http://127.0.0.1/v1/runs/saved-run/diagnostics", strings.NewReader(`{"models":["wadepre"],"methods":[],"visualization":true}`))
-			req.Header.Set("Authorization", "Bearer token")
-			response := httptest.NewRecorder()
-			server.Routes().ServeHTTP(response, req)
-			if response.Code != 409 || !strings.Contains(response.Body.String(), "global terrain") {
-				t.Fatalf("%s: %d %s", state, response.Code, response.Body.String())
-			}
-		})
 	}
 }

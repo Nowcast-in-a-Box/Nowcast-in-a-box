@@ -15,33 +15,32 @@ const Version = "0.1.0"
 
 // Server is the loopback HTTP API.
 type Server struct {
-	Config                      Config
-	Preflight                   []func() Check
-	Runner                      CommandRunner
-	Token                       string
-	PickFolder                  func() (string, error)
-	configMu                    sync.RWMutex
-	jobsMu                      sync.Mutex
-	jobs                        map[string]*Job
-	executionMu                 sync.Mutex
-	recoveryMu                  sync.Mutex
-	resourcesMu                 sync.Mutex
-	imageMu                     sync.Mutex
-	currentResources            resourceSnapshot
-	preparingResources          bool
-	resourcesLoaded             bool
-	diagnosticsViewerMu         sync.Mutex
-	diagnosticsViewerRun        string
-	diagnosticsViewerContainer  string
-	diagnosticsViewerHasBasemap bool
-	diagnosticsViewerReport     string
-	executionDataID             string
-	executionModels             []string
-	Resources                   *Resources
-	ResourceError               error
-	stopping                    bool // guarded by jobsMu
-	shutdown                    chan struct{}
-	instanceID                  string
+	Config                     Config
+	Preflight                  []func() Check
+	Runner                     CommandRunner
+	Token                      string
+	PickFolder                 func() (string, error)
+	configMu                   sync.RWMutex
+	jobsMu                     sync.Mutex
+	jobs                       map[string]*Job
+	executionMu                sync.Mutex
+	recoveryMu                 sync.Mutex
+	resourcesMu                sync.Mutex
+	imageMu                    sync.Mutex
+	currentResources           resourceSnapshot
+	preparingResources         bool
+	resourcesLoaded            bool
+	diagnosticsViewerMu        sync.Mutex
+	diagnosticsViewerRun       string
+	diagnosticsViewerContainer string
+	diagnosticsViewerReport    string
+	executionDataID            string
+	executionModels            []string
+	Resources                  *Resources
+	ResourceError              error
+	stopping                   bool // guarded by jobsMu
+	shutdown                   chan struct{}
+	instanceID                 string
 }
 
 // NewServer returns a server whose preflight list starts with DockerCheck.

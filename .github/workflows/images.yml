@@ -4,12 +4,10 @@ name: publish images
 # startup pulls the diagnostics image; Validate pulls the selected data/model
 # image when the local tag is absent.
 #
-# The CMA data reader and its NowcastNet model are published as multi-arch
-# manifest lists: each platform builds on its own native runner, then a merge
-# job writes the short tag that the runtime manifests reference. `docker pull`
-# therefore returns the host architecture, so an Apple Silicon Mac stops
-# emulating linux/amd64 for the CMA demo. The diagnostics image is still
-# amd64-only.
+# Diagnostics, the CMA data reader and NowcastNet use multi-arch manifests.
+# Each architecture builds natively before publishing the shared runtime tag.
+# Diagnostics copies the versioned prepared basemap image during build; users
+# pull only the final diagnostics image, not a separate host cache.
 on:
   workflow_dispatch:
 
@@ -19,7 +17,17 @@ permissions:
 
 jobs:
   diagnostics:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            architecture: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: linux/arm64
+            suffix: arm64
+    runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -31,8 +39,24 @@ jobs:
         run: |
           set -euo pipefail
           owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
-          docker build -f diagnostics/Dockerfile -t "ghcr.io/$owner/nib-diagnostics:automatic-flow" .
-          docker push "ghcr.io/$owner/nib-diagnostics:automatic-flow"
+          docker build --platform "${{ matrix.platform.architecture }}" -f diagnostics/Dockerfile -t "ghcr.io/$owner/nib-diagnostics:automatic-flow-basemap-v1-${{ matrix.platform.suffix }}" .
+          docker push "ghcr.io/$owner/nib-diagnostics:automatic-flow-basemap-v1-${{ matrix.platform.suffix }}"
+
+  diagnostics-merge:
+    needs: diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Publish multi-architecture diagnostics tag
+        run: |
+          set -euo pipefail
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          docker buildx imagetools create -t "ghcr.io/$owner/nib-diagnostics:automatic-flow-basemap-v1" \
+            -t "ghcr.io/$owner/nib-diagnostics:automatic-flow" \
+            "ghcr.io/$owner/nib-diagnostics:automatic-flow-basemap-v1-amd64" \
+            "ghcr.io/$owner/nib-diagnostics:automatic-flow-basemap-v1-arm64"
+
 
   cma:
     name: ${{ matrix.image.name }} (${{ matrix.platform.platform }})

@@ -27,9 +27,6 @@ func TestPackagedResourcesDeclareEveryDataAndModel(t *testing.T) {
 			t.Fatalf("product %s -> %+v", product, model)
 		}
 	}
-	if resources.Diagnostics == nil || resources.Diagnostics.Container.Image != "nib-diagnostics:automatic-flow" {
-		t.Fatalf("diagnostics = %+v", resources.Diagnostics)
-	}
 	if sevir, _ := resources.DataByID("sevir"); sevir.Verification.LevelMax != 255 || sevir.Data.Catalog == "" {
 		t.Fatalf("sevir = %+v", sevir)
 	}

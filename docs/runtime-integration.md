@@ -45,10 +45,9 @@ The initial reader requires six context and twenty target 128x128 frames. It
 rejects event/time ambiguity and events with missing pixels that the processed
 file can no longer mask reliably. Sample listings show this limitation.
 
-Maps require an explicitly prepared WMO cache under `artifacts/basemap/wmo`.
-Acquire it before execution with the existing visualization acquisition script;
-runtime containers never download basemaps or weights. Metrics-only jobs do not
-need a basemap. Scientific VIL units are `raw`; they are not dBZ or rain rate.
+The diagnostics image includes the prepared global terrain/WMO display basemap.
+Users do not prepare an artifacts basemap directory. Runtime containers never
+download basemaps or weights. Scientific VIL units are `raw`, not dBZ or rain rate.
 
 ## Connection and execution
 

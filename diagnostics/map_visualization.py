@@ -21,12 +21,15 @@ from utils.stored_fields import StoredFields, save_manifest, sha256
 _VIS = Path(__file__).resolve().parent / "visualization"
 _REF_COLORS = _VIS / "resources" / "cma_ref_colormap.json"
 _MAP_PREFIX = "/map-basemap/"
-_PREPARE = "prepare the offline global terrain and WMO basemap cache"
+_PREPARE = "diagnostics image basemap is missing or corrupt; pull the current diagnostics image"
 _DEFAULT_NOTICE = "Stored model forecast; this map does not validate forecast skill."
 _WORLD = [-180.0, -90.0, 180.0, 90.0]
+DEFAULT_BASEMAP = Path("/basemap")
 
 
-def visualization(directory, model_id, basemap_path, *, attempt_id=None):
+def visualization(
+    directory, model_id, basemap_path=DEFAULT_BASEMAP, *, attempt_id=None
+):
     """Write viewer.json and weather COGs, then record one succeeded attempt."""
     attempt_id = attempt_id or uuid.uuid4().hex
     if (

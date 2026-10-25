@@ -60,7 +60,7 @@ def main():
             )
         )
     if request.get("visualization"):
-        from diagnostics.map_visualization import visualization
+        from diagnostics.map_visualization import DEFAULT_BASEMAP, visualization
 
         config = request["visualization"]
         for model in config["models"]:
@@ -75,7 +75,10 @@ def main():
                     model,
                     attempt_id,
                     lambda model=model, attempt_id=attempt_id: visualization(
-                        directory, model, config["basemap"], attempt_id=attempt_id
+                        directory,
+                        model,
+                        config.get("basemap", DEFAULT_BASEMAP),
+                        attempt_id=attempt_id,
                     ),
                 )
             )
@@ -149,7 +152,7 @@ def _batch_main(directory, manifest, request):
             )
         )
     if request.get("visualization"):
-        from diagnostics.map_visualization import visualization
+        from diagnostics.map_visualization import DEFAULT_BASEMAP, visualization
 
         config = request["visualization"]
         for sample, child in zip(samples, children):
@@ -167,7 +170,10 @@ def _batch_main(directory, manifest, request):
                         sample.get("sample_id"),
                         attempt_id,
                         lambda model=model, child=child, attempt_id=attempt_id: visualization(
-                            child, model, config["basemap"], attempt_id=attempt_id
+                            child,
+                            model,
+                            config.get("basemap", DEFAULT_BASEMAP),
+                            attempt_id=attempt_id,
                         ),
                     )
                 )
