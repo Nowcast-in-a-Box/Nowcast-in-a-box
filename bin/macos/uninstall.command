@@ -62,13 +62,17 @@ find_binary() {
     printf '%s' "${NIB_HANDLER_BIN}"
     return
   fi
-  local candidate
-  for candidate in "$ROOT/bin/macos/nib-handler-darwin-"*; do
-    if [[ -x "$candidate" ]]; then
-      printf '%s' "$candidate"
-      return
-    fi
-  done
+  local arch candidate
+  case "$(uname -m)" in
+    arm64|aarch64) arch=arm64 ;;
+    x86_64|amd64) arch=amd64 ;;
+    *) return 0 ;;
+  esac
+  candidate="$ROOT/bin/macos/nib-handler-darwin-$arch"
+  if [[ -x "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return
+  fi
   if [[ -x "$ROOT/bin/nib-handler" ]]; then
     printf '%s' "$ROOT/bin/nib-handler"
   fi
@@ -106,12 +110,13 @@ fi
 if [[ -n "$BINARY" ]]; then
   if ((DRY_RUN)); then
     printf 'would stop the Handler using %s if it is running\n' "$BINARY"
-  elif ! "$BINARY" stop -force -config "$CONFIG"; then
+  elif ! "$BINARY" uninstall -config "$CONFIG"; then
     echo "ERROR: the Handler is still serving its port and could not be stopped. Nothing was removed." >&2
     exit 1
   fi
 else
-  echo "No local Handler binary found; removing registration and local state only."
+  echo "ERROR: no Handler binary found; cannot verify shutdown. Nothing was removed." >&2
+  exit 1
 fi
 
 if ((DRY_RUN)); then
@@ -122,19 +127,12 @@ if ((DRY_RUN)); then
   if [[ -d "$APP" ]]; then
     printf 'would unregister %s\n' "$APP"
   fi
-else
-  while IFS= read -r label; do
-    [[ -n "$label" ]] || continue
-    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null ||
-      launchctl remove "$label" 2>/dev/null || true
-  done < <(launchctl list 2>/dev/null | awk '$3 ~ /^app\.nowcast\.nib-handler\./ {print $3}')
-  if [[ -x "$LSREGISTER" && -d "$APP" ]]; then
-    "$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
-  fi
 fi
 
-remove_path "$APP"
-remove_path "$CACHE"
+if ((DRY_RUN)); then
+  remove_path "$APP"
+  remove_path "$CACHE"
+fi
 remove_path "$ROOT/nib-settings.json"
 remove_path "$ROOT/logs/handler.log"
 

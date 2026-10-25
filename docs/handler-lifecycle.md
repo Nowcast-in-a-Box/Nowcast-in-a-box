@@ -22,17 +22,27 @@ bin/macos/start.command stop
 bin/macos/start.command restart
 ```
 
-`start` is the default. `serve` is the explicit foreground contributor entry.
-Repeat startup reuses a running compatible instance. Ordinary `stop`, `restart`
-and termination signals refuse while an inference job is queued/running or a
-diagnostic attempt owns the execution resource. Wait for completion first.
-There is no force-cancel operation in this release. An OS force-kill cannot be
-prevented; unfinished saved jobs are shown as interrupted, not resubmitted.
+`start` is the default. `serve` is the foreground contributor entry. One Handler
+is allowed per operating-system user, including across installation directories
+and configured ports. A fixed lifecycle lock serializes activation, replacement
+and uninstall; a separate process-lifetime lock prevents a second live Handler.
+Repeated startup of the same executable build reuses the actual running address
+without replacing its configuration or URL registration.
 
-`-config /absolute/path/config.yaml` selects another configuration. `-host` and
-`-port` override its API bind address and are also retained by the registered
-macOS app. Only loopback addresses are accepted. The registered app uses the
-configuration selected by the latest registration; it is not a profile chooser.
+Starting a different executable build automatically stops the old idle Handler,
+retires its service and application registration, and activates this build. The
+executable SHA256 identifies a build; this is replacement, not semantic-version
+ordering or a promise to prevent choosing an older download. Legacy path-scoped
+private sessions are discovered and authenticated during migration. Active jobs
+block replacement and uninstall; neither operation force-cancels inference.
+Old download folders, data, runs and artifacts are not deleted or moved.
+
+`-config /absolute/path/config.yaml` selects settings for a new activation.
+`-host` and `-port` override its loopback API address. Another config or port
+does not create another instance. Use explicit `restart` to apply changes to a
+running build. A missing old config after a directory rename triggers safe
+replacement using the newly selected configuration. Existing saved absolute
+data/output paths are not rewritten automatically.
 For a contributor-provided executable, set `NIB_HANDLER_BIN` before launching.
 
 The default API and results addresses are `http://127.0.0.1:8765` and
@@ -53,31 +63,31 @@ installed from scratch:
 - Windows: `Uninstall NiB.cmd`
 - Linux: `Uninstall NiB.sh`
 
-The default removes the macOS application and launchd job, URL-scheme
-registration, `~/Library/Caches/NiB/handler`, the project `nib-settings.json`,
-and the Handler log. It keeps `runs/`, `artifacts/`, and the data folder. On
-Linux and Windows it removes the desktop/registry registration and the
-per-user Handler cache instead of a macOS application.
+The uninstaller calls the Handler `uninstall` command. Under the lifecycle lock,
+it discovers the actual active instance from the fixed private control record,
+authenticates its identity, requests idle shutdown, verifies listener closure and
+process completion, and removes the service and application/URI registration.
+The removable cache is deleted only after successful shutdown; lock files live
+outside it so deleting a cache cannot create two independent lock owners.
+An uninstall from a renamed or different release folder controls the same
+instance. A missing binary, invalid private session or busy Handler aborts rather
+than claiming success or killing an unverified PID.
 
-Use `--dry-run` to inspect the planned paths, or `--purge` to additionally
-remove generated runs, artifacts, packaged resources, logs, and downloaded
-Handler binaries. `--purge` asks for a second confirmation and never deletes
-the external data folder. A queued or running job blocks a normal stop; wait
-for it to finish or stop it from the local CLI first. A Handler that cannot be
-authenticated through its session file (deleted cache, upgraded binary, edited
-`config.yaml`) is ended by process ID once the configured port identifies as
-`nib-handler`, escalating to `SIGKILL` after about 12 seconds, so uninstall
-does not leave a Handler serving that port.
+The default keeps `runs/`, `artifacts/`, and user data. Use `--dry-run` to inspect
+the planned operations, or `--purge` to additionally remove generated assets and
+downloaded binaries inside the uninstaller's release directory. Purge requires
+explicit confirmation and never deletes the external data directory or another
+release's download folder. Linux/Windows registration changes are implemented
+but require native platform acceptance; macOS lifecycle is exercised locally.
 
 ## Configuration changes and local control
 
-Compatibility checks include the canonical config source, API/results addresses,
-run/artifact locations, the runtime resources root, Docker context and Atlas
-revision. Images, data files, catalogs and mounts live in the resources
-manifests, so changing one of those manifests requires a Handler restart; the
-compatibility identity covers the resources root, not the manifest contents.
-Data-root, trusted-origin and local image-source updates do not change that
-identity. Credentials are not part of the public identity response.
+Configuration compatibility remains useful for diagnostics, but it is not the
+instance owner. The fixed control record locates the actual running address,
+instance ID, executable digest and private local-stop credential. Optional empty
+paths remain empty in the configuration fingerprint rather than resolving to
+the invoking terminal's working directory. Data-root, trusted-origin and image
+source changes remain dynamically reloadable.
 
 The Hub saves the selected folder per data source in `nib-settings.json` next to
 `config.yaml`. The file is gitignored, contains `data_roots` (and accepts the old
@@ -85,22 +95,19 @@ single `data_root`), is written atomically with mode `0600`, and is read after
 `config.yaml` and before the `NIB_DATA_ROOT` fallback. Deleting it returns the
 Handler to the fallback.
 
-Local control ownership follows the config file's canonical path, separately
-from compatibility. After editing execution settings or a port, use `restart`
-with the **same config file**. The CLI verifies the old instance against its
-private session before stopping it, then starts with the new settings. A plain
-`start` refuses to silently keep using old execution settings. Keep the config
-file valid and at its original path until its existing service is stopped.
-When that verification is impossible (edited `config.yaml`, a Handler started by
-an older release, a deleted cache), `stop` and `restart` report the instance
-instead of killing it; `stop -force` ends it by process ID, which the platform
-uninstallers use.
+Local control ownership is independent of the config filename and release
+directory. `status`, `stop`, `restart` and `uninstall` find the recorded live
+instance even if the command selected another config or port. Idle automatic
+replacement retires the old service before publishing the new registration.
+Registration now runs inside activation, not before startup in shell scripts,
+so a refused busy upgrade cannot redirect the user's application registration.
 
-Startup/status print actual addresses, the config source and local service-file
-location. On macOS the latter is under
-`~/Library/Caches/NiB/handler/<profile-id>/`: `handler.log`, `handler.plist` and a
-private `session.json` (mode `0600`). The session contains a credential; **do not
-paste it into issues or logs**. Routine output never prints the token.
+On macOS, the fixed cache is `~/Library/Caches/NiB/handler/`, containing
+`handler.log`, `handler.plist` and private `session.json` (mode `0600`). Locks
+are under the user's configuration directory in `NiB/locks/` and deliberately
+survive uninstall. Legacy profile records are used only to verify and retire old
+instances, not to create new profiles. The session contains a credential;
+**never paste it into issues or logs**. Startup output does not print the token.
 The older per-config `logs/handler.log` records lifecycle and job events.
 
 ## Webpage connection

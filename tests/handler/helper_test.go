@@ -8,6 +8,24 @@ import (
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler"
 )
 
+func TestMain(m *testing.M) {
+	os.Setenv("NIB_SKIP_URI_REGISTRATION", "1")
+	if os.Getenv("NIB_TEST_SERVE_CHILD") == "1" {
+		os.Exit(m.Run())
+	}
+	home, err := os.MkdirTemp("", "nib-handler-tests-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", home)
+	os.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	os.Setenv("LOCALAPPDATA", filepath.Join(home, "local"))
+	os.Setenv("APPDATA", filepath.Join(home, "app"))
+	code := m.Run()
+	os.RemoveAll(home)
+	os.Exit(code)
+}
 func repoConfigPath(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join("..", "..", "config.yaml")

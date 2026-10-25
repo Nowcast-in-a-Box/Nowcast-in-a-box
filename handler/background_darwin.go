@@ -95,7 +95,7 @@ func startBackground(cfg Config) error {
 	definition.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict>")
 	definition.WriteString("<key>Label</key>" + plistString(label))
 	definition.WriteString("<key>ProgramArguments</key><array>")
-	for _, arg := range []string{executable, "serve", "-config", cfg.Source, "-host", cfg.Handler.Host, "-port", strconv.Itoa(cfg.Handler.Port)} {
+	for _, arg := range []string{executable, "serve-child", "-config", cfg.Source, "-host", cfg.Handler.Host, "-port", strconv.Itoa(cfg.Handler.Port)} {
 		definition.WriteString(plistString(arg))
 	}
 	definition.WriteString("</array><key>WorkingDirectory</key>" + plistString(filepath.Dir(cfg.Source)))

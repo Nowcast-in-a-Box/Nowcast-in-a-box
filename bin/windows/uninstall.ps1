@@ -68,28 +68,23 @@ if ($Bin) {
     if ($DryRun) {
         Write-Host "would stop the Handler using $Bin if it is running"
     } else {
-        & $Bin stop -force -config $Config
+        & $Bin uninstall -config $Config
         if ($LASTEXITCODE -ne 0) {
             Write-Error "the Handler is still serving its port and could not be stopped. Nothing was removed."
             exit 1
         }
     }
 } else {
-    Write-Host "No local Handler binary found; removing registration and local state only."
+    throw "No Handler binary found; cannot verify shutdown. Nothing was removed."
 }
 
 $Registry = "HKCU:\Software\Classes\nib"
-if (Test-Path -LiteralPath $Registry) {
-    if ($DryRun) {
-        Write-Host "would remove registry key $Registry"
-    } else {
-        Remove-Item -LiteralPath $Registry -Recurse -Force
-        Write-Host "remove registry key $Registry"
-    }
+if ($DryRun -and (Test-Path -LiteralPath $Registry)) {
+    Write-Host "would remove registry key $Registry"
 }
 
 $CacheRoot = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { [Environment]::GetFolderPath("LocalApplicationData") }
-Remove-Path (Join-Path $CacheRoot "NiB\handler")
+if ($DryRun) { Remove-Path (Join-Path $CacheRoot "NiB\handler") }
 Remove-Path (Join-Path $Root "nib-settings.json")
 Remove-Path (Join-Path $Root "logs\handler.log")
 

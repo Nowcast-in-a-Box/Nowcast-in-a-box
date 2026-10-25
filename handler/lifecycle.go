@@ -35,15 +35,21 @@ type identityResponse struct {
 }
 
 type localSession struct {
-	ConfigID   string `json:"config_id"`
-	InstanceID string `json:"instance_id"`
-	URL        string `json:"url"`
-	ReviewURL  string `json:"review_url"`
-	PID        int    `json:"pid"`
-	Token      string `json:"token"`
+	ConfigID     string `json:"config_id"`
+	InstanceID   string `json:"instance_id"`
+	URL          string `json:"url"`
+	ReviewURL    string `json:"review_url"`
+	PID          int    `json:"pid"`
+	Token        string `json:"token"`
+	BinarySHA256 string `json:"binary_sha256,omitempty"`
+	ConfigSource string `json:"config_source,omitempty"`
+	LegacyPath   string `json:"-"`
 }
 
 func canonicalPath(path string) string {
+	if path == "" {
+		return ""
+	}
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return filepath.Clean(path)
@@ -75,11 +81,7 @@ func addressURL(addr Addr) string {
 }
 
 func profileID(cfg Config) string {
-	source := canonicalPath(cfg.Source)
-	if cfg.Source == "" {
-		source = canonicalPath(cfg.Paths.Runs) + "\x00" + addressURL(cfg.Handler)
-	}
-	digest := sha256.Sum256([]byte(source))
+	digest := sha256.Sum256([]byte("nib-handler-singleton"))
 	return hex.EncodeToString(digest[:])
 }
 
@@ -113,7 +115,7 @@ func sessionDirectory(cfg Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cache, "NiB", "handler", profileID(cfg)), nil
+	return filepath.Join(cache, "NiB", "handler"), nil
 }
 
 func localHTTPClient() *http.Client {
@@ -246,16 +248,23 @@ func waitBackgroundExit(cfg Config, pid int) error {
 }
 
 func stopInstance(cfg Config, force bool) error {
-	session, err := readSession(cfg)
+	session, err := discoverSession(cfg)
 	if err != nil {
 		return stopUnidentified(cfg, err, force)
 	}
+	if err := stopRecordedInstance(cfg, session); err != nil {
+		return err
+	}
+	return retireBackground(session)
+}
+
+func stopRecordedInstance(cfg Config, session localSession) error {
 	identity, err := probeAddress(context.Background(), session.URL)
 	if err != nil && !errors.Is(err, errNotRunning) {
 		return err
 	}
 	if err == nil && (session.InstanceID != identity.InstanceID || session.ConfigID != identity.ConfigID || session.URL != identity.URL || session.ReviewURL != identity.ReviewURL) {
-		return stopUnidentified(cfg, fmt.Errorf("local session is stale"), force)
+		return fmt.Errorf("local session is stale; refusing to stop an unverified process")
 	}
 	if err == nil {
 		request, err := http.NewRequest(http.MethodPost, session.URL+"/v1/control/stop", bytes.NewReader(nil))
@@ -280,15 +289,19 @@ func stopInstance(cfg Config, force bool) error {
 	}
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
-		current, err := probeAddress(context.Background(), session.URL)
-		if (errors.Is(err, errNotRunning) || (err == nil && current.InstanceID != session.InstanceID)) && listenerClosed(session.ReviewURL) {
-			recorded, recordErr := readSession(cfg)
-			cleared := errors.Is(recordErr, os.ErrNotExist) || (recordErr == nil && recorded.InstanceID != session.InstanceID)
-			if !cleared && processExited(session.PID) {
+		_, err := probeAddress(context.Background(), session.URL)
+		if errors.Is(err, errNotRunning) && listenerClosed(session.ReviewURL) {
+			_, recordErr := readSession(cfg)
+			if processExited(session.PID) {
 				removeSession(cfg, session.InstanceID)
-				cleared = true
+				return nil
 			}
-			if cleared && backgroundProcessExited(cfg, session.PID) {
+			if session.LegacyPath == "" && errors.Is(recordErr, os.ErrNotExist) {
+				release, lockErr := singletonLock("running")
+				if lockErr != nil {
+					return lockErr
+				}
+				release()
 				return nil
 			}
 		}
