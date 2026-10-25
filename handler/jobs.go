@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +52,8 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /static/{path...}", s.handleDiagnosticsPage)
 	mux.HandleFunc("GET /visualization", s.handleDiagnosticsPage)
 	mux.HandleFunc("GET /visualization/{path...}", s.handleDiagnosticsPage)
+	mux.HandleFunc("GET /map-viewer/{path...}", s.handleDiagnosticsPage)
+	mux.HandleFunc("GET /map-basemap/{path...}", s.handleDiagnosticsPage)
 }
 
 func (s *Server) docker(ctx context.Context, args ...string) (int, []byte, error) {
@@ -84,9 +84,13 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		for _, modelID := range s.Resources.ModelIDs(data.ID) {
 			model, _ := s.modelResource(data.ID, modelID)
 			imageCode, _, imageErr := s.docker(ctx, "image", "inspect", model.Container.Image)
-			weight, weightErr := s.weightPath(data.ID, modelID)
-			if weightErr == nil {
-				weightErr = verifyWeight(weight, model.Weights.SHA256)
+			var weightErr error
+			if !model.Weights.Embedded {
+				var weight string
+				weight, weightErr = s.weightPath(data.ID, modelID)
+				if weightErr == nil {
+					weightErr = verifyWeight(weight, model.Weights.SHA256)
+				}
 			}
 			readyModels = append(readyModels, map[string]any{"data_id": data.ID, "id": modelID, "ready": dockerReady && dataErr == nil && imageErr == nil && imageCode == 0 && weightErr == nil})
 		}
@@ -231,7 +235,7 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Visualization && dataResource.VisualizationBasemap && !s.basemapReady() {
-		runtimeError(w, 409, fmt.Errorf("prepare the WMO basemap cache first"))
+		runtimeError(w, 409, fmt.Errorf("prepare the offline global terrain and WMO basemap cache"))
 		return
 	}
 	if len(s.Config.Runtime.AtlasRevision) != 40 {
@@ -297,20 +301,18 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	id := s.matchingRunID(request)
-	reuse := id != ""
-	if live := s.jobs[id]; reuse && live != nil && (live.Status == "queued" || live.Status == "running") {
-		s.jobsMu.Unlock()
-		runtimeError(w, http.StatusConflict, fmt.Errorf("this run is already queued or running; observe it in Runs and wait before rerunning"))
-		return
-	}
-	if !reuse {
-		id, err = newRunID(time.Now())
-		if err != nil {
+	for _, job := range s.jobs {
+		if job.Request.PackageSHA256 == request.PackageSHA256 && (job.Status == "queued" || job.Status == "running") {
 			s.jobsMu.Unlock()
-			runtimeError(w, 500, err)
+			runtimeError(w, http.StatusConflict, fmt.Errorf("this package is already queued or running; observe it in Runs and wait before rerunning"))
 			return
 		}
+	}
+	id, err := newRunID(time.Now())
+	if err != nil {
+		s.jobsMu.Unlock()
+		runtimeError(w, 500, err)
+		return
 	}
 	directory := filepath.Join(s.Config.Paths.Runs, id)
 	if err = os.MkdirAll(s.Config.Paths.Runs, 0o755); err != nil {
@@ -318,12 +320,10 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 500, err)
 		return
 	}
-	if !reuse {
-		if err = os.Mkdir(directory, 0o755); err != nil {
-			s.jobsMu.Unlock()
-			runtimeError(w, 500, err)
-			return
-		}
+	if err = os.Mkdir(directory, 0o755); err != nil {
+		s.jobsMu.Unlock()
+		runtimeError(w, 500, err)
+		return
 	}
 	job := &Job{ID: id, Status: "queued", Stage: "queued", Request: request, IdempotencyKey: key, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	if err := writeJob(directory, job); err != nil {
@@ -341,43 +341,6 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	s.jobsMu.Unlock()
 	go s.executeJob(id)
 	writeJSON(w, http.StatusAccepted, copy)
-}
-
-func sameRunConfig(stored, next RuntimeRequest) bool {
-	left := append([]string(nil), stored.Models...)
-	right := append([]string(nil), next.Models...)
-	sort.Strings(left)
-	sort.Strings(right)
-	return stored.DataID == next.DataID && stored.CenterLon == next.CenterLon && stored.CenterLat == next.CenterLat && stored.EventID == next.EventID && stored.StartTime == next.StartTime && strings.Join(stored.SampleStarts, "\x00") == strings.Join(next.SampleStarts, "\x00") && strings.Join(left, "\x00") == strings.Join(right, "\x00")
-}
-
-// matchingRunID reuses one run when the sample and selected models are unchanged.
-// A different sample or model set starts a new run. Metric choices do not.
-func (s *Server) matchingRunID(request RuntimeRequest) string {
-	for id, job := range s.jobs {
-		if sameRunConfig(job.Request, request) {
-			return id
-		}
-	}
-	entries, err := os.ReadDir(s.Config.Paths.Runs)
-	if err != nil {
-		return ""
-	}
-	var found string
-	for _, entry := range entries {
-		if !entry.IsDir() || !idPattern.MatchString(entry.Name()) {
-			continue
-		}
-		raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, entry.Name(), "job.json"))
-		var recorded Job
-		if readErr != nil || json.Unmarshal(raw, &recorded) != nil || !sameRunConfig(recorded.Request, request) {
-			continue
-		}
-		if found == "" || entry.Name() > found {
-			found = entry.Name()
-		}
-	}
-	return found
 }
 
 func writeJob(directory string, job *Job) error {
@@ -506,11 +469,6 @@ func (s *Server) executeJob(id string) {
 		return
 	}
 	// Ingestion creates a child run inside the job workspace, then publishes its contents.
-	// A retry reuses the run ID; clear the previous child before starting again.
-	if removeErr := os.RemoveAll(filepath.Join(directory, id)); removeErr != nil {
-		s.updateJob(id, "failed", "ingestion", removeErr)
-		return
-	}
 	args, err := s.dataCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 	if err != nil {
 		s.updateJob(id, "failed", "preflight", err)
@@ -532,33 +490,6 @@ func (s *Server) executeJob(id string) {
 					continue
 				}
 				target := filepath.Join(directory, entry.Name())
-				if entry.Name() == "manifest.json" {
-					oldRaw, _ := os.ReadFile(target)
-					newRaw, readErr := os.ReadFile(filepath.Join(child, entry.Name()))
-					var oldManifest, newManifest map[string]any
-					if json.Unmarshal(oldRaw, &oldManifest) == nil && readErr == nil && json.Unmarshal(newRaw, &newManifest) == nil {
-						if history, ok := oldManifest["diagnostics"].([]any); ok {
-							newManifest["diagnostics"] = history
-						}
-						forecasts, _ := oldManifest["forecasts"].(map[string]any)
-						kept := map[string]any{}
-						for model, descriptor := range forecasts {
-							if !slices.Contains(request.Models, model) {
-								kept[model] = descriptor
-							}
-						}
-						newManifest["forecasts"] = kept
-						newManifest["model_names"] = oldManifest["model_names"]
-						newRaw, _ = json.Marshal(newManifest)
-						if err := os.WriteFile(filepath.Join(child, entry.Name()), newRaw, 0o644); err != nil {
-							s.updateJob(id, "failed", "ingestion", err)
-							return
-						}
-					}
-				}
-				if entry.Name() == "inputs" || entry.Name() == "manifest.json" {
-					_ = os.RemoveAll(target)
-				}
 				if moveErr := os.Rename(filepath.Join(child, entry.Name()), target); moveErr != nil {
 					err = moveErr
 					break
@@ -602,8 +533,6 @@ func (s *Server) executeJob(id string) {
 		}
 	}
 	for _, model := range request.Models {
-		// Rerunning this configuration replaces only this model's previous forecast.
-		_ = os.RemoveAll(filepath.Join(directory, "forecasts", model))
 		args, specErr := s.modelCommandArgs(request.DataID, model, directory)
 		if specErr != nil {
 			s.updateJob(id, "failed", model, specErr)
@@ -759,12 +688,6 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 			args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 		}
 		args = append([]string{"-v", volumeSpec(samplesRoot, "/workspace", false)}, args...)
-		// A retry reuses the run ID, so a previous ingestion attempt may have
-		// left its sample directory behind. Remove it before recreating it.
-		if err := os.RemoveAll(childDir); err != nil {
-			failures = append(failures, childID+": reset sample directory: "+err.Error())
-			continue
-		}
 		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-ingestion", args...); err != nil {
 			failures = append(failures, childID+": ingestion: "+err.Error())
 			continue

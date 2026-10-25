@@ -16,6 +16,9 @@ check with Docker.
 - `artifacts/cma_radar/nowcastnet/NowcastNet.onnx` exists (135 MB, pinned
   SHA-256), or `paths.weight_source` points at an artifacts-like folder
   that contains it.
+- Visualization requires the offline global terrain/WMO viewer cache prepared
+  under `artifacts/basemap/wmo/viewer`; metrics-only does not. See
+  [map preparation](../diagnostics/visualization/docs/map_viewer.md).
 - A built Handler binary and the Hub checkout (or a published Hub) on this
   machine. No GitHub Release is required for this runbook.
 
@@ -27,7 +30,7 @@ missing image is reported with the exact image name if the pull fails.
 Use the normal launcher, as a first-time user would. No terminal command,
 flag, or environment variable is required:
 
-- macOS: double-click `Start NiB.command` (or `bin/macos/start.command`).
+- macOS: double-click `Start NiB.command`.
 - Windows: double-click `Start NiB.cmd`.
 - Linux: run `Start NiB.sh`.
 
@@ -111,9 +114,13 @@ before distribution.
 9. **Open the result.** When the run finishes, press `Open result`. Handler
    starts one diagnostics result viewer and proxies it on the existing result
    listener; the page contains `Visualization` and `Metrics` tabs in one
-   document. The diagnostics viewer address comes from `config.yaml`; it is not
-   selected by the browser. Switch tabs and exercise the metric query in the
-   Metrics view.
+   document. Verify the real-forecast map, world/data navigation, frame playback,
+   layers and PNG export. Switch to Metrics: the first selected available method
+   must render a line chart without pressing Run query. Only the methods selected
+   in Checkout should be offered.
+   Also open a saved image-only or metrics-only result, then explicitly retry
+   with visualization. Reopen the result and verify terrain is available and
+   the first selected metric reflects the new diagnostic report.
 
 The result viewer uses `diagnostics.host` and `diagnostics.port` in
 `config.yaml`. Its container is stopped when Handler stops.

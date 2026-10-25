@@ -62,58 +62,113 @@ var MetricFamilies = map[string]string{
 }
 
 func metricGroups(config map[string]json.RawMessage, data *DataResource) ([]map[string]any, error) {
-	var methods []string
-	var levels []float64
-	var windows []int
-	if len(config) != 3 || json.Unmarshal(config["methods"], &methods) != nil || json.Unmarshal(config["levels"], &levels) != nil || json.Unmarshal(config["half_windows"], &windows) != nil || len(methods) == 0 || len(methods) > 11 || len(levels) == 0 || len(levels) > 16 || len(windows) == 0 || len(windows) > 16 {
+	for key := range config {
+		switch key {
+		case "methods", "levels", "half_windows":
+		default:
+			return nil, fmt.Errorf("unknown metric field %q", key)
+		}
+	}
+	methods, err := metricStrings(config["methods"])
+	if err != nil || len(methods) == 0 || len(methods) > len(MetricFamilies) {
 		return nil, fmt.Errorf("invalid metric configuration")
 	}
-	levelSet := map[float64]bool{}
-	levelMin, levelMax, unit := 0.0, 255.0, "raw"
-	if data != nil {
-		levelMin, levelMax = data.Verification.LevelMin, data.Verification.LevelMax
-		if data.Verification.Unit != "" {
-			unit = data.Verification.Unit
-		}
-	}
-	for _, level := range levels {
-		if level < levelMin || level > levelMax || levelSet[level] {
-			return nil, fmt.Errorf("%s thresholds must be distinct values %g..%g %s", dataName(data), levelMin, levelMax, unit)
-		}
-		levelSet[level] = true
-	}
-	windowSet := map[int]bool{}
-	for _, window := range windows {
-		if window < 0 || window > 16 || windowSet[window] {
-			return nil, fmt.Errorf("invalid or repeated spatial window")
-		}
-		windowSet[window] = true
-	}
-	families := MetricFamilies
 	selected := map[string][]string{}
 	seen := map[string]bool{}
+	needsLevels := false
+	needsWindows := false
 	for _, method := range methods {
-		family := families[method]
+		family := MetricFamilies[method]
 		if family == "" || seen[method] {
 			return nil, fmt.Errorf("unsupported or repeated metric")
 		}
 		seen[method] = true
 		selected[family] = append(selected[family], method)
+		switch family {
+		case "yes_or_no":
+			needsLevels = true
+		case "spatial":
+			needsLevels = true
+			needsWindows = true
+		}
+	}
+	// Unused lists are not parsed. An empty or malformed threshold list must not
+	// reject a metric that does not read thresholds.
+	var levels []float64
+	if needsLevels {
+		levels, err = metricFloats(config["levels"])
+		if err != nil || len(levels) == 0 || len(levels) > 16 {
+			return nil, fmt.Errorf("invalid metric configuration")
+		}
+		levelSet := map[float64]bool{}
+		levelMin, levelMax, unit := 0.0, 255.0, "raw"
+		if data != nil {
+			levelMin, levelMax = data.Verification.LevelMin, data.Verification.LevelMax
+			if data.Verification.Unit != "" {
+				unit = data.Verification.Unit
+			}
+		}
+		for _, level := range levels {
+			if level < levelMin || level > levelMax || levelSet[level] {
+				return nil, fmt.Errorf("%s thresholds must be distinct values %g..%g %s", dataName(data), levelMin, levelMax, unit)
+			}
+			levelSet[level] = true
+		}
+	}
+	var windows []int
+	if needsWindows {
+		windows, err = metricInts(config["half_windows"])
+		if err != nil || len(windows) == 0 || len(windows) > 16 {
+			return nil, fmt.Errorf("invalid metric configuration")
+		}
+		windowSet := map[int]bool{}
+		for _, window := range windows {
+			if window < 0 || window > 16 || windowSet[window] {
+				return nil, fmt.Errorf("invalid or repeated spatial window")
+			}
+			windowSet[window] = true
+		}
 	}
 	groups := []map[string]any{}
 	for _, family := range []string{"continuous", "yes_or_no", "spatial", "moments"} {
-		if items := selected[family]; len(items) > 0 {
-			group := map[string]any{"family": family, "items": items}
-			if family == "yes_or_no" || family == "spatial" {
-				group["levels"] = levels
-			}
-			if family == "spatial" {
-				group["half_windows"] = windows
-			}
-			groups = append(groups, group)
+		items := selected[family]
+		if len(items) == 0 {
+			continue
 		}
+		group := map[string]any{"family": family, "items": items}
+		if family == "yes_or_no" || family == "spatial" {
+			group["levels"] = levels
+		}
+		if family == "spatial" {
+			group["half_windows"] = windows
+		}
+		groups = append(groups, group)
 	}
 	return groups, nil
+}
+
+func metricStrings(raw json.RawMessage) ([]string, error) {
+	var values []string
+	if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+		return nil, fmt.Errorf("invalid metric configuration")
+	}
+	return values, nil
+}
+
+func metricFloats(raw json.RawMessage) ([]float64, error) {
+	var values []float64
+	if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+		return nil, fmt.Errorf("invalid metric configuration")
+	}
+	return values, nil
+}
+
+func metricInts(raw json.RawMessage) ([]int, error) {
+	var values []int
+	if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+		return nil, fmt.Errorf("invalid metric configuration")
+	}
+	return values, nil
 }
 
 // ParseRuntimePackage checks the immutable package before selecting any execution.

@@ -27,11 +27,11 @@ after its model outputs finish. Explicit retries use the same internal executor
 and saved Forecasts. Each internal request may include an `operation_id`; the
 combined report binds it and the exact attempt IDs.
 
-The local report has keyboard-accessible native Visualization / Metrics radio
-views, without scripts. It is generated even when one diagnostic fails, retaining
-the successful content and showing the failed product's error. Loading/switching
-views never starts computation. The shell displays existing artifacts; a future
-interactive metrics webpage remains separate work. See
+The Handler result listener serves one diagnostics container with Visualization
+and Metrics tabs. Visualization embeds the global COG map; Metrics automatically
+draws the first selected available method as a line chart. Loading or switching
+views reads stored results and never starts computation. Failed diagnostic
+attempts remain inspectable alongside successful content. See
 [execution and recovery](../docs/automatic-diagnostics.md).
 
 ## CMA xarray data handoff

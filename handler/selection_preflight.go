@@ -114,6 +114,9 @@ func (s *Server) weightCheck(dataID, modelID string) Check {
 	if err != nil {
 		return Check{ID: "weight:" + modelID, OK: false, Message: err.Error()}
 	}
+	if resource.Weights.Embedded {
+		return Check{ID: "weight:" + modelID, OK: true, Message: "weights are embedded in the model image; SHA-256 is verified when inference starts"}
+	}
 	path, err := s.weightPath(dataID, modelID)
 	if err != nil {
 		return Check{ID: "weight:" + modelID, OK: false, Message: err.Error()}

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -32,7 +33,10 @@ func (s *Server) handleDiagnosticsPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid run id", http.StatusBadRequest)
 		return
 	}
-	if err := s.ensureDiagnosticsViewer(runID); err != nil {
+	if r.PathValue("id") != "" {
+		w.Header().Set("Cache-Control", "no-store")
+	}
+	if err := s.ensureDiagnosticsViewer(runID, r.PathValue("id") != ""); err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -51,14 +55,16 @@ func (s *Server) diagnosticsProxy() *httputil.ReverseProxy {
 	return proxy
 }
 
-func (s *Server) ensureDiagnosticsViewer(runID string) error {
+func (s *Server) ensureDiagnosticsViewer(runID string, inspectManifest bool) error {
 	s.diagnosticsViewerMu.Lock()
 	defer s.diagnosticsViewerMu.Unlock()
 
-	if s.diagnosticsViewerRun == runID && s.diagnosticsViewerContainer != "" && s.diagnosticsViewerHealthy() {
+	reusable := s.diagnosticsViewerRun == runID && s.diagnosticsViewerContainer != "" && s.diagnosticsViewerHealthy()
+	// Assets reuse the viewer; result navigation checks the latest diagnostic
+	// report so retries refresh both the metric root and required map mounts.
+	if reusable && !inspectManifest {
 		return nil
 	}
-	s.stopDiagnosticsViewerLocked()
 
 	cfg := s.currentConfig()
 	runDir := filepath.Join(cfg.Paths.Runs, runID)
@@ -81,12 +87,55 @@ func (s *Server) ensureDiagnosticsViewer(runID string) error {
 		"--pull", "never",
 		"-p", fmt.Sprintf("%s:%s", net.JoinHostPort(cfg.Diagnostics.Host, port), port),
 		"-v", volumeSpec(runDir, "/run", false),
+	}
+	manifestRaw, err := os.ReadFile(filepath.Join(runDir, "manifest.json"))
+	if err != nil {
+		return fmt.Errorf("read diagnostics result manifest: %w", err)
+	}
+	var manifest struct {
+		Diagnostics []struct {
+			Kind   string `json:"kind"`
+			Status string `json:"status"`
+			Entry  string `json:"entry"`
+		} `json:"diagnostics"`
+	}
+	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+		return fmt.Errorf("read diagnostics result manifest: %w", err)
+	}
+	mapResult := false
+	reportEntry := ""
+	for _, attempt := range manifest.Diagnostics {
+		if attempt.Kind == "visualization" && (attempt.Status == "succeeded" || attempt.Status == "partial") && filepath.Base(attempt.Entry) == "viewer.json" {
+			mapResult = true
+		}
+		if attempt.Kind == "report" && (attempt.Status == "succeeded" || attempt.Status == "partial") {
+			reportEntry = attempt.Entry
+		}
+	}
+	if reusable && (!mapResult || s.diagnosticsViewerHasBasemap) && reportEntry == s.diagnosticsViewerReport {
+		return nil
+	}
+	if mapResult {
+		if !s.basemapReady() {
+			return fmt.Errorf("prepare the offline global terrain and WMO basemap cache")
+		}
+		basemap, err := s.mountHost("basemap", "", "", runDir, "", "")
+		if err != nil {
+			return err
+		}
+		args = append(args, "-v", volumeSpec(basemap, "/basemap", true))
+	}
+	args = append(args,
 		"--entrypoint", "python",
 		image,
 		"-m", "diagnostics.diagnostics_server",
 		"--run", "/run",
 		"--port", port,
+	)
+	if mapResult {
+		args = append(args, "--basemap", "/basemap")
 	}
+	s.stopDiagnosticsViewerLocked()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	code, out, err := s.docker(ctx, args...)
@@ -98,6 +147,8 @@ func (s *Server) ensureDiagnosticsViewer(runID string) error {
 	}
 	s.diagnosticsViewerRun = runID
 	s.diagnosticsViewerContainer = name
+	s.diagnosticsViewerHasBasemap = mapResult
+	s.diagnosticsViewerReport = reportEntry
 	if err := s.waitDiagnosticsViewer(ctx); err != nil {
 		s.stopDiagnosticsViewerLocked()
 		return err
@@ -147,6 +198,8 @@ func (s *Server) stopDiagnosticsViewerLocked() {
 	name := s.diagnosticsViewerContainer
 	s.diagnosticsViewerContainer = ""
 	s.diagnosticsViewerRun = ""
+	s.diagnosticsViewerHasBasemap = false
+	s.diagnosticsViewerReport = ""
 	if name == "" {
 		return
 	}

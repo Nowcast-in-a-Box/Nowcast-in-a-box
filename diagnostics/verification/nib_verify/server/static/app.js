@@ -96,6 +96,10 @@ const state = {
 };
 
 // ---------------------------------------------------------------- result views
+let metricsReady = null;
+let queryGeneration = 0;
+let selectionGeneration = 0;
+
 function showView(name) {
   for (const section of $$(".result-view")) {
     section.hidden = section.dataset.view !== name;
@@ -103,7 +107,29 @@ function showView(name) {
   for (const button of $$(".result-tabs button")) {
     button.setAttribute("aria-selected", String(button.dataset.view === name));
   }
-  if (name === "metrics") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
+  if (name !== "visualization") disposeVisualization();
+  else if (state.visualization) renderVisualization(state.visualization, $("#viz-sample")?.value || state.visualization.sample_id);
+  if (name === "metrics") {
+    renderKindChips();
+    syncMethodChips();
+    openMetrics().catch(() => {});
+  }
+}
+
+// One in-flight open. A failed open is not remembered, so Run query and the
+// next visit can try again. A successful open is remembered so flipping tabs
+// does not start a second selector load.
+function openMetrics() {
+  if (metricsReady) return metricsReady;
+  let pending;
+  pending = refreshResultsSelectors().then(ok => {
+    if (ok === false) throw new Error("metric query failed");
+  }).catch(error => {
+    if (metricsReady === pending) metricsReady = null;
+    throw error;
+  });
+  metricsReady = pending;
+  return pending;
 }
 
 $$(".result-tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
@@ -141,7 +167,17 @@ async function loadVisualization() {
   }
 }
 
+let visualizationGeneration = 0;
+const visualizationDisposers = [];
+
+function disposeVisualization() {
+  visualizationGeneration += 1;
+  for (const dispose of visualizationDisposers.splice(0)) dispose();
+}
+
 function renderVisualization(data, sampleId) {
+  disposeVisualization();
+  const generation = visualizationGeneration;
   const host = $("#visualization-body");
   if (!host) { return; }
   const models = data.models || [];
@@ -155,8 +191,28 @@ function renderVisualization(data, sampleId) {
   if ($("#result-meta") && sample) $("#result-meta").textContent = sample.sample_id;
   mount(host, models.map(model => {
     const cases = model.cases || [];
-    const selected = cases.find(item => item.sample_id === sampleId) || cases[0];
+    const selected = sampleId ? cases.find(item => item.sample_id === sampleId) : cases[0];
     const images = selected ? selected.images || [] : [];
+    if (selected?.viewer_url) {
+      const mapHost = h("div", { class: "viz-map" });
+      import("/map-viewer/visualization.js").then(({ mountVisualization }) => {
+        if (generation !== visualizationGeneration || !mapHost.isConnected) return;
+        visualizationDisposers.push(mountVisualization(mapHost, new URL(selected.viewer_url, location.href).href));
+      }).catch(error => {
+        if (generation === visualizationGeneration && mapHost.isConnected) {
+          mount(mapHost, notice("bad", `Could not open the map: ${error.message}`));
+        }
+      });
+      return h("section", { class: "card viz-model" },
+        h("h2", { text: model.name || model.id }),
+        model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
+        mapHost);
+    }
+    if (cases.length && !cases.some(item => item.sample_id === sampleId)) {
+      return h("section", { class: "card viz-model" },
+        h("h2", { text: model.name || model.id }),
+        empty("No visualization is available for this case."));
+    }
     return h("section", { class: "card viz-model" },
       h("h2", { text: model.name || model.id }),
       model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
@@ -1030,7 +1086,8 @@ async function saveConfig() {
 async function refreshResultsSelectors() {
   await loadConfigsIntoSelect();
   const select = $("#q-config");
-  if (select.value) await onConfigPicked();
+  if (!select || !select.value) return runQuery();
+  return onConfigPicked();
 }
 
 // What a run is called on screen. The platform's own name is an event id glued to
@@ -1068,12 +1125,20 @@ async function loadConfigsIntoSelect() {
 }
 
 async function onConfigPicked() {
+  const serial = ++selectionGeneration;
   const groupId = $("#q-config").value;
-  if (!groupId) return;
+  if (!groupId) return runQuery();
   let cfg = state.selected && state.selected.group_id === groupId ? state.selected : null;
   if (!cfg) {
-    try { cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`); } catch (_) { return; }
+    try {
+      cfg = await api(`/api/configs/${encodeURIComponent(groupId)}`);
+    } catch (error) {
+      if (serial !== selectionGeneration) return true;
+      mount($("#query-result"), notice("bad", error.message));
+      throw error;
+    }
   }
+  if (serial !== selectionGeneration) return true;
   state.selected = cfg;
   // Defaults come off the config, not off the clock. Start with the latest
   // seven days so a year of stored results does not run a full-span query
@@ -1088,7 +1153,12 @@ async function onConfigPicked() {
   const previous = select.value;
   mount(select, available.map(m => h("option", { value: m.method, text: m.method })));
   if (previous && available.some(m => m.method === previous)) select.value = previous;
-  if (available.length) await onMethodPicked();
+  else if (available.length) select.value = available[0].method;
+  if (serial !== selectionGeneration) return true;
+  if (available.length) onMethodPicked();
+  else renderParams(null);
+  syncMethodChips();
+  return runQuery();
 }
 
 //: What the quick picks offer, in days. The full stored span is not one of
@@ -1360,12 +1430,23 @@ function queryParams() {
   if (state.hidden.length) shownMembers().forEach(name => params.append("member", name));
   return params;
 }
+function showMetricNotice(text) {
+  mount($("#query-result"), notice("bad", text));
+  const card = $("#chart-card");
+  const blank = $("#chart-empty");
+  if (card) card.hidden = true;
+  if (blank) {
+    blank.hidden = false;
+    blank.textContent = text;
+  }
+}
 
 async function runQuery() {
+  const generation = ++queryGeneration;
   const host = $("#query-result");
   if (!$("#q-method").value) {
-    mount(host, notice("bad", "No metric is available for this run. Re-run diagnostics with a metric selection."));
-    return;
+    showMetricNotice("No metric is available for this run. Re-run diagnostics with a metric selection.");
+    return true;
   }
   // Every parameter has to keep at least one value. An empty list is not "no
   // filter" -- it is a question with no answer, and sending nothing would quietly
@@ -1374,8 +1455,8 @@ async function runQuery() {
   const none = Object.entries(state.picked || {})
     .filter(([, values]) => !values.length).map(([key]) => PARAM_LABEL[key]);
   if (none.length) {
-    mount(host, notice("bad", `Pick at least one ${none.join(" and ")}.`));
-    return;
+    showMetricNotice(`Pick at least one ${none.join(" and ")}.`);
+    return true;
   }
   // A mesh is a grid of member x time x lead. A parameter at more than one
   // value -- levels, half windows -- is a third dimension, and a third does
@@ -1388,7 +1469,7 @@ async function runQuery() {
     $("#chart-empty").hidden = false;
     $("#chart-card").hidden = true;
     mount(host, empty(`Pick a single ${which} to draw the grid.`));
-    return;
+    return true;
   }
 
   mount(host, empty("Querying…"));
@@ -1403,20 +1484,21 @@ async function runQuery() {
   dims.forEach(d => params.append("g", d));
   try {
     const result = await api(`/api/scores?${params.toString()}`);
+    if (generation !== queryGeneration) return true;
     state.lastQuery = result;
     mount(host, renderScores(result));
     showChart(params);
+    return true;
   } catch (error) {
+    if (generation !== queryGeneration) return true;
       const limit = /over the \d+ limit/.test(error.message || "");
       const msg = limit
         ? kindOf() === "mesh"
           ? `This grid would take too many cells to draw at once (member × init × lead). Narrow the time range, or switch to a line along one axis.`
           : `Too many points for this range. Narrow the time range, or pick a shorter axis.`
         : error.message;
-      mount(host, notice("bad", msg));
-      $("#chart-card").hidden = true;
-      $("#chart-empty").hidden = false;
-      $("#chart-empty").textContent = msg;    // the card says the same as the table
+      showMetricNotice(msg);
+      return false;
   }
 }
 
@@ -1573,9 +1655,12 @@ $("#btn-init-range").addEventListener("click", openInitPanel);
 $("#btn-init-ok").addEventListener("click", applyInit);
 $("#q-config").addEventListener("change", () => {
   setTimeout(syncMethodChips, 60);   // the metrics change with the config
-  onConfigPicked();
+  onConfigPicked().catch(() => {});
 });
-$("#q-method").addEventListener("change", onMethodPicked);
+$("#q-method").addEventListener("change", () => {
+  onMethodPicked();
+  runQuery();
+});
 $("#q-axis").addEventListener("change", () => {
   if (state.lastQuery) runQuery(); else renderKindChips();
 });
@@ -1717,7 +1802,11 @@ async function boot() {
   await Promise.all([loadConfigs(), loadCatalog(), loadMetrics(), loadVisualization()]);
   // renderMembers is the roster editor of the removed New config panel.
   renderMetricGroups();
-  showView("visualization");
+  const viz = state.visualization;
+  const hasViz = viz && Array.isArray(viz.models) && viz.models.length;
+  // A failed load leaves the error on the visualization panel. An empty model
+  // list is a verification-only result and opens Metrics.
+  showView(!viz || hasViz ? "visualization" : "metrics");
 }
 
 boot();

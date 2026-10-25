@@ -70,8 +70,9 @@ type DataResource struct {
 }
 
 type ModelWeights struct {
-	File   string `yaml:"file"`
-	SHA256 string `yaml:"sha256"`
+	File     string `yaml:"file"`
+	SHA256   string `yaml:"sha256"`
+	Embedded bool   `yaml:"embedded"`
 }
 
 type ModelResource struct {
@@ -254,7 +255,14 @@ func readModelResources(dataDir, dataID string) (map[string]*ModelResource, erro
 		if err := validateContainer(path, resource.Container, "model"); err != nil {
 			return nil, err
 		}
-		for _, name := range []string{"run", "inputs", "weights"} {
+		if _, ok := resource.Container.mount("weights"); ok && resource.Weights.Embedded {
+			return nil, fmt.Errorf("%s: embedded weights cannot have a weights mount", path)
+		}
+		requiredMounts := []string{"run", "inputs"}
+		if !resource.Weights.Embedded {
+			requiredMounts = append(requiredMounts, "weights")
+		}
+		for _, name := range requiredMounts {
 			if _, ok := resource.Container.mount(name); !ok {
 				return nil, fmt.Errorf("%s: a %s mount is required", path, name)
 			}

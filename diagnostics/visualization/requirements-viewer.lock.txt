@@ -1,0 +1,8 @@
+# Optional COG exporter, on top of the unchanged Core development lock.
+-r requirements-dev.lock.txt
+rasterio==1.4.4
+affine==3.0.1
+attrs==26.1.0
+click==8.5.0
+click-plugins==1.1.1.2
+cligj==0.7.2

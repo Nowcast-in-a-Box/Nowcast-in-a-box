@@ -33,8 +33,10 @@ another center or time. Target masks remain available to verification.
 
 ## Weight and interpretation
 
-Copy `artifacts/sevir/nowcastnet/NowcastNet.onnx` to
-`artifacts/cma_radar/nowcastnet/NowcastNet.onnx`. Both must have SHA256:
+The `nib-nowcastnet:cma-demo-embedded` image includes the pinned ONNX weight at
+`/opt/nib/weights/NowcastNet.onnx`; users do not need an artifacts weight file.
+Maintainers supply a directory containing `NowcastNet.onnx` as the `weights`
+build context. The image build and each inference verify SHA256:
 
 ```
 773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d
@@ -56,9 +58,36 @@ repository root when preparing the development demo:
 ```sh
 git submodule update --init --recursive
 docker build -f adapters/cma_radar/Dockerfile -t nib-ingestion:cma-demo .
-docker build -f adapters/cma_radar/nowcastnet/Dockerfile -t nib-nowcastnet:cma-demo .
+docker build --build-context weights=./artifacts/cma_radar/nowcastnet -f adapters/cma_radar/nowcastnet/Dockerfile -t nib-nowcastnet:cma-demo-embedded .
 docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow .
 ```
+
+The build context can point to any local directory with the pinned ONNX file;
+weights are not committed or copied into the repository build context.
+`scripts/publish-images.sh` accepts `NIB_NOWCASTNET_WEIGHTS_DIR` for that directory.
+The new image tag deliberately differs from the old external-weight image.
+Use the matching Handler/resource package: it understands `weights.embedded`
+and does not download, copy or mount host weights for this model. Other models
+retain external weights. The ONNX checksum remains mandatory at runtime.
+
+Before publishing, run inference against an isolated copy of genuine CMA inputs
+with `--network none`, a read-only root, and no host weight mount. Check the
+registered forecast SHA256 and all 20 finite 128×128 CREF frames. A wrong weight
+must fail both the image-build checksum and runtime checksum checks. Building
+locally does not publish to GHCR; `publish-images.sh` builds and pushes all
+reference images, not just this model.
+
+The manual **publish images** GitHub Actions workflow publishes the matching
+multi-architecture tag. Before running it, set the repository secret `HF_TOKEN`
+with read access to `sonderlau/nib-nowcastnet`, and repository variable
+`NIB_NOWCASTNET_HF_REVISION` to its immutable 40-character commit SHA containing
+the pinned file. The workflow rejects a missing revision/token or wrong weight
+checksum. Do not put credentials in source or image build arguments. Local
+builds can instead use the existing checked weight directory as above.
+
+A Handler release tag alone does not run this manual image workflow. Publish
+the matching diagnostics, ingestion and embedded model images before testing a
+fresh installation; local cached images are not evidence of registry availability.
 
 Use [the example configuration](../tests/runtime/cma-demo.config.yaml). The
 runtime tree comes from `paths.resources` (`runtime.yaml` in each data/model

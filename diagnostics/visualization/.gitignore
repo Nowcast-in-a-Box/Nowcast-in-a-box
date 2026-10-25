@@ -4,6 +4,7 @@ output/
 .venv/
 build/
 dist/
+dist-embed/
 *.egg-info/
 __pycache__/
 *.py[cod]
@@ -12,3 +13,8 @@ __pycache__/
 .DS_Store
 .env
 .env.*
+
+# Interactive viewer dependencies and local server logs
+node_modules/
+*.log
+viewer/tests/.cache/

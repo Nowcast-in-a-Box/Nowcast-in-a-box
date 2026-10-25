@@ -60,7 +60,7 @@ def main():
             )
         )
     if request.get("visualization"):
-        from diagnostics.visualization_run import visualization
+        from diagnostics.map_visualization import visualization
 
         config = request["visualization"]
         for model in config["models"]:
@@ -133,29 +133,44 @@ def _batch_main(directory, manifest, request):
         from diagnostics.verification_run import verification_batch
 
         attempt_id = uuid.uuid4().hex
-        jobs.append((
-            "verification", None, None, attempt_id,
-            lambda attempt_id=attempt_id: verification_batch(
-                directory, samples, request["metrics"], attempt_id=attempt_id,
-                models=request.get("verification_models"),
-            ),
-        ))
+        jobs.append(
+            (
+                "verification",
+                None,
+                None,
+                attempt_id,
+                lambda attempt_id=attempt_id: verification_batch(
+                    directory,
+                    samples,
+                    request["metrics"],
+                    attempt_id=attempt_id,
+                    models=request.get("verification_models"),
+                ),
+            )
+        )
     if request.get("visualization"):
-        from diagnostics.visualization_run import visualization
+        from diagnostics.map_visualization import visualization
 
         config = request["visualization"]
         for sample, child in zip(samples, children):
             child_fields = StoredFields(child)
             for model in config["models"]:
                 if model not in child_fields.manifest["forecasts"]:
-                    raise ValueError("visualization selects a model without stored forecasts")
+                    raise ValueError(
+                        "visualization selects a model without stored forecasts"
+                    )
                 attempt_id = uuid.uuid4().hex
-                jobs.append((
-                    "visualization", model, sample.get("sample_id"), attempt_id,
-                    lambda model=model, child=child, attempt_id=attempt_id: visualization(
-                        child, model, config["basemap"], attempt_id=attempt_id
-                    ),
-                ))
+                jobs.append(
+                    (
+                        "visualization",
+                        model,
+                        sample.get("sample_id"),
+                        attempt_id,
+                        lambda model=model, child=child, attempt_id=attempt_id: visualization(
+                            child, model, config["basemap"], attempt_id=attempt_id
+                        ),
+                    )
+                )
     if not jobs:
         raise ValueError("select at least one diagnostic product")
     for kind, model_id, sample_id, attempt_id, job in jobs:
@@ -163,10 +178,17 @@ def _batch_main(directory, manifest, request):
             result = job()
             if kind == "visualization":
                 result = dict(result)
-                case = next((item for item in samples if item.get("sample_id") == sample_id), samples[0])
+                case = next(
+                    (item for item in samples if item.get("sample_id") == sample_id),
+                    samples[0],
+                )
                 result["sample_id"] = sample_id
                 result["path"] = (Path(case["path"]) / result["path"]).as_posix()
-                result["entry"] = (Path(case["path"]) / result["entry"]).as_posix() if result.get("entry") else None
+                result["entry"] = (
+                    (Path(case["path"]) / result["entry"]).as_posix()
+                    if result.get("entry")
+                    else None
+                )
             results.append(result)
             failed = failed or result["status"] != "succeeded"
         except Exception as exc:  # noqa: BLE001
@@ -174,10 +196,13 @@ def _batch_main(directory, manifest, request):
             out = directory / "diagnostics" / kind / attempt_id
             out.mkdir(parents=True, exist_ok=True)
             error = {
-                "kind": kind, "id": attempt_id, "model_id": model_id,
+                "kind": kind,
+                "id": attempt_id,
+                "model_id": model_id,
                 "sample_id": sample_id,
                 "path": out.relative_to(directory).as_posix(),
-                "status": "failed", "error": str(exc),
+                "status": "failed",
+                "error": str(exc),
             }
             (out / "summary.json").write_text(json.dumps(error, indent=2) + "\n")
             manifest["diagnostics"].append(error)

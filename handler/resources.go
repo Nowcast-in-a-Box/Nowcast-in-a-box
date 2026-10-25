@@ -208,6 +208,15 @@ func (s *Server) imageItem(image string) resourceItem {
 
 func (s *Server) weightItem(dataID, modelID string, resource *ModelResource) resourceItem {
 	item := resourceItem{Kind: "weight", ID: modelID}
+	if resource.Weights.Embedded {
+		image := s.imageItem(resource.Container.Image)
+		item.Status = image.Status
+		item.Message = "weights are embedded in the model image; SHA-256 is verified when inference starts"
+		if image.Status != "ready" {
+			item.Message = image.Message
+		}
+		return item
+	}
 	path, err := s.weightPath(dataID, modelID)
 	if err != nil {
 		item.Status = "failed"
@@ -281,6 +290,10 @@ func (s *Server) prepareExecution(dataID string, models []string) {
 			s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "failed", Message: err.Error()})
 			s.finishPreparation()
 			return
+		}
+		if resource.Weights.Embedded {
+			s.updateResourceItem(s.weightItem(dataID, model, resource))
+			continue
 		}
 		s.updateResourceItem(resourceItem{Kind: "weight", ID: model, Status: "preparing", Message: "checking local weight"})
 		weight, err := s.weightPath(dataID, model)

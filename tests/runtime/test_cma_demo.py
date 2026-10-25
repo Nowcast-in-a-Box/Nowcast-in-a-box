@@ -1,6 +1,7 @@
 """CMA demo contract: July-only windows, honest masks and a metric grid."""
 
 import datetime as dt
+import json
 
 import numpy as np
 import pytest
@@ -10,7 +11,7 @@ from adapters.cma_radar.nowcastnet.adapter import ADAPTER
 from adapters.sevir.nowcastnet.adapter import NowcastNetAdapter as SEVIR
 from ingestion import cma_radar as cma
 from interfaces.model import Forecast, PreparedInput
-from utils.stored_fields import StoredFields, create_run
+from utils.stored_fields import StoredFields, create_run, sha256
 
 
 def test_july_index_latest_generation_and_nested_files(tmp_path):
@@ -150,22 +151,68 @@ def test_stored_cma_roundtrip(tmp_path):
         )["unit"]
         == "dBZ"
     )
-    from PIL import Image
-
-    from diagnostics.cma_visualization import visualization
     from utils.stored_fields import add_forecast
 
+    forecast = np.arange(20 * 128 * 128, dtype=np.float32).reshape(20, 128, 128)
+    forecast[0, 0, 0] = np.nan
     add_forecast(
         directory,
         "nowcastnet",
         "test",
         "a" * 64,
-        np.zeros((20, 128, 128), np.float32),
+        forecast,
         list(range(6, 121, 6)),
     )
-    attempt = visualization(directory, "nowcastnet")
+    pytest.importorskip("rasterio")
+    from diagnostics.map_visualization import visualization
+
+    basemap = tmp_path / "basemap"
+    viewer = basemap / "viewer"
+    (viewer / "wmo" / "0" / "0").mkdir(parents=True)
+    (viewer / "terrain-land.tif").write_bytes(b"terrain")
+    (viewer / "wmo" / "0" / "0" / "0.pbf").write_bytes(b"pbf")
+    (viewer / "basemap.json").write_text(
+        json.dumps(
+            {
+                "map_extent": [-180, -90, 180, 90],
+                "terrain": {
+                    "url": "terrain-land.tif",
+                    "sha256": sha256(viewer / "terrain-land.tif"),
+                    "colors": [[0, "#dce5d2"]],
+                    "attribution": "ETOPO",
+                    "disclaimer": "not for navigation",
+                },
+                "boundaries": {
+                    "url": "wmo",
+                    "tiles": {
+                        "keys": ["0/0/0"],
+                        "origin": [-180, 90],
+                        "tile_size": 512,
+                        "resolutions": [0.7],
+                        "symbol_types": {"0": "coastline"},
+                    },
+                    "styles": {
+                        "coastline": {"edgecolor": "#A1B6D3", "linewidth": 0.35}
+                    },
+                    "attribution": "WMO",
+                    "disclaimer": "no opinion",
+                },
+            }
+        )
+    )
+    stored = directory / "forecasts" / "nowcastnet" / "fields.npz"
+    before = stored.read_bytes()
+    attempt = visualization(directory, "nowcastnet", basemap)
     report = directory / attempt["entry"]
-    assert "skill unvalidated" in report.read_text()
-    with Image.open(report.parent / "animation.gif") as animation:
-        assert animation.n_frames == 20
-    assert (report.parent / "comparison.png").is_file()
+    bundle = json.loads(report.read_text())
+    assert attempt["entry"].endswith("viewer.json")
+    assert bundle["mock"] is False and bundle["is_real_forecast"] is True
+    assert "skill unvalidated" in bundle["notice"]
+    assert "observation replay" not in bundle["notice"].lower()
+    assert len(bundle["frames"]) == 20
+    assert bundle["weather_style"]["min"] == 10
+    assert bundle["spatial_sampling"] == "nearest"
+    assert (report.parent / "weather" / "frame-0000.tif").is_file()
+    assert not (report.parent / "comparison.png").exists()
+    assert not (report.parent / "animation.gif").exists()
+    assert stored.read_bytes() == before

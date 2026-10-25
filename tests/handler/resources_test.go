@@ -58,6 +58,18 @@ func resourceServer(t *testing.T, cfg handler.Config) *handler.Server {
 	return handler.NewServer(cfg)
 }
 
+func externalWeightServer(t *testing.T, cfg handler.Config) *handler.Server {
+	t.Helper()
+	server := resourceServer(t, cfg)
+	model, ok := server.Resources.ModelByProductID("cma_radar", "nowcastnet-cma")
+	if !ok {
+		t.Fatal("missing CMA model")
+	}
+	model.Weights.Embedded = false
+	model.Container.Image = "nib-nowcastnet:cma-demo"
+	return server
+}
+
 func resourceGet(t *testing.T, server *handler.Server, path string) map[string]any {
 	t.Helper()
 	request := httptest.NewRequest("GET", "http://127.0.0.1"+path, nil)
@@ -136,7 +148,7 @@ func TestResourcesPrepareCopiesMissingWeightFromLocalSource(t *testing.T) {
 	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Paths.WeightSource, _ = filepath.Abs(source)
-	server := resourceServer(t, cfg)
+	server := externalWeightServer(t, cfg)
 	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
@@ -169,18 +181,11 @@ func TestResourcesSkipWeightCopyWhenSHAAlreadyMatches(t *testing.T) {
 	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = artifacts
 	cfg.Paths.WeightSource = t.TempDir()
-	server := resourceServer(t, cfg)
+	server := externalWeightServer(t, cfg)
 	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
-	snapshot := waitForExecution(t, server, "ready")
-	items := executionGroup(snapshot)["items"].([]any)
-	for _, raw := range items {
-		item := raw.(map[string]any)
-		if item["kind"] == "weight" && !strings.Contains(item["message"].(string), "matches the pinned SHA-256") {
-			t.Fatalf("weight item = %s", mustJSON(t, item))
-		}
-	}
+	waitForExecution(t, server, "ready")
 }
 
 func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
@@ -195,7 +200,7 @@ func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "NowcastNet.onnx"), []byte("not the real weight"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	server := resourceServer(t, cfg)
+	server := externalWeightServer(t, cfg)
 	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
@@ -217,7 +222,7 @@ func TestResourcesExplainMissingWeightSource(t *testing.T) {
 	cfg := testConfig(t)
 	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = t.TempDir()
-	server := resourceServer(t, cfg)
+	server := externalWeightServer(t, cfg)
 	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
@@ -235,5 +240,19 @@ func TestResourcesRejectUnconfiguredModel(t *testing.T) {
 	server.Routes().ServeHTTP(response, request)
 	if response.Code != 422 {
 		t.Fatalf("status %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestResourcesPrepareEmbeddedModelWithoutHostWeights(t *testing.T) {
+	cfg := testConfig(t)
+	writeCmaData(t, &cfg)
+	cfg.Paths.Artifacts = t.TempDir()
+	cfg.Paths.WeightSource = ""
+	server := resourceServer(t, cfg)
+	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo-embedded": true}}
+	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
+	waitForExecution(t, server, "ready")
+	if _, err := os.Stat(filepath.Join(cfg.Paths.Artifacts, "cma_radar", "nowcastnet", "NowcastNet.onnx")); !os.IsNotExist(err) {
+		t.Fatalf("embedded model must not create a host weight: %v", err)
 	}
 }

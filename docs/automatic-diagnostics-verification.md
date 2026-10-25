@@ -82,3 +82,49 @@ remain ignored and are not commit candidates.
   owned separately. No cloud execution or full force-cancel is included.
 - Concurrent external mutation of a run outside Handler is outside the execution
   lock; existing filesystem/API path protections still apply when serving.
+
+## Demo readiness and global forecast map (#46)
+
+The demo-readiness implementation was checked locally with Chromium, real CMA
+data, pinned NowcastNet weights, Docker, and an isolated installed macOS Handler.
+The shared user Handler and Hub backend were not stopped. The root macOS launcher
+was exercised with `serve` and an isolated configuration; URI registration and
+native Windows/Linux startup were not revalidated. Six cross-builds succeeded.
+
+- `go test ./...` passed. The canonical Python suites completed with **956 passed,
+  9 skipped**; all skips were optional OCHA cache integrations. Real WMO checks
+  ran against a checksum-verified local cache.
+- Hub frontend **186 tests** and production build passed. The fast local E2E
+  completed **2 passed, 1 real-only skip**; the real Docker E2E completed
+  **3 passed**. The map viewer completed **64 tests**, **4 Sites tests**,
+  typecheck, standalone and embedded builds. Its compatible patched lockfile
+  reported zero npm audit vulnerabilities.
+- Actual saved-address recovery produced three bounded eight-second attempt
+  groups. Network request counts stayed unchanged over a further 30 seconds.
+  Each attempt includes internal probes; three attempts does not mean three
+  HTTP requests. Orders list/detail did not query data without a session;
+  disconnect removed 13 displayed rows immediately. Main retained its vertical
+  position. Layout was checked at 1440×900, 390×844 and a 276px Checkout sidebar.
+- A real Hub inference run `20261025T031624Z-32a09c677e0056e2` finished successfully
+  with only `mae` in the frozen selection, Handler groups, verification config,
+  and result selector. Its first Metrics chart decoded automatically as a line.
+- A separate copied three-sample real run exported 60 COGs. Every display cell,
+  mask, first pixel centre, bound, CRS and valid time matched its display field;
+  the three scientific forecast hashes stayed unchanged. The shared terrain
+  was 7200×3600 with cache mask version 4 and 3431 WMO tiles. NOAA source bytes
+  matched the recorded size and SHA-256 before preparation.
+- The actual result surface exercised world/data navigation, zoom, layer toggles,
+  opacity, first/middle/last frame selection, 2× playback, pause, sample switching,
+  map unmount on Metrics and actual PNG download. The PNG included terrain, WMO,
+  model/time, legend and forecast-skill notice. No external map/CDN requests were
+  observed. Viewport emulation is not physical touch-device evidence.
+- COG requests through the Handler proxy returned 206 with correct Content-Range
+  and 1024 bytes; out-of-range requests returned 416. A legacy image result was
+  opened before a real COG retry, then reopened: its viewer refreshed the shared
+  basemap mount and verification root, served terrain ranges, and offered only
+  the newly selected `mae`. Result HTML used `Cache-Control: no-store`.
+
+Ignored evidence and exported PNGs are under `.pi/demo-readiness/`; E2E keeps its
+printed temporary workspace. Inputs, global terrain, weights, images and runs
+remain outside version control. These checks do not establish forecast skill,
+public deployment, or clean-machine installation on other operating systems.

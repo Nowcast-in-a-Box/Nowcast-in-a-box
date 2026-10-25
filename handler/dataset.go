@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,6 +182,64 @@ func (s *Server) modelCommandArgs(dataID, modelID, directory string) ([]string, 
 }
 
 func (s *Server) basemapReady() bool {
-	info, err := os.Stat(filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo", "acquisition.json"))
-	return err == nil && info.Mode().IsRegular()
+	root := filepath.Join(s.Config.Paths.Artifacts, "basemap", "wmo")
+	info, err := os.Stat(filepath.Join(root, "acquisition.json"))
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	root = filepath.Join(root, "viewer")
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return false
+	}
+	regular := func(relative string) bool {
+		if relative == "" || filepath.IsAbs(relative) || strings.Contains(relative, ":") || strings.Contains(relative, "\\") {
+			return false
+		}
+		real, err := filepath.EvalSymlinks(filepath.Join(realRoot, filepath.FromSlash(relative)))
+		if err != nil {
+			return false
+		}
+		rel, err := filepath.Rel(realRoot, real)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return false
+		}
+		info, err := os.Stat(real)
+		return err == nil && info.Mode().IsRegular()
+	}
+	if !regular("basemap.json") {
+		return false
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "basemap.json"))
+	if err != nil {
+		return false
+	}
+	var bundle struct {
+		Terrain struct {
+			URL string `json:"url"`
+		} `json:"terrain"`
+		Boundaries struct {
+			URL   string `json:"url"`
+			Tiles *struct {
+				Keys []string `json:"keys"`
+			} `json:"tiles"`
+		} `json:"boundaries"`
+	}
+	if json.Unmarshal(raw, &bundle) != nil || !regular(bundle.Terrain.URL) {
+		return false
+	}
+	if bundle.Boundaries.Tiles == nil {
+		return regular(bundle.Boundaries.URL)
+	}
+	if len(bundle.Boundaries.Tiles.Keys) == 0 {
+		return false
+	}
+	parent := false
+	for _, key := range bundle.Boundaries.Tiles.Keys {
+		if !regular(bundle.Boundaries.URL + "/" + key + ".pbf") {
+			return false
+		}
+		parent = parent || key == "0/0/0"
+	}
+	return parent
 }

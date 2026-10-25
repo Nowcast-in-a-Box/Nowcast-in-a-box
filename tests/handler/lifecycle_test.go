@@ -344,7 +344,12 @@ func TestHistoricalPollingCannotOverwriteConcurrentAdmission(t *testing.T) {
 			go func() { defer done.Done(); <-start; server.Routes().ServeHTTP(observed, poll) }()
 			close(start)
 			done.Wait()
-			defer func() { close(runner.release); waitJob(t, server, "historical-run", "failed") }()
+			var admitted handler.Job
+			if err := json.Unmarshal(admission.Body.Bytes(), &admitted); err != nil {
+				close(runner.release)
+				t.Fatal(err)
+			}
+			defer func() { close(runner.release); waitJob(t, server, admitted.ID, "failed") }()
 			if admission.Code != http.StatusAccepted || observed.Code != http.StatusOK {
 				t.Fatal(admission.Code, observed.Code)
 			}
@@ -356,8 +361,8 @@ func TestHistoricalPollingCannotOverwriteConcurrentAdmission(t *testing.T) {
 			if err := json.Unmarshal(saved, &current); err != nil {
 				t.Fatal(err)
 			}
-			if current.IdempotencyKey != "new-key" || current.Status == "interrupted" {
-				t.Fatal("history overwrote a live admission", string(saved))
+			if current.IdempotencyKey != "old-key" || current.Status != "interrupted" || admitted.ID == "historical-run" {
+				t.Fatal("historical polling and new admission must retain independent records", string(saved), admitted.ID)
 			}
 		})
 	}

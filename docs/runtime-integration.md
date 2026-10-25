@@ -81,8 +81,9 @@ remain in configured `runs/<unique-id>/`; no outputs live in Hub or atlas.
 Execution is serialized in this first integration. Jobs record queued/running/
 succeeded/failed/partial states with a stage, request identity and logs. A repeated
 idempotency key returns the same run, including after restart. A new explicit
-submission may reuse the same sample/model run only after its current execution
-finishes; an active run cannot be replaced by another idempotency key.
+submission allocates a new run ID and directory, even for the same Order,
+package, samples and models. A queued/running package rejects a second request
+identity until it finishes; no active or historical run is replaced.
 Restarted unfinished jobs are marked interrupted,
 not silently resumed. Successful Forecasts survive diagnostic failure.
 

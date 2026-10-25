@@ -42,8 +42,10 @@ jobs:
         image:
           - name: nib-ingestion
             dockerfile: adapters/cma_radar/Dockerfile
+            tag: cma-demo
           - name: nib-nowcastnet
             dockerfile: adapters/cma_radar/nowcastnet/Dockerfile
+            tag: cma-demo-embedded
         platform:
           - runner: ubuntu-latest
             platform: linux/amd64
@@ -61,14 +63,41 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Prepare pinned embedded NowcastNet weight
+        if: matrix.image.name == 'nib-nowcastnet'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REVISION: ${{ vars.NIB_NOWCASTNET_HF_REVISION }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$HF_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Set NIB_NOWCASTNET_HF_REVISION to the immutable Hugging Face commit containing the pinned ONNX file." >&2
+            exit 1
+          fi
+          if [[ -z "$HF_TOKEN" ]]; then
+            echo "Set the HF_TOKEN repository secret with read access to sonderlau/nib-nowcastnet." >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/nowcastnet-weights"
+          curl --fail --location --retry 3 \
+            --header "Authorization: Bearer $HF_TOKEN" \
+            "https://huggingface.co/sonderlau/nib-nowcastnet/resolve/$HF_REVISION/NowcastNet.onnx" \
+            --output "$RUNNER_TEMP/nowcastnet-weights/NowcastNet.onnx"
+          echo "773b6cbe0b1e0c8cea3b62932dc60b108b60885a54f7445a0074a48d4810b37d  $RUNNER_TEMP/nowcastnet-weights/NowcastNet.onnx" | sha256sum -c -
+
       - name: Build and publish ${{ matrix.platform.platform }}
         run: |
           set -euo pipefail
           owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          contexts=()
+          if [[ "${{ matrix.image.name }}" == "nib-nowcastnet" ]]; then
+            contexts+=(--build-context "weights=$RUNNER_TEMP/nowcastnet-weights")
+          fi
           docker buildx build \
             --platform "${{ matrix.platform.platform }}" \
+            "${contexts[@]}" \
             -f "${{ matrix.image.dockerfile }}" \
-            -t "ghcr.io/$owner/${{ matrix.image.name }}:cma-demo-${{ matrix.platform.suffix }}" \
+            -t "ghcr.io/$owner/${{ matrix.image.name }}:${{ matrix.image.tag }}-${{ matrix.platform.suffix }}" \
             --push .
 
   cma-merge:
@@ -76,19 +105,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [nib-ingestion, nib-nowcastnet]
+        image:
+          - name: nib-ingestion
+            tag: cma-demo
+          - name: nib-nowcastnet
+            tag: cma-demo-embedded
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Write the multi-arch cma-demo tag
+      - name: Write the multi-arch runtime tag
         run: |
           set -euo pipefail
           owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
           docker buildx imagetools create \
-            -t "ghcr.io/$owner/${{ matrix.image }}:cma-demo" \
-            "ghcr.io/$owner/${{ matrix.image }}:cma-demo-amd64" \
-            "ghcr.io/$owner/${{ matrix.image }}:cma-demo-arm64"
-          docker buildx imagetools inspect "ghcr.io/$owner/${{ matrix.image }}:cma-demo"
+            -t "ghcr.io/$owner/${{ matrix.image.name }}:${{ matrix.image.tag }}" \
+            "ghcr.io/$owner/${{ matrix.image.name }}:${{ matrix.image.tag }}-amd64" \
+            "ghcr.io/$owner/${{ matrix.image.name }}:${{ matrix.image.tag }}-arm64"
+          docker buildx imagetools inspect "ghcr.io/$owner/${{ matrix.image.name }}:${{ matrix.image.tag }}"
