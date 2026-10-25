@@ -25,10 +25,11 @@ from nib_verify.server import create_app
 
 PAGE_CSP = (
     "default-src 'none'; "
-    "img-src 'self' data:; "
+    "img-src 'self' data: blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self'; "
     "connect-src 'self'; "
+    "worker-src 'self' blob:; "
     "base-uri 'none'; "
     "frame-ancestors 'none'"
 )
@@ -169,20 +170,29 @@ def _visualization_models(run: Path, manifest: dict, samples: list[dict]) -> lis
             if attempt is None:
                 continue
             images = _case_images(run, attempt["path"], model_id, names)
-            if images:
-                cases.append({"sample_id": sample_id, "images": images})
+            viewer = run / attempt["path"] / "viewer.json"
+            if images or viewer.is_file():
+                case = {"sample_id": sample_id, "images": images}
+                if viewer.is_file():
+                    case["viewer_url"] = (
+                        f"/visualization/{quote(attempt['path'], safe='/')}/viewer.json"
+                    )
+                cases.append(case)
         if not cases:
             continue
         models.append(
             {
                 "id": model_id,
                 "name": names.get(model_id, model_id),
-                "notice": (manifest.get("sample") or {}).get("provenance", {}).get("notice"),
+                "notice": (manifest.get("sample") or {})
+                .get("provenance", {})
+                .get("notice"),
                 "cases": cases,
                 "images": cases[0]["images"],
             }
         )
     return models
+
 
 def _safe_visualization_file(run: Path, path: str) -> Path:
     candidate = (run / Path(path)).resolve()
@@ -195,7 +205,10 @@ def _safe_visualization_file(run: Path, path: str) -> Path:
         and relative.parts[0] == "samples"
         and relative.parts[2:4] == ("diagnostics", "visualization")
     )
-    if relative.parts[:2] != ("diagnostics", "visualization") and not batch_visualization:
+    if (
+        relative.parts[:2] != ("diagnostics", "visualization")
+        and not batch_visualization
+    ):
         raise HTTPException(status_code=404, detail="visualization file unavailable")
     if not candidate.is_file():
         raise HTTPException(status_code=404, detail="visualization file unavailable")
@@ -215,7 +228,15 @@ def _visualization_payload(run: Path) -> dict:
     }
 
 
-def build_app(run: Path) -> FastAPI:
+def _safe_static_file(root: Path, path: str) -> Path:
+    root = root.resolve()
+    candidate = (root / path).resolve()
+    if root not in candidate.parents or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="map asset unavailable")
+    return candidate
+
+
+def build_app(run: Path, basemap: Path | None = None) -> FastAPI:
     verification = _verification_root(run)
     app = create_app(
         root=verification,
@@ -232,6 +253,7 @@ def build_app(run: Path) -> FastAPI:
         response = await call_next(request)
         if response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Content-Security-Policy"] = PAGE_CSP
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.get("/health")
@@ -242,11 +264,29 @@ def build_app(run: Path) -> FastAPI:
     def visualization_file(path: str):
         return FileResponse(_safe_visualization_file(run, path))
 
+    @app.get("/map-viewer/{path:path}")
+    def map_viewer_file(path: str):
+        root = Path(__file__).parent / "visualization" / "viewer" / "dist-embed"
+        return FileResponse(_safe_static_file(root, path))
+
+    @app.get("/map-basemap/{path:path}")
+    def map_basemap_file(path: str):
+        if basemap is None:
+            raise HTTPException(status_code=404, detail="global basemap unavailable")
+        return FileResponse(_safe_static_file(basemap / "viewer", path))
+
     @app.get("/v1/runs/{run_id}/files/{file:path}")
     def result_page(run_id: str, file: str):
         if not file.endswith(".html"):
             raise HTTPException(status_code=404, detail="result page unavailable")
-        return FileResponse(Path(__file__).parent / "verification" / "nib_verify" / "server" / "static" / "index.html")
+        return FileResponse(
+            Path(__file__).parent
+            / "verification"
+            / "nib_verify"
+            / "server"
+            / "static"
+            / "index.html"
+        )
 
     return app
 
@@ -255,12 +295,18 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", required=True, type=Path)
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--basemap", type=Path)
     parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
 
     import uvicorn
 
-    uvicorn.run(build_app(args.run), host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(
+        build_app(args.run, args.basemap),
+        host=args.host,
+        port=args.port,
+        log_level="warning",
+    )
     return 0
 
 

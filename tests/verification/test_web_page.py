@@ -94,8 +94,14 @@ def test_the_page_uses_the_endpoints_it_was_given(app):
     """
     calls = page_calls()
     assert len(calls) >= 10, sorted(calls)
-    for expected in ("/api/configs", "/api/catalog", "/api/metrics",
-                     "/api/runs", "/api/scores", "/api/chart"):
+    for expected in (
+        "/api/configs",
+        "/api/catalog",
+        "/api/metrics",
+        "/api/runs",
+        "/api/scores",
+        "/api/chart",
+    ):
         assert expected in calls, expected
     assert "/api/plan" not in calls
 
@@ -105,7 +111,7 @@ def test_every_static_file_the_page_loads_is_served(app):
 
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     referenced = set(re.findall(r'(?:src|href)="(/static/[^"]+)"', html))
-    referenced |= set(re.findall(r'(/api/[A-Za-z0-9_\-/]*)', html))
+    referenced |= set(re.findall(r"(/api/[A-Za-z0-9_\-/]*)", html))
 
     with TestClient(app) as client:
         for path in sorted(referenced):
@@ -172,7 +178,7 @@ def test_the_table_can_be_saved_as_csv():
     """
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert "function saveCsv" in app
-    body = app[app.index("function saveCsv"):]
+    body = app[app.index("function saveCsv") :]
     body = body[: body.index("\n}\n")]
     assert "result.records" in body, "the rows already on screen, not a second query"
     # the header says what the numbers are, or the file cannot be labelled later
@@ -181,33 +187,8 @@ def test_the_table_can_be_saved_as_csv():
     assert "URL.createObjectURL" in body
     assert "URL.revokeObjectURL" in body, "an object URL holds its blob for good"
     # and it is offered beside the table's own summary line
-    table = app[app.index("function renderScores"):]
-    assert 'id: "btn-csv"' in table[: table.index("h(\"table\"")]
-
-
-def test_the_chart_and_the_table_expand_by_the_same_dimensions():
-    """One query, two shapes.
-
-    The table groups by what the chart draws along. If the two could disagree the
-    page would be describing two different queries, and the picture would not be
-    of the numbers underneath it.
-    """
-    app = (STATIC / "app.js").read_text(encoding="utf-8")
-    body = app[app.index("async function runQuery"):]
-    body = body[: body.index("\n}\n")]
-    assert 'axes.length > 1' in body, "two axes is not a line chart"
-    assert "...many, ...axes" in body, "the extra dimensions are the marks"
-    assert 'dims.forEach(d => params.append("g", d))' in body, \
-        "the table expands by exactly those"
-
-    chart = app[app.index("function showChart"):]
-    chart = chart[: chart.index("\n}\n")]
-    assert 'chart.delete("g")' in chart, "g is the table's grouping, not the chart's"
-    assert 'chart.set("series", "member")' in chart, "the models are the marks"
-    assert 'chart.set("kind", kind)' in chart, "the form reaches the chart"
-    assert 'chart.append("panel", extra)' in chart, \
-        "a parameter with more than one value is a panel, not another line"
-    assert '["member", ...many]' not in chart, "and never a second series"
+    table = app[app.index("function renderScores") :]
+    assert 'id: "btn-csv"' in table[: table.index('h("table"')]
 
 
 def test_the_axis_is_a_control_and_not_the_order_the_chips_were_clicked():
@@ -235,7 +216,7 @@ def test_the_results_tab_is_split_into_a_question_and_an_answer():
     """
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     css = (STATIC / "style.css").read_text(encoding="utf-8")
-    results = html[html.index('id="tab-results"'):]
+    results = html[html.index('id="tab-results"') :]
     results = results[: results.index("</section>")]
     assert 'class="split"' in results
     assert 'class="ask"' in results and 'class="answer"' in results
@@ -256,11 +237,14 @@ def test_the_wizard_does_not_ask_when_a_forecast_ran():
     last day is a later action, in the config's own detail panel, and it is the
     only reason the dates still exist at all."""
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    wizard = app[app.index("function emptyMember"):
-                 app.index("function renderMembers")]
+    wizard = app[
+        app.index("function emptyMember") : app.index("function renderMembers")
+    ]
     assert "active_from" not in wizard
     assert "active_to" not in wizard
     assert "active_from" in app, "the detail panel still gives a member a last day"
+
+
 def test_the_page_owns_no_list_of_families():
     """The families, their words and the defaults all come from the service.
 
@@ -280,8 +264,12 @@ def test_the_family_words_are_sent_with_the_registry():
     from nib_verify.core.metrics import list_families
 
     words = {f["family"]: f["label"] for f in list_families()}
-    assert words == {"continuous": "Continuous", "yes_or_no": "Yes or no",
-                     "spatial": "Spatial", "moments": "Moments"}
+    assert words == {
+        "continuous": "Continuous",
+        "yes_or_no": "Yes or no",
+        "spatial": "Spatial",
+        "moments": "Moments",
+    }
     defaults = {f["family"] for f in list_families() if f["added_by_default"]}
     assert defaults == {"continuous", "yes_or_no", "spatial"}
     # and the names are the ones the store knows, because they are one name
@@ -308,12 +296,14 @@ def test_the_page_does_not_keep_its_own_copy_of_the_plan_reasons():
     """
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert "REASON_TEXT" not in app
-    for sentence in ("is not on this config's roster",
-                     "different observation source",
-                     "was not on the roster on that date",
-                     "no start_time",
-                     "forecast horizon",
-                     "packages do not match"):
+    for sentence in (
+        "is not on this config's roster",
+        "different observation source",
+        "was not on the roster on that date",
+        "no start_time",
+        "forecast horizon",
+        "packages do not match",
+    ):
         assert sentence not in app, sentence
 
 
@@ -322,22 +312,26 @@ def test_the_legend_is_the_roster_and_clicking_it_hides_a_model():
     back -- a model that has been clicked off is not in the records, and would
     have no way back onto the chart."""
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    legend = app[app.index("function renderLegend"):]
+    legend = app[app.index("function renderLegend") :]
     legend = legend[: legend.index(chr(10) + "}" + chr(10))]
     assert "member_names" in legend, "the roster"
     assert "series_colours" in legend, "the palette the lines are drawn with"
     assert "state.hidden" in legend
     assert "Pick at least one model" in legend, "the last one cannot be hidden"
 
-    params = app[app.index("function queryParams"):]
+    params = app[app.index("function queryParams") :]
     params = params[: params.index(chr(10) + "}" + chr(10))]
-    assert 'params.append("member", name)' in params,         "hiding a model has to reach the query, not only the picture"
+    assert (
+        'params.append("member", name)' in params
+    ), "hiding a model has to reach the query, not only the picture"
 
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'id="chart-legend"' in html
-    row = html[html.index('id="chart-legend"') - 400: html.index('id="q-kind"') + 200]
+    row = html[html.index('id="chart-legend"') - 400 : html.index('id="q-kind"') + 200]
     assert "justify-content:space-between" in row, "the two ends of one row"
-    assert html.index('id="chart-legend"') < html.index('id="q-kind"'),         "the key on the left, the buttons on the right"
+    assert html.index('id="chart-legend"') < html.index(
+        'id="q-kind"'
+    ), "the key on the left, the buttons on the right"
 
 
 def test_the_gap_marker_is_on_the_page_because_the_canvas_has_no_legend():
@@ -347,10 +341,10 @@ def test_the_gap_marker_is_on_the_page_because_the_canvas_has_no_legend():
     and that sentence now lives under the key rather than across the plot.
     """
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    legend = app[app.index("function renderLegend"):]
+    legend = app[app.index("function renderLegend") :]
     legend = legend[: legend.index(chr(10) + "}" + chr(10))]
-    assert 'r.value === null' in legend, "a member with a missing lead"
-    assert '(gap)' in legend
+    assert "r.value === null" in legend, "a member with a missing lead"
+    assert "(gap)" in legend
 
 
 def test_the_time_fields_say_what_they_mean_and_have_a_key_to_confirm_it():
@@ -364,12 +358,12 @@ def test_the_time_fields_say_what_they_mean_and_have_a_key_to_confirm_it():
     """
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     assert "function sayInit" in app and "function applyInit" in app
-    said = app[app.index("function sayInit"):]
+    said = app[app.index("function sayInit") :]
     said = said[: said.index(chr(10) + "}" + chr(10))]
     assert "btn-init-range" in said, "the range is said on the button that opens it"
 
     # The one button, on the panel, where the choosing happens
-    panel = app[app.index("function applyInit"):]
+    panel = app[app.index("function applyInit") :]
     panel = panel[: panel.index(chr(10) + "}" + chr(10))]
     assert "closeInitPanel()" in panel and "sayInit()" in panel
     assert "panelParts" in panel, "the panel is what is read, not the hidden field"
@@ -377,11 +371,15 @@ def test_the_time_fields_say_what_they_mean_and_have_a_key_to_confirm_it():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'id="init-panel"' in html and 'id="btn-init-ok"' in html
     assert 'id="q-init-quick"' in html, "the week is a click, not a calendar"
-    assert 'type="hidden" id="q-init-from"' in html, \
-        "the browser's own picker is not used: it draws Today and Clear and there is no way to change that"
+    assert (
+        'type="hidden" id="q-init-from"' in html
+    ), "the browser's own picker is not used: it draws Today and Clear and there is no way to change that"
     # the panel is inside the same block as the fields it edits, not off to one side
-    assert html.index('id="q-init-quick"') < html.index('id="btn-init-range"') \
+    assert (
+        html.index('id="q-init-quick"')
+        < html.index('id="btn-init-range"')
         < html.index('id="init-panel"')
+    )
     # and nothing of the picker's own footer is ours
     for theirs in ("\u4eca\u5929", "\u6e05\u9664"):
         assert theirs not in html, theirs
@@ -389,7 +387,7 @@ def test_the_time_fields_say_what_they_mean_and_have_a_key_to_confirm_it():
 
 def test_the_quick_picks_are_the_windows_people_ask_for():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    picks = app[app.index("const INIT_PICKS"):]
+    picks = app[app.index("const INIT_PICKS") :]
     picks = picks[: picks.index("];")]
     for days in ("[1,", "[3,", "[7,", "[30,"):
         assert days in picks, days

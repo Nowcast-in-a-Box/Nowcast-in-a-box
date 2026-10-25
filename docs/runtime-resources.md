@@ -62,7 +62,7 @@ verification:
   level_min: 0
   level_max: 75
   unit: dBZ
-visualization_basemap: false
+visualization_basemap: true
 container:
   image: nib-ingestion:cma-demo
   build:
@@ -87,26 +87,28 @@ id: nowcastnet                # must match the directory name
 product_ids: [nowcastnet-cma] # one or more Hub product ids
 name: NowcastNet · CMA demo
 weights:
-  file: NowcastNet.onnx       # one file name, under artifacts/<data>/<model>/
+  file: NowcastNet.onnx       # provenance; host path only for external weights
   sha256: "…"
+  embedded: true
 container:
-  image: nib-nowcastnet:cma-demo
+  image: nib-nowcastnet:cma-demo-embedded
   build:
     context: "."
     dockerfile: adapters/cma_radar/nowcastnet/Dockerfile
-  command: ["--run", "/run", "--weights", "/weights/model.onnx"]
+  command: ["--run", "/run", "--weights", "/opt/nib/weights/NowcastNet.onnx"]
   mounts:
     - name: run
       target: /run
       write: true
     - name: inputs
       target: /run/inputs
-    - name: weights
-      target: /weights/model.onnx
 ```
 
-A model must mount `run`, `inputs`, and `weights`. Product ids must be unique
-within their data source.
+A model must mount `run` and `inputs`. With `weights.embedded: true`, the
+weight is supplied by the image and a host `weights` mount is forbidden.
+Without this flag (default false), a `weights` mount is required and the Handler
+prepares the pinned host file as before. Product ids must be unique within their
+data source.
 
 ### Diagnostics
 
@@ -134,6 +136,14 @@ container:
 `{{request}}` is replaced with the absolute path inside the mounted run
 directory. The `basemap` mount is omitted for data sources with
 `visualization_basemap: false`.
+
+The global map requires a prepared `artifacts/basemap/wmo/viewer/` cache in
+addition to the WMO `acquisition.json`. Its `basemap.json` references the terrain
+COG and physical WMO tiles; missing files and paths escaping the cache block
+visualization before execution. Metrics-only requests do not need a basemap.
+The result viewer mounts this same cache read-only when a run has map bundles.
+Maintainers prepare it using explicit, checksum-verified ETOPO/WMO inputs; see
+[global map preparation](../diagnostics/visualization/docs/map_viewer.md).
 
 ## Allowed mounts
 

@@ -86,6 +86,7 @@ def test_the_result_page_has_both_views_in_one_document(tmp_path):
         assert 'id="viz-sample"' in page.text
         assert "Content-Security-Policy" in page.headers
         assert "frame-ancestors 'none'" in page.headers["Content-Security-Policy"]
+        assert page.headers["cache-control"] == "no-store"
 
 
 def test_visualization_is_a_same_origin_artifact_list(tmp_path):
@@ -100,13 +101,10 @@ def test_visualization_is_a_same_origin_artifact_list(tmp_path):
         assert client.get(next(iter(urls))).content in (b"png", b"gif")
 
 
-
 def test_a_batch_result_exposes_each_sample_as_a_visualization_case(tmp_path):
     run = tmp_path / "run"
     samples = []
-    for index, init_time in enumerate(
-        ("2026-07-01T00:00:00Z", "2026-07-01T00:06:00Z")
-    ):
+    for index, init_time in enumerate(("2026-07-01T00:00:00Z", "2026-07-01T00:06:00Z")):
         sample_id = f"20260701@{init_time}"
         path = f"samples/{index:03d}"
         picture = run / path / "diagnostics" / "visualization" / "picture"
@@ -159,6 +157,7 @@ def test_a_batch_result_exposes_each_sample_as_a_visualization_case(tmp_path):
         image = client.get(second["images"][0]["url"])
         assert image.content == b"png"
 
+
 def test_a_result_config_is_queryable_with_a_metric(tmp_path):
     run = make_run(tmp_path)
     add_verification(run)
@@ -190,3 +189,44 @@ def test_a_result_url_serves_the_same_page(tmp_path):
         )
         assert page.status_code == 200
         assert "NiB diagnostics" in page.text
+
+
+def test_map_only_attempt_is_visible_and_supports_byte_ranges(tmp_path):
+    run = make_run(tmp_path)
+    picture = run / "diagnostics/visualization/picture"
+    for image in picture.iterdir():
+        image.unlink()
+    (picture / "viewer.json").write_text('{"viewer_bundle_version":1}')
+    weather = picture / "weather"
+    weather.mkdir()
+    content = bytes(range(256)) * 8
+    (weather / "frame-0000.tif").write_bytes(content)
+    with TestClient(build_app(run)) as client:
+        case = client.get("/visualization").json()["models"][0]["cases"][0]
+        assert case["images"] == []
+        assert client.get(case["viewer_url"]).json()["viewer_bundle_version"] == 1
+        url = case["viewer_url"].replace("viewer.json", "weather/frame-0000.tif")
+        response = client.get(url, headers={"Range": "bytes=0-1023"})
+        assert response.status_code == 206
+        assert response.headers["content-range"] == "bytes 0-1023/2048"
+        assert response.content == content[:1024]
+        assert client.get(url, headers={"Range": "bytes=4096-"}).status_code == 416
+
+
+def test_shared_map_assets_cannot_escape_the_configured_cache(tmp_path):
+    run = make_run(tmp_path)
+    basemap = tmp_path / "basemap"
+    viewer = basemap / "viewer"
+    viewer.mkdir(parents=True)
+    (viewer / "terrain-land.tif").write_bytes(b"terrain")
+    secret = tmp_path / "secret.tif"
+    secret.write_bytes(b"private")
+    (viewer / "escape.tif").symlink_to(secret)
+    with TestClient(build_app(run, basemap)) as client:
+        assert client.get("/map-basemap/terrain-land.tif").content == b"terrain"
+        assert client.get("/map-basemap/escape.tif").status_code == 404
+        assert client.get("/map-basemap/missing.tif").status_code == 404
+        assert client.get("/map-basemap/%2e%2e/secret.tif").status_code == 404
+        assert client.get("/map-viewer/%2e%2e/package.json").status_code == 404
+    with TestClient(build_app(run)) as client:
+        assert client.get("/map-basemap/terrain-land.tif").status_code == 404

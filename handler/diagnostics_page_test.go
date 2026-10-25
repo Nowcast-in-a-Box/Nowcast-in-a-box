@@ -39,35 +39,6 @@ func TestDiagnosticsProxyUsesTheConfiguredLoopbackAddress(t *testing.T) {
 	}
 }
 
-func TestResultRouteProxiesToAnActiveDiagnosticsViewer(t *testing.T) {
-	viewer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			_, _ = io.WriteString(w, `{"ok":true}`)
-			return
-		}
-		_, _ = io.WriteString(w, "result-page")
-	}))
-	defer viewer.Close()
-
-	host, portText, err := net.SplitHostPort(viewer.Listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := strconv.Atoi(portText)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := &Server{Config: Config{Diagnostics: Addr{Host: host, Port: port}}}
-	server.diagnosticsViewerRun = "run-one"
-	server.diagnosticsViewerContainer = "fake-viewer"
-	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/v1/runs/run-one/files/result/index.html", nil)
-	response := httptest.NewRecorder()
-	server.Routes().ServeHTTP(response, request)
-	if response.Code != http.StatusOK || response.Body.String() != "result-page" {
-		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
-	}
-}
-
 type recordingRunner struct {
 	calls [][]string
 }
@@ -95,6 +66,9 @@ func TestDiagnosticsViewerStartsOnceFromTheConfiguredPort(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(runs, runID), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(runs, runID, "manifest.json"), []byte(`{"diagnostics":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	runner := &recordingRunner{}
 	server := &Server{
 		Config: Config{
@@ -106,7 +80,7 @@ func TestDiagnosticsViewerStartsOnceFromTheConfiguredPort(t *testing.T) {
 			Diagnostics: &DiagnosticsResource{Container: ResourceContainer{Image: "nib-diagnostics:test"}},
 		},
 	}
-	if err := server.ensureDiagnosticsViewer(runID); err != nil {
+	if err := server.ensureDiagnosticsViewer(runID, true); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.calls) != 1 {

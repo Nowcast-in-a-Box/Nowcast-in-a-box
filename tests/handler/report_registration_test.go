@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler"
@@ -33,6 +34,15 @@ func (f *invalidReportRunner) Run(ctx context.Context, args ...string) (int, []b
 			continue
 		}
 		report := attempts[len(attempts)-1].(map[string]any)
+		if f.mode == "component-failure" {
+			m["diagnostics"] = append(attempts, map[string]any{
+				"kind": "visualization", "status": "failed", "operation_id": report["operation_id"],
+				"error": "prepare the offline global terrain and WMO basemap cache",
+			})
+			raw, _ = json.Marshal(m)
+			_ = os.WriteFile(p, raw, 0o600)
+			return 1, out, nil
+		}
 		if f.mode == "wrong-schema" || f.mode == "wrong-id" {
 			if f.mode == "wrong-schema" {
 				m["schema"] = "bad"
@@ -72,5 +82,22 @@ func TestAutomaticDiagnosticsDoesNotClaimMissingOrUnregisteredReport(t *testing.
 				t.Fatalf("wrong operation: %+v", state)
 			}
 		})
+	}
+}
+
+func TestDiagnosticFailureExposesComponentCause(t *testing.T) {
+	server, cfg := automaticServer(t)
+	server.Runner = &invalidReportRunner{runtimeRunner: runtimeRunner{root: cfg.Paths.Runs}, mode: "component-failure"}
+	job := waitJob(t, server, submitSelection(t, server, "S700003", []string{"wadepre"}, "metrics", "component-cause").ID, "partial")
+	raw, err := os.ReadFile(filepath.Join(cfg.Paths.Runs, job.ID, "logs", "diagnostics-"+job.DiagnosticOperationID, "status.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state handler.DiagnosticOperation
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(state.Error, "offline global terrain and WMO basemap cache") || strings.Contains(state.Error, "<nil>") {
+		t.Fatalf("operation must expose actionable failure without nil error: %+v", state)
 	}
 }

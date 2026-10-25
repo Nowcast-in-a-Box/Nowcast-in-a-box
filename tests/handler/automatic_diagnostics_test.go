@@ -106,7 +106,7 @@ func TestSuccessfulAutomaticRerunPreservesPreviousReportRegistration(t *testing.
 		time.Sleep(time.Millisecond)
 	}
 	second := waitJob(t, server, submitSelection(t, server, "S700002", []string{"wadepre"}, "metrics", "second").ID, "succeeded")
-	if second.ID != first.ID || second.DiagnosticOperationID == first.DiagnosticOperationID || second.ReportEntry == first.ReportEntry {
+	if second.ID == first.ID || second.DiagnosticOperationID == first.DiagnosticOperationID {
 		t.Fatal("operation identity was reused", first, second)
 	}
 	raw, err := os.ReadFile(filepath.Join(cfg.Paths.Runs, first.ID, "manifest.json"))
@@ -121,7 +121,7 @@ func TestSuccessfulAutomaticRerunPreservesPreviousReportRegistration(t *testing.
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Diagnostics) != 2 || manifest.Diagnostics[0].OperationID != first.DiagnosticOperationID || manifest.Diagnostics[1].OperationID != second.DiagnosticOperationID {
-		t.Fatal("history registration lost", string(raw))
+	if len(manifest.Diagnostics) != 1 || manifest.Diagnostics[0].OperationID != first.DiagnosticOperationID {
+		t.Fatal("previous run registration changed", string(raw))
 	}
 }

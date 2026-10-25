@@ -70,11 +70,23 @@ To view the PNG and GIF together in a local HTML page:
 Open `output/example/index.html` in a browser. The library uses a headless plotting
 backend. Matplotlib/Fontconfig cache directories must be writable by the run user.
 
+## Interactive map viewer
+
+The optional React/OpenLayers viewer reads prepared numeric COG layers and WMO
+vector tiles. Land terrain uses the soft-natural palette; boundary detail follows
+zoom with sparse parent-tile fallback. It supports world navigation, independent
+layer controls, playback and PNG view export. All UI text and PNG annotations
+are in English. See [map viewer setup and commands](docs/map_viewer.md).
+The independent example supports existing observation-replay bundles. Integrated
+Diagnostics exports real stored forecasts through `diagnostics/map_visualization.py`
+and mounts this same viewer inside its Visualization tab. Identity, units, times,
+and sources come from each bundle; scientific forecast arrays remain unchanged.
+
 ## Tests
 
 ```bash
 .venv/bin/python -m pytest -q
-.venv/bin/python -m ruff check src scripts tests
+.venv/bin/python -m ruff check src scripts ../../tests/visualization
 ```
 
 Tests that require real basemap caches skip when their cache environment variables
@@ -97,4 +109,5 @@ terrain. The REF colour table is included at `resources/cma_ref_colormap.json`;
 the data preparation guide passes it through `--color-file`.
 Basemap acquisition records describe their original acquisition snapshot.
 
-`SHA256SUMS.txt` lists the files in this source delivery for integrity checking.
+Source identity is tracked by the repository revision. Basemap cache checksum
+manifests and pinned source acquisition records remain independent of source code.

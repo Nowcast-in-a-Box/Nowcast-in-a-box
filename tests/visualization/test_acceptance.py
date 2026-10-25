@@ -95,6 +95,7 @@ def _run_demo(
     n_leads=None,
 ):
     _block_network(monkeypatch)
+    monkeypatch.chdir(ROOT)
     args = ["demo", "--provider", provider, "--grid", grid]
     if basemap is not None:
         args += ["--basemap", str(basemap)]
@@ -170,20 +171,24 @@ def wmo_latlon_manifest(tmp_path_factory):
     """One real, offline WMO demo run shared by the E2 manifest checks."""
     cache = _wmo_cache()
     output = tmp_path_factory.mktemp("e2-wmo") / "latlon"
-    with _blocked_network():
-        assert main(
-            [
-                "demo",
-                "--provider",
-                "wmo",
-                "--grid",
-                "latlon",
-                "--basemap",
-                cache,
-                "--output",
-                str(output),
-            ]
-        ) == 0
+    with _blocked_network(), pytest.MonkeyPatch.context() as context:
+        context.chdir(ROOT)
+        assert (
+            main(
+                [
+                    "demo",
+                    "--provider",
+                    "wmo",
+                    "--grid",
+                    "latlon",
+                    "--basemap",
+                    cache,
+                    "--output",
+                    str(output),
+                ]
+            )
+            == 0
+        )
     return output, json.loads((output / "manifest.json").read_text(encoding="utf-8"))
 
 
@@ -301,8 +306,17 @@ def test_e2_ocha_minimal_demo_smoke(tmp_path, monkeypatch):
     """One minimal OCHA demo covers the single-file GeoPackage checksum branch."""
     cache = _ocha_cache()
     output = tmp_path / "ocha-smoke"
-    assert _run_demo(monkeypatch, output, provider="ocha", grid="latlon",
-                     basemap=cache, n_leads=2) == 0
+    assert (
+        _run_demo(
+            monkeypatch,
+            output,
+            provider="ocha",
+            grid="latlon",
+            basemap=cache,
+            n_leads=2,
+        )
+        == 0
+    )
 
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     basemap = manifest["basemap"]

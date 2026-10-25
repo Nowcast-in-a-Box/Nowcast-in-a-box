@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -71,7 +72,7 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 	needsBasemap := dataResource.VisualizationBasemap
 	if selection.Visualization {
 		if needsBasemap && !s.basemapReady() {
-			runtimeError(w, 409, fmt.Errorf("prepare offline WMO basemap"))
+			runtimeError(w, 409, fmt.Errorf("prepare the offline global terrain and WMO basemap cache"))
 			return
 		}
 		config["visualization"] = map[string]any{"models": selection.Models, "basemap": "/basemap"}
@@ -226,8 +227,8 @@ func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) Diagno
 	raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, id, "manifest.json"))
 	var manifest struct {
 		Diagnostics []struct {
-			Kind, Status, Entry, Path string
-			OperationID               string `json:"operation_id"`
+			Kind, Status, Entry, Path, Error string
+			OperationID                      string `json:"operation_id"`
 		}
 	}
 	var identity struct{ Schema, ID string }
@@ -242,7 +243,19 @@ func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) Diagno
 		if state.ReportEntry != "" {
 			state.Status = "partial"
 		}
-		state.Error = fmt.Sprintf("diagnostics exited %d: %v; inspect this operation's container log", code, err)
+		state.Error = fmt.Sprintf("diagnostics exited %d; inspect this operation's container log", code)
+		if err != nil {
+			state.Error = fmt.Sprintf("diagnostics exited %d: %v; inspect this operation's container log", code, err)
+		}
+		var causes []string
+		for _, item := range manifest.Diagnostics {
+			if item.OperationID == state.ID && item.Status == "failed" && item.Error != "" && !slices.Contains(causes, item.Error) {
+				causes = append(causes, item.Error)
+			}
+		}
+		if len(causes) > 0 {
+			state.Error += ": " + strings.Join(causes, "; ")
+		}
 		if err == nil && code == 0 {
 			state.Error = "diagnostics did not register a report for this operation; rebuild the diagnostics image and inspect its log"
 		}

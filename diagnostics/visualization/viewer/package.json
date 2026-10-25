@@ -1,0 +1,31 @@
+{
+  "name": "viewer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/local-viewer.mjs start",
+    "stop": "node scripts/local-viewer.mjs stop",
+    "status": "node scripts/local-viewer.mjs status",
+    "dev": "vite",
+    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "build:embed": "vite build --config vite.embed.config.ts",
+    "preview": "vite preview",
+    "test:sites": "node --test tests/sites-worker.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/boundary-layer.test.mjs tests/playback.test.mjs tests/map-controller.test.mjs tests/app-workspace.test.mjs tests/map-view.test.mjs tests/map-export.test.mjs tests/local-viewer.test.mjs tests/bundle.test.mjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@vitejs/plugin-react": "5.0.4",
+    "ol": "^10.11.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}

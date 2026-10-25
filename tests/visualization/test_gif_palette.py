@@ -5,7 +5,10 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageDraw
 
-from scripts.gif_palette import save_gif_with_shared_palette, verify_gif
+from diagnostics.visualization.scripts.gif_palette import (
+    save_gif_with_shared_palette,
+    verify_gif,
+)
 
 
 def make_frame(path: Path, map_color: str, bar_color: str = "#ff00ff") -> None:
@@ -65,10 +68,14 @@ def test_complex_map_exposes_per_frame_palette_regression(tmp_path):
 
     bar_box = (110, 8, 122, 88)
     legacy = tmp_path / "per-frame-palette.gif"
-    with Image.open(paths[0]) as first, Image.open(paths[1]) as second, Image.open(
-        paths[2]
-    ) as third:
-        first.save(legacy, save_all=True, append_images=[second, third], duration=200, loop=0)
+    with (
+        Image.open(paths[0]) as first,
+        Image.open(paths[1]) as second,
+        Image.open(paths[2]) as third,
+    ):
+        first.save(
+            legacy, save_all=True, append_images=[second, third], duration=200, loop=0
+        )
     with pytest.raises(ValueError, match="colorbar changed"):
         verify_gif(legacy, 3, 200, bar_box)
 

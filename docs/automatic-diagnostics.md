@@ -32,13 +32,42 @@ remains available in the unified result. The single diagnostics result viewer
 serves **Visualization** and **Metrics** in one document with real tabs; the
 Metrics view is the merged verification page and its interactive query, not a
 second static report. Viewing or switching views is read-only. Unselected,
-partially available and failed diagnostics have different messages. Historical
-attempts/reports and unselected forecast registrations survive an explicit
-inference rerun of the same sample/model configuration.
+partially available and failed diagnostics have different messages. **Run again**
+creates a separate run for the same frozen Order/revision; old forecasts,
+diagnostic attempts and reports remain in the original run. **Retry diagnostics**
+creates another operation inside the existing run without repeating inference.
 
-The Visualization view displays existing images/GIFs/SVGs from the diagnostic
-packages. Per-model labels remain attached to each image and the metrics' stored
-output includes all selected model results.
+The Visualization view embeds the React/OpenLayers global map in the same
+document, without an iframe or another server. Every successful map attempt
+records `viewer.json` and one lossless display COG per forecast time. Shared
+ETOPO terrain and WMO tiles stay in the read-only basemap cache, not each run.
+Scientific NPZ fields, masks, hashes, and scoring grids remain unchanged;
+display-only projection does not change metric inputs. Historical image/GIF/SVG
+attempts remain viewable through their existing manifests.
+
+An installed resource manifest and its diagnostics image must agree on basemap
+requirements. The global-map CMA manifest sets `visualization_basemap: true`;
+its prepared cache belongs under that installation's configured artifacts root.
+A newer map image combined with an older CMA manifest can omit `/basemap` and
+fail visualization while verification succeeds. Update the installed Handler and
+resource declaration, prepare the offline cache, then retry diagnostics from the
+saved Forecasts. The original failed operation remains inspectable. Operation
+errors include failed component causes rather than an unhelpful `<nil>` suffix.
+
+Result HTML is served with `Cache-Control: no-store` so opening it initializes
+the current Handler's viewer even after a Handler restart. Reopening a result
+after a new diagnostic report refreshes the viewer's verification root and map
+mounts. Asset requests continue to reuse the active viewer; a legacy image-only
+or metrics-only viewer can upgrade to a real COG map after an explicit retry.
+
+Metric selection in Checkout is authoritative. Continuous and moments methods
+do not require thresholds or spatial windows; yes/no methods require thresholds,
+and spatial methods require both. Unused parameter lists are omitted from the
+computed groups. Opening Metrics draws the first selected available metric as a
+line chart automatically; changing the method or configuration redraws it.
+Visualization stays the initial view when map results exist. Metrics-only runs
+open Metrics directly. Switching views reads stored results and never starts
+diagnostic computation.
 
 ## Crash and cleanup recovery
 

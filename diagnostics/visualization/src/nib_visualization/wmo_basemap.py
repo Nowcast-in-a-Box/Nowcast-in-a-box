@@ -59,17 +59,24 @@ def load_wmo_basemap(path: Path | str, source_record: Path | str) -> WmoBasemap:
     metadata_path = root / "VectorTileServer" / "metadata.json"
     acquisition_path = root / "acquisition.json"
     if not metadata_path.is_file():
-        raise BasemapError(BASEMAP_UNAVAILABLE, f"WMO tile metadata missing: {metadata_path}")
+        raise BasemapError(
+            BASEMAP_UNAVAILABLE, f"WMO tile metadata missing: {metadata_path}"
+        )
     try:
         record = json.loads(Path(source_record).read_text(encoding="utf-8"))
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         acquisition = json.loads(acquisition_path.read_text(encoding="utf-8"))
         tile_info = metadata["tileInfo"]
-        if tile_info["spatialReference"]["wkid"] != 4326 or tile_info["format"] != "pbf":
+        if (
+            tile_info["spatialReference"]["wkid"] != 4326
+            or tile_info["format"] != "pbf"
+        ):
             raise ValueError("expected EPSG:4326 PBF tileInfo")
         if tile_info["rows"] != tile_info["cols"]:
             raise ValueError("non-square WMO tiles are unsupported")
-        resolutions = {int(lod["level"]): float(lod["resolution"]) for lod in tile_info["lods"]}
+        resolutions = {
+            int(lod["level"]): float(lod["resolution"]) for lod in tile_info["lods"]
+        }
         return WmoBasemap(
             path=root,
             source_id=record["source_id"],
@@ -87,7 +94,9 @@ def load_wmo_basemap(path: Path | str, source_record: Path | str) -> WmoBasemap:
         ) from err
 
 
-def resolve_tile(root: Path | str, lod: int, row: int, col: int) -> tuple[Path, int, int, int]:
+def resolve_tile(
+    root: Path | str, lod: int, row: int, col: int
+) -> tuple[Path, int, int, int]:
     """Find physical tile at this LOD or nearest ancestor (ArcGIS resample semantics)."""
     root = Path(root) / "VectorTileServer" / "tile"
     for parent_lod in range(lod, -1, -1):
@@ -112,7 +121,11 @@ def _decode_layer(
     tile: Path, name: str, bounds: tuple[float, float, float, float]
 ) -> gpd.GeoDataFrame:
     """Decode MVT tile-local geometry and apply the WMO geographic grid."""
-    frame = pyogrio.read_dataframe(tile, layer=name, X=0, Y=0, Z=0, METADATA_FILE="", CLIP="YES")
+    # GDAL's MVT clipping can drop valid components of buffered MultiPolygons.
+    # Decode them intact, then clip in the actual WMO grid after mapping.
+    frame = pyogrio.read_dataframe(
+        tile, layer=name, X=0, Y=0, Z=0, METADATA_FILE="", CLIP="NO"
+    )
     west, south, east, north = bounds
     scale_x = (east - west) / (2 * _MERCATOR_HALF_WORLD)
     scale_y = (north - south) / (2 * _MERCATOR_HALF_WORLD)
@@ -122,7 +135,8 @@ def _decode_layer(
             [scale_x, 0, 0, scale_y, (west + east) / 2, (south + north) / 2],
         )
     )
-    return frame.set_crs(WGS84, allow_override=True)
+    frame.geometry = frame.geometry.intersection(box(*bounds))
+    return frame.loc[~frame.geometry.is_empty].set_crs(WGS84, allow_override=True)
 
 
 def _choose_lod(basemap: WmoBasemap, width_degrees: float) -> int:
@@ -146,7 +160,9 @@ def crop_wmo_basemap(
     physical: dict[Path, tuple[int, int, int]] = {}
     for row in range(first_row, last_row + 1):
         for col in range(first_col, last_col + 1):
-            tile, tile_lod, tile_row, tile_col = resolve_tile(basemap.path, lod, row, col)
+            tile, tile_lod, tile_row, tile_col = resolve_tile(
+                basemap.path, lod, row, col
+            )
             physical[tile] = (tile_lod, tile_row, tile_col)
 
     viewport = box(west, south, east, north)
@@ -171,7 +187,9 @@ def crop_wmo_basemap(
                     oceans.append(water)
         if "Boundaries" in names:
             boundary = _decode_layer(tile, "Boundaries", bounds)
-            for symbol, geom in zip(boundary["_symbol"], boundary.geometry, strict=True):
+            for symbol, geom in zip(
+                boundary["_symbol"], boundary.geometry, strict=True
+            ):
                 clipped = geom.intersection(viewport)
                 if not clipped.is_empty:
                     lines.append(clipped)
@@ -181,7 +199,9 @@ def crop_wmo_basemap(
         layers={
             "ocean": gpd.GeoDataFrame(geometry=oceans, crs=WGS84),
             "country_land": gpd.GeoDataFrame(geometry=lands, crs=WGS84),
-            "boundary_lines": gpd.GeoDataFrame({"boundary_type": types}, geometry=lines, crs=WGS84),
+            "boundary_lines": gpd.GeoDataFrame(
+                {"boundary_type": types}, geometry=lines, crs=WGS84
+            ),
         },
         extent_wgs84=(west, east, south, north),
         attribution=basemap.attribution,

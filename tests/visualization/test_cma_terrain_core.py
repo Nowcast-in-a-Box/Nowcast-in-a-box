@@ -41,12 +41,18 @@ def mock_npz(directory, minutes):
         time = np.datetime64("2024-07-05T00:00") + np.timedelta64(minute, "m")
         path = directory / f"reverse-{len(minutes) - index}.npz"
         np.savez_compressed(
-            path, reflectivity=values,
-            latitude=np.arange(15.5, 9.5, -1), longitude=np.arange(70.5, 78.5),
-            bbox=np.array([70.5, 9.5, 78.5, 15.5]), resolution_deg=1.0,
+            path,
+            reflectivity=values,
+            latitude=np.arange(15.5, 9.5, -1),
+            longitude=np.arange(70.5, 78.5),
+            bbox=np.array([70.5, 9.5, 78.5, 15.5]),
+            resolution_deg=1.0,
             data_time=np.datetime_as_string(time, unit="s") + "Z",
-            generation_time="2024-07-05T01:00:00Z", source_file=f"source-{index}.bin",
-            source="cma_radar", product="CREF", unit="dBZ",
+            generation_time="2024-07-05T01:00:00Z",
+            source_file=f"source-{index}.bin",
+            source="cma_radar",
+            product="CREF",
+            unit="dBZ",
         )
         paths.append(path)
     return paths
@@ -71,11 +77,17 @@ def terrain(tmp_path):
         z.grid_mapping, z.units = "crs", "meters"
         z[:] = values
     record = tmp_path / "terrain-source.json"
-    record.write_text(json.dumps({
-        "source_id": "test-etopo", "horizontal_crs": "EPSG:4326",
-        "vertical_crs": "EPSG:3855", "citation": "Test terrain attribution",
-        "disclaimer": "Test terrain disclaimer",
-    }))
+    record.write_text(
+        json.dumps(
+            {
+                "source_id": "test-etopo",
+                "horizontal_crs": "EPSG:4326",
+                "vertical_crs": "EPSG:3855",
+                "citation": "Test terrain attribution",
+                "disclaimer": "Test terrain disclaimer",
+            }
+        )
+    )
     return path, record, values
 
 
@@ -142,7 +154,9 @@ def test_relief_crop_has_exact_source_samples_and_edges(terrain):
 
 
 @pytest.mark.parametrize("minutes", [[0], [0, 6, 21]])
-def test_mock_relief_uses_core_with_dynamic_frames(tmp_path, terrain, monkeypatch, minutes):
+def test_mock_relief_uses_core_with_dynamic_frames(
+    tmp_path, terrain, monkeypatch, minutes
+):
     mock_npz(tmp_path / "input", minutes)
     field = read_cma_mock(tmp_path / "input", crs="EPSG:4326", display_width=8)
     original = field.values.values.copy()
@@ -155,10 +169,16 @@ def test_mock_relief_uses_core_with_dynamic_frames(tmp_path, terrain, monkeypatc
         gpkg, layer="country_land", driver="GPKG"
     )
     vector_record = tmp_path / "vector-source.json"
-    vector_record.write_text(json.dumps({
-        "source_id": "test-vector", "attribution": "Test boundaries",
-        "disclaimer": "Test vector disclaimer", "layers": {"country_land": {}},
-    }))
+    vector_record.write_text(
+        json.dumps(
+            {
+                "source_id": "test-vector",
+                "attribution": "Test boundaries",
+                "disclaimer": "Test vector disclaimer",
+                "layers": {"country_land": {}},
+            }
+        )
+    )
     acquisition = tmp_path / "acquisition.json"
     acquisition.write_text("{}")
     basemap = CompositeBasemap(load_basemap(gpkg, vector_record), relief)
@@ -172,7 +192,10 @@ def test_mock_relief_uses_core_with_dynamic_frames(tmp_path, terrain, monkeypatc
     monkeypatch.setattr(type(relief), "crop", record_crop)
     config = RenderConfig(
         cmap=ListedColormap(["cyan", "green", "yellow", "red"], name="test-ref"),
-        vmin=10, vmax=75, buffer_fraction=0, display_min=10,
+        vmin=10,
+        vmax=75,
+        buffer_fraction=0,
+        display_min=10,
         notice="MOCK FORECAST — observations, not a real forecast",
     )
     scene = prepare_scene(field, config, basemap)
@@ -191,14 +214,31 @@ def test_mock_relief_uses_core_with_dynamic_frames(tmp_path, terrain, monkeypatc
         assert len(calls) == 1
         np.testing.assert_array_equal(field.values.values, original)
         checks = inspect_outputs(
-            map_path, gif_path, len(minutes), expected_duration_ms=500,
+            map_path,
+            gif_path,
+            len(minutes),
+            expected_duration_ms=500,
             colorbar_box=axes_pixel_box(scene.figure, scene.colorbar.ax),
         )
         manifest = write_manifest(
-            field, scene, provider="ocha", basemap=basemap,
-            source_record_path=vector_record, acquisition_record_path=acquisition,
-            outputs={"map": map_path, "animation": gif_path, "manifest": tmp_path / "run.json"},
-            command=["test"], fps=2, checks=checks,
+            field,
+            scene,
+            provider="ocha",
+            basemap=basemap,
+            source_record_path=vector_record,
+            acquisition_record_path=acquisition,
+            outputs={
+                "map": map_path,
+                "animation": gif_path,
+                "manifest": tmp_path / "run.json",
+            },
+            command=["test"],
+            fps=2,
+            checks=checks,
+            lockfile_path=Path(__file__).resolve().parents[2]
+            / "diagnostics"
+            / "visualization"
+            / "requirements-dev.lock.txt",
         )
     finally:
         plt.close(scene.figure)

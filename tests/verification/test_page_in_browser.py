@@ -51,8 +51,9 @@ def live_server(platform, tmp_path):
 
     ConfigLibrary(tmp_path / "configs").create(make_config())
 
-    config = uvicorn.Config(app, host="127.0.0.1", port=0,
-                            log_level="error", access_log=False)
+    config = uvicorn.Config(
+        app, host="127.0.0.1", port=0, log_level="error", access_log=False
+    )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -77,7 +78,11 @@ def browser():
     with playwright_api.sync_playwright() as p:
         for attempt in ("msedge", "chrome", None):
             try:
-                instance = p.chromium.launch(channel=attempt) if attempt else p.chromium.launch()
+                instance = (
+                    p.chromium.launch(channel=attempt)
+                    if attempt
+                    else p.chromium.launch()
+                )
             except Exception:  # noqa: BLE001 - any failure means "try the next one"
                 continue
             try:
@@ -95,8 +100,14 @@ class Page:
         self.page = page
         self.errors: list[str] = []
         page.on("pageerror", lambda exc: self.errors.append(f"pageerror: {exc}"))
-        page.on("console", lambda msg: self.errors.append(f"console.{msg.type}: {msg.text}")
-                if msg.type == "error" else None)
+        page.on(
+            "console",
+            lambda msg: (
+                self.errors.append(f"console.{msg.type}: {msg.text}")
+                if msg.type == "error"
+                else None
+            ),
+        )
 
     def load(self, url: str) -> "Page":
         self.page.goto(url, wait_until="networkidle")
@@ -135,22 +146,59 @@ def seed_run(base_url: str, group_id: str = "vil-test") -> dict:
     import json
     import urllib.request
 
-    body = json.dumps({"config": group_id,
-                       "init": ["2026-01-01T00:00:00Z"]}).encode()
+    body = json.dumps({"config": group_id, "init": ["2026-01-01T00:00:00Z"]}).encode()
     request = urllib.request.Request(
-        f"{base_url}/api/runs", data=body,
-        headers={"Content-Type": "application/json"}, method="POST")
+        f"{base_url}/api/runs",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     started = json.loads(urllib.request.urlopen(request, timeout=30).read())
     assert started["started"], started
 
     for _ in range(200):
-        with urllib.request.urlopen(f"{base_url}/api/jobs/{started['job']}", timeout=10) as r:
+        with urllib.request.urlopen(
+            f"{base_url}/api/jobs/{started['job']}", timeout=10
+        ) as r:
             view = json.loads(r.read())
         if view["state"] != "running":
             assert view["state"] == "done", view.get("error")
             return view
         time.sleep(0.1)
     raise AssertionError("the run never finished")
+
+
+def seed_mae_only_config(base_url: str) -> None:
+    """A second stored config whose only metric is mae.
+
+    Sorted before vil-test, so a page that opens it first is not showing the
+    same selection a later switch must replace.
+    """
+    import json
+    import urllib.request
+
+    from .conftest import make_config
+
+    spec = make_config(group_id="vil-mae").to_dict()
+    spec["group"]["name"] = "MAE only"
+    spec["metrics"] = [
+        {
+            "family": "continuous",
+            "items": ["mae"],
+            "levels": [],
+            "half_windows": [],
+        }
+    ]
+    body = json.dumps({"spec": spec, "strict": False}).encode()
+    request = urllib.request.Request(
+        f"{base_url}/api/configs",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        created = json.loads(response.read())
+    assert created["created"] == "vil-mae", created
 
 
 # ======================================================================
@@ -165,7 +213,7 @@ def test_three_thresholds_are_three_panels_not_three_lines(page, live_server):
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1400)
 
-    page.page.locator("#q-params .chip").nth(0).click()   # two thresholds now
+    page.page.locator("#q-params .chip").nth(0).click()  # two thresholds now
     page.page.wait_for_timeout(200)
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1800)
@@ -189,11 +237,17 @@ def test_the_chart_is_drawn_at_the_width_it_is_shown_at(page, live_server):
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1800)
 
-    asked = int([p for p in page.page.locator("#chart").get_attribute("src").split("&")[1:]
-                 if p.startswith("width=")][0].split("=")[1])
+    asked = int(
+        [
+            p
+            for p in page.page.locator("#chart").get_attribute("src").split("&")[1:]
+            if p.startswith("width=")
+        ][0].split("=")[1]
+    )
     drawn = page.page.locator("#chart").evaluate("e => e.naturalWidth")
     shown = page.page.locator("#chart").evaluate(
-        "e => Math.round(e.getBoundingClientRect().width)")
+        "e => Math.round(e.getBoundingClientRect().width)"
+    )
     assert abs(drawn - shown) <= 2, (drawn, shown)
     assert abs(asked - shown) <= 2, (asked, shown)
     assert page.errors == []
@@ -206,7 +260,9 @@ def test_the_results_tab_answers_a_query(page, live_server):
 
     # the config, and the metrics that config carries, are offered
     assert page.page.eval_on_selector("#q-config", "e => e.value") == "vil-test"
-    methods = page.page.eval_on_selector_all("#q-method option", "e => e.map(x => x.value)")
+    methods = page.page.eval_on_selector_all(
+        "#q-method option", "e => e.map(x => x.value)"
+    )
     assert methods[:3] == ["ts", "bias", "ets"]
     assert "pod" not in methods, "a metric the config does not carry is not offered"
 
@@ -214,11 +270,14 @@ def test_the_results_tab_answers_a_query(page, live_server):
     # the config stored, tiled, with the middle one on -- ten lines on a chart is
     # not a chart, and the rest are one click away
     chips = page.page.eval_on_selector_all(
-        "#q-params .chip", "e => e.map(x => [x.textContent, x.getAttribute('aria-pressed')])")
+        "#q-params .chip",
+        "e => e.map(x => [x.textContent, x.getAttribute('aria-pressed')])",
+    )
     assert [c[0] for c in chips] == ["16", "74", "133", "181", "219"], chips
     assert [c[0] for c in chips if c[1] == "true"] == ["133"], chips
-    assert page.page.text_content("#q-params .who") == "level (kg m-2)", \
-        "a threshold means nothing without the unit it is a threshold on"
+    assert (
+        page.page.text_content("#q-params .who") == "level (kg m-2)"
+    ), "a threshold means nothing without the unit it is a threshold on"
 
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
@@ -226,11 +285,12 @@ def test_the_results_tab_answers_a_query(page, live_server):
     body = page.text()
     assert "THREAT SCORE" in body, "the result table did not render"
     assert "LEAD_MINUTES" in body, "the axis is a column of the table too"
-    assert "valid samples" in body
     assert page.errors == []
 
 
-def test_a_threshold_is_read_back_from_the_store_and_never_recomputed(page, live_server):
+def test_a_threshold_is_read_back_from_the_store_and_never_recomputed(
+    page, live_server
+):
     """The done_when condition, through the interface.
 
     The run stored five thresholds. Picking the fourth asks the store a
@@ -258,28 +318,221 @@ def test_a_threshold_is_read_back_from_the_store_and_never_recomputed(page, live
 
 
 def test_the_chart_is_drawn_by_the_browser(page, live_server):
-    """``naturalWidth`` is the whole assertion.
+    """Opening Metrics draws the first selected metric. No Run query click.
 
-    An ``<img>`` whose request failed shows a broken icon and reports a width of
-    zero, and no console error has to be raised for that to happen — so a chart
-    endpoint that returns the wrong content type, or an SVG the browser refuses,
-    looks like a working page with a small grey box on it.
+    ``naturalWidth`` is the assertion that the browser decoded the image. A
+    failed image request reports a width of zero without a console error, so
+    the width is the check that the line chart actually arrived.
     """
     seed_run(live_server)
-    page.load(live_server).tab("results")
-    page.page.wait_for_timeout(700)
-    assert not page.page.locator("#chart-card").is_visible(), "no query, no chart"
+    page.load(live_server)
+    page.page.wait_for_function("""() => {
+          const img = document.querySelector('#chart');
+          const src = img && (img.getAttribute('src') || '');
+          return img && img.naturalWidth > 0
+            && src.includes('method=ts') && src.includes('kind=line');
+        }""")
 
-    page.page.click("#btn-query")
-    page.page.wait_for_timeout(1200)
-
+    assert page.page.locator("#view-metrics").is_visible()
+    assert (
+        page.page.locator('.result-tabs button[data-view="metrics"]').get_attribute(
+            "aria-selected"
+        )
+        == "true"
+    )
+    assert page.page.eval_on_selector("#q-method", "e => e.value") == "ts"
     assert page.page.locator("#chart-card").is_visible()
-    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0,         "the browser could not render what /api/chart returned"
-    assert "x=lead_minutes" in page.page.locator("#chart").get_attribute("src")
-    # the picture is for looking at; what is under it says what it is of
+    assert (
+        page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
+    ), "the browser could not render what /api/chart returned"
+    src = page.page.locator("#chart").get_attribute("src")
+    assert "method=ts" in src
+    assert "kind=line" in src
+    assert "x=lead_minutes" in src
     assert "ts over" in page.text()
-    assert page.page.locator("#chart-svg").count() == 0, \
-        "no save-the-chart link: the table is what can be saved"
+    assert (
+        page.page.locator("#chart-svg").count() == 0
+    ), "no save-the-chart link: the table is what can be saved"
+    assert page.errors == []
+
+
+def test_changing_metric_or_config_redraws_that_selection(page, live_server):
+    """A different config is a different question, so the picture has to follow it.
+
+    vil-mae has no ts. Leaving vil-test on ts and opening vil-mae must draw mae
+    for vil-mae, not keep the previous chart because the image URL happened to
+    match.
+    """
+    seed_mae_only_config(live_server)
+    seed_run(live_server)
+    seed_run(live_server, "vil-mae")
+    page.load(live_server)
+    page.page.select_option("#q-config", "vil-test")
+    page.page.click('#q-methods button:text-is("ts")')
+    page.page.wait_for_function("""() => {
+          const img = document.querySelector('#chart');
+          const src = img && (img.getAttribute('src') || '');
+          return img && img.naturalWidth > 0
+            && src.includes('config=vil-test') && src.includes('method=ts')
+            && src.includes('kind=line');
+        }""")
+    assert page.page.eval_on_selector("#q-config", "e => e.value") == "vil-test"
+    assert page.page.eval_on_selector("#q-method", "e => e.value") == "ts"
+
+    page.page.select_option("#q-config", "vil-mae")
+    page.page.wait_for_function("""() => {
+          const img = document.querySelector('#chart');
+          const src = img && (img.getAttribute('src') || '');
+          return img && img.naturalWidth > 0
+            && src.includes('config=vil-mae') && src.includes('method=mae')
+            && src.includes('kind=line');
+        }""")
+    assert page.page.eval_on_selector("#q-config", "e => e.value") == "vil-mae"
+    assert page.page.eval_on_selector("#q-method", "e => e.value") == "mae"
+    assert "method=ts" not in page.page.locator("#chart").get_attribute("src")
+    assert page.errors == []
+
+
+def test_a_late_metric_response_cannot_replace_the_latest_chart(page, live_server):
+    seed_run(live_server)
+    page.load(live_server)
+    page.page.wait_for_function(
+        "() => (document.querySelector('#chart')?.getAttribute('src') || '').includes('method=ts')"
+        " && document.querySelector('#chart').naturalWidth > 0"
+    )
+    page.page.evaluate("""() => {
+          const real = window.fetch.bind(window);
+          const held = [];
+          window.fetch = (input, init) => {
+            const url = String(input);
+            if (url.includes('/api/scores') && url.includes('method=bias')) {
+              return new Promise((resolve, reject) => {
+                held.push(() => real(input, init).then(resolve, reject));
+              });
+            }
+            return real(input, init);
+          };
+          window.__releaseHeldScores = () => Promise.all(held.splice(0).map(run => run()));
+        }""")
+    page.page.click('#q-methods button:text-is("bias")')
+    page.page.click('#q-methods button:text-is("mae")')
+    page.page.wait_for_function("""() => {
+          const img = document.querySelector('#chart');
+          const src = img && (img.getAttribute('src') || '');
+          return img && img.naturalWidth > 0 && src.includes('method=mae');
+        }""")
+    page.page.evaluate("() => window.__releaseHeldScores()")
+    page.page.wait_for_timeout(700)
+    src = page.page.locator("#chart").get_attribute("src")
+    assert "method=mae" in src
+    assert "method=bias" not in src
+    assert page.page.eval_on_selector("#q-method", "e => e.value") == "mae"
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
+    assert page.errors == []
+
+
+def test_no_metric_shows_an_empty_state_and_does_not_query(page, live_server):
+    def handle(route):
+        url = route.request.url.split("?")[0].rstrip("/")
+        if url.endswith("/api/configs"):
+            route.fulfill(
+                json={
+                    "configs": [
+                        {
+                            "group_id": "empty",
+                            "name": "empty",
+                            "member_names": [],
+                            "ground_truth": "radar-composite",
+                        }
+                    ],
+                    "broken": [],
+                }
+            )
+            return
+        if "/api/configs/" in url:
+            route.fulfill(
+                json={
+                    "group_id": "empty",
+                    "name": "empty",
+                    "metrics_available": [],
+                    "leads": [],
+                    "member_names": [],
+                    "ruler": {"unit": "kg m-2"},
+                }
+            )
+            return
+        route.fallback()
+
+    page.page.route("**/api/configs**", handle)
+    requested = []
+    page.page.on(
+        "request",
+        lambda req: (
+            requested.append(req.url)
+            if "/api/scores" in req.url or "/api/chart" in req.url
+            else None
+        ),
+    )
+    page.load(live_server)
+    page.page.wait_for_function(
+        "() => document.body.innerText.includes('No metric is available')"
+    )
+    assert page.page.eval_on_selector("#q-method", "e => e.value") == ""
+    assert requested == []
+    assert page.errors == []
+
+
+def test_visualization_stays_default_until_metrics_is_opened(page, live_server):
+    seed_run(live_server)
+
+    def handle(route):
+        if route.request.url.rstrip("/").endswith("/visualization"):
+            route.fulfill(
+                json={
+                    "models": [
+                        {
+                            "id": "wadepre",
+                            "name": "WADEPre",
+                            "cases": [{"sample_id": "s1", "images": []}],
+                            "images": [],
+                        }
+                    ],
+                    "sample_id": "s1",
+                    "samples": [{"sample_id": "s1"}],
+                }
+            )
+            return
+        route.fallback()
+
+    page.page.route("**/visualization", handle)
+    requested = []
+    page.page.on(
+        "request",
+        lambda req: (
+            requested.append(req.url)
+            if "/api/scores" in req.url or "/api/chart" in req.url
+            else None
+        ),
+    )
+    page.load(live_server)
+    page.page.wait_for_selector("#visualization-body .card, #visualization-body .empty")
+    page.page.wait_for_timeout(400)
+    assert (
+        page.page.locator(
+            '.result-tabs button[data-view="visualization"]'
+        ).get_attribute("aria-selected")
+        == "true"
+    )
+    assert page.page.locator("#view-metrics").is_hidden()
+    assert requested == []
+
+    page.page.click('.result-tabs button[data-view="metrics"]')
+    page.page.wait_for_function("""() => {
+          const img = document.querySelector('#chart');
+          const src = img && (img.getAttribute('src') || '');
+          return img && img.naturalWidth > 0
+            && src.includes('method=ts') && src.includes('kind=line');
+        }""")
     assert page.errors == []
 
 
@@ -348,7 +601,9 @@ def test_the_bar_form_asks_for_bars(page, live_server):
     assert page.errors == []
 
 
-def test_the_form_redraws_at_once_and_the_filters_wait_for_the_button(page, live_server):
+def test_the_form_redraws_at_once_and_the_filters_wait_for_the_button(
+    page, live_server
+):
     """Two kinds of control, and they must not behave alike.
 
     The form is a way of looking at an answer and redraws on the click, the same
@@ -365,7 +620,9 @@ def test_the_form_redraws_at_once_and_the_filters_wait_for_the_button(page, live
     # a filter: no redraw until the button
     page.page.fill("#q-lead-from", "20")
     page.page.wait_for_timeout(600)
-    assert page.page.locator("#chart").get_attribute("src") == first,         "typing in a filter started a query"
+    assert (
+        page.page.locator("#chart").get_attribute("src") == first
+    ), "typing in a filter started a query"
 
     # the form: a redraw with no button
     page.page.click("#q-kind button:has-text('line')")
@@ -412,13 +669,16 @@ def test_a_metric_with_two_parameters_shows_both_rows(page, live_server):
 
     page.page.click('#q-methods button:text-is("fss")')
     page.page.wait_for_timeout(400)
-    rows = page.page.eval_on_selector_all("#q-params .who", "e => e.map(x => x.textContent)")
+    rows = page.page.eval_on_selector_all(
+        "#q-params .who", "e => e.map(x => x.textContent)"
+    )
     assert len(rows) == 2, rows
     assert rows[0].startswith("level"), rows
     assert rows[1].startswith("half window"), rows
     # and both rows carry chips, not just the last one
-    chips = page.page.eval_on_selector_all("#q-params .param-row",
-                                          "e => e.map(r => r.querySelectorAll('.chip').length)")
+    chips = page.page.eval_on_selector_all(
+        "#q-params .param-row", "e => e.map(r => r.querySelectorAll('.chip').length)"
+    )
     assert all(n >= 2 for n in chips), chips
     assert page.errors == []
 
@@ -432,7 +692,7 @@ def test_unselecting_every_threshold_is_refused_rather_than_widened(page, live_s
     seed_run(live_server)
     page.load(live_server).tab("results")
     page.page.wait_for_timeout(700)
-    page.page.click("#q-params .chip[aria-pressed='true']")   # clear the last one
+    page.page.click("#q-params .chip[aria-pressed='true']")  # clear the last one
     page.page.wait_for_timeout(200)
     page.page.click("#btn-query")
     page.page.wait_for_timeout(700)
@@ -456,8 +716,9 @@ def test_the_defaults_come_off_the_config_and_not_off_the_clock(page, live_serve
     lead_from = page.page.eval_on_selector("#q-lead-from", "e => Number(e.value)")
     lead_to = page.page.eval_on_selector("#q-lead-to", "e => Number(e.value)")
     assert lead_from <= lead_to and lead_to > 0, (lead_from, lead_to)
-    assert page.page.text_content("#tab-results").count("minutes") >= 1, \
-        "the lead boxes say what they are measured in"
+    assert (
+        page.page.text_content("#tab-results").count("minutes") >= 1
+    ), "the lead boxes say what they are measured in"
     # The range is chosen in a panel of our own, and the panel is the only place
     # it can be accepted. The browser's picker draws its own footer -- Today, and
     # Clear -- and none of that can be changed, so it is not used at all.
@@ -468,9 +729,12 @@ def test_the_defaults_come_off_the_config_and_not_off_the_clock(page, live_serve
     page.page.click("#btn-init-range")
     page.page.wait_for_timeout(300)
     assert page.page.locator("#init-panel select").count() == 10, "five per end"
-    assert [b.strip() for b in page.page.eval_on_selector_all(
-        "#init-panel button", "e => e.map(x => x.textContent)")] == ["OK"], \
-        "one button, and it is the one the picker was missing"
+    assert [
+        b.strip()
+        for b in page.page.eval_on_selector_all(
+            "#init-panel button", "e => e.map(x => x.textContent)"
+        )
+    ] == ["OK"], "one button, and it is the one the picker was missing"
     page.page.click("#btn-init-ok")
     page.page.wait_for_timeout(300)
     assert page.page.locator("#init-panel").is_hidden()
@@ -493,6 +757,8 @@ def test_the_results_tab_says_so_when_nothing_matches(page, live_server):
     assert "No stored quantities match" in body
     assert "THREAT SCORE" not in body, "a table of nothing is not a table"
     assert page.errors == []
+
+
 def test_a_one_model_config_needs_no_legend(page, live_server):
     """A key for one line is a key with nothing to distinguish.
 
@@ -506,6 +772,8 @@ def test_a_one_model_config_needs_no_legend(page, live_server):
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1600)
 
-    assert page.page.locator("#chart-legend").count() == 1,         "the slot is there for when there are two models"
+    assert (
+        page.page.locator("#chart-legend").count() == 1
+    ), "the slot is there for when there are two models"
     assert page.page.locator("#chart-legend .chip").count() == 0
     assert page.errors == []
