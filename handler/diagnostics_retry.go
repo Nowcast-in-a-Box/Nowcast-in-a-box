@@ -69,13 +69,8 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		config["metrics"] = groups
 		config["verification_models"] = selection.Models
 	}
-	needsBasemap := dataResource.VisualizationBasemap
 	if selection.Visualization {
-		if needsBasemap && !s.basemapReady() {
-			runtimeError(w, 409, fmt.Errorf("prepare the offline global terrain and WMO basemap cache"))
-			return
-		}
-		config["visualization"] = map[string]any{"models": selection.Models, "basemap": "/basemap"}
+		config["visualization"] = map[string]any{"models": selection.Models}
 	}
 	if len(selection.Methods) == 0 && !selection.Visualization {
 		runtimeError(w, 422, fmt.Errorf("select at least one diagnostic"))
@@ -110,7 +105,7 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		runtimeError(w, 409, fmt.Errorf("wait for queued jobs"))
 		return
 	}
-	operation, err := s.prepareDiagnostics(id, config, selection.Visualization && needsBasemap)
+	operation, err := s.prepareDiagnostics(id, config)
 	if err != nil {
 		s.executionMu.Unlock()
 		runtimeError(w, 500, err)
@@ -146,7 +141,7 @@ func saveOperation(path string, state DiagnosticOperation) error {
 }
 
 // The caller owns executionMu, for both initial diagnostics and an explicit retry.
-func (s *Server) prepareDiagnostics(id string, config map[string]any, basemap bool) (DiagnosticOperation, error) {
+func (s *Server) prepareDiagnostics(id string, config map[string]any) (DiagnosticOperation, error) {
 	attempt, err := newRunID(time.Now())
 	if err != nil {
 		return DiagnosticOperation{}, err
@@ -172,9 +167,6 @@ func (s *Server) prepareDiagnostics(id string, config map[string]any, basemap bo
 	requestPath := "/run/logs/diagnostics-" + attempt + "/request.json"
 	volumes := []string{}
 	for _, mount := range diagnostics.Container.Mounts {
-		if mount.Name == "basemap" && !basemap {
-			continue
-		}
 		host, err := s.mountHost(mount.Name, "", "", directory, "", "")
 		if err != nil {
 			return state, err

@@ -127,3 +127,24 @@ real-cache tests need the documented basemap paths. Missing caches mean those
 checks have not been established.
 
 Do not commit inputs, weights, basemap caches or generated run outputs.
+
+## Bundled global display basemap
+
+The runtime image includes `/basemap/viewer/` (terrain COG and WMO tiles) and
+`/basemap/metadata/` (original attribution, terms and acquisition records).
+Each file is checked against `SHA256SUMS` during the diagnostics image build.
+No user-side basemap download or mount is required; inference/diagnostics remain
+offline. Original ETOPO files and acquisition caches are not included.
+
+Maintainers prepare a display bundle, then package it with:
+
+```sh
+python scripts/package-basemap.py --source artifacts/basemap/wmo --output /tmp/nib-basemap-assets
+docker build -f diagnostics/basemap.Dockerfile -t ghcr.io/nowcast-in-a-box/nib-diagnostics:basemap-20261025 /tmp/nib-basemap-assets
+```
+
+Publish the versioned data-image tag before building the runtime Dockerfile.
+It is a build input, not an additional image end users need to pull. Keep the
+published data tag immutable; the default `BASEMAP_IMAGE` can be overridden by
+maintainers for a newly verified bundle. Source terms remain separate from NiB
+code licensing; the image retains NOAA and WMO attribution and disclaimers.

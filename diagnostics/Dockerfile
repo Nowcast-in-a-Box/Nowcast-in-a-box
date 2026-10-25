@@ -1,4 +1,7 @@
-# Build from the resources root: docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow .
+# Build from the resources root: docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow-basemap-v1 .
+ARG BASEMAP_IMAGE=ghcr.io/nowcast-in-a-box/nib-diagnostics:basemap-20261025
+FROM ${BASEMAP_IMAGE} AS basemap
+
 FROM node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS map-viewer
 WORKDIR /viewer
 COPY diagnostics/visualization/viewer/package*.json ./
@@ -13,6 +16,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY diagnostics/requirements.txt /tmp/diagnostics.lock
 RUN pip install --no-cache-dir -r /tmp/diagnostics.lock
+COPY --from=basemap /basemap/ /basemap/
+RUN cd /basemap && sha256sum --quiet -c SHA256SUMS
 COPY diagnostics/visualization /app/diagnostics/visualization
 COPY diagnostics/verification /app/diagnostics/verification
 RUN pip install --no-cache-dir --no-deps /app/diagnostics/visualization /app/diagnostics/verification

@@ -102,28 +102,14 @@ func (s *Server) ensureDiagnosticsViewer(runID string, inspectManifest bool) err
 	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
 		return fmt.Errorf("read diagnostics result manifest: %w", err)
 	}
-	mapResult := false
 	reportEntry := ""
 	for _, attempt := range manifest.Diagnostics {
-		if attempt.Kind == "visualization" && (attempt.Status == "succeeded" || attempt.Status == "partial") && filepath.Base(attempt.Entry) == "viewer.json" {
-			mapResult = true
-		}
 		if attempt.Kind == "report" && (attempt.Status == "succeeded" || attempt.Status == "partial") {
 			reportEntry = attempt.Entry
 		}
 	}
-	if reusable && (!mapResult || s.diagnosticsViewerHasBasemap) && reportEntry == s.diagnosticsViewerReport {
+	if reusable && reportEntry == s.diagnosticsViewerReport {
 		return nil
-	}
-	if mapResult {
-		if !s.basemapReady() {
-			return fmt.Errorf("prepare the offline global terrain and WMO basemap cache")
-		}
-		basemap, err := s.mountHost("basemap", "", "", runDir, "", "")
-		if err != nil {
-			return err
-		}
-		args = append(args, "-v", volumeSpec(basemap, "/basemap", true))
 	}
 	args = append(args,
 		"--entrypoint", "python",
@@ -132,9 +118,6 @@ func (s *Server) ensureDiagnosticsViewer(runID string, inspectManifest bool) err
 		"--run", "/run",
 		"--port", port,
 	)
-	if mapResult {
-		args = append(args, "--basemap", "/basemap")
-	}
 	s.stopDiagnosticsViewerLocked()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -147,7 +130,6 @@ func (s *Server) ensureDiagnosticsViewer(runID string, inspectManifest bool) err
 	}
 	s.diagnosticsViewerRun = runID
 	s.diagnosticsViewerContainer = name
-	s.diagnosticsViewerHasBasemap = mapResult
 	s.diagnosticsViewerReport = reportEntry
 	if err := s.waitDiagnosticsViewer(ctx); err != nil {
 		s.stopDiagnosticsViewerLocked()
@@ -198,7 +180,6 @@ func (s *Server) stopDiagnosticsViewerLocked() {
 	name := s.diagnosticsViewerContainer
 	s.diagnosticsViewerContainer = ""
 	s.diagnosticsViewerRun = ""
-	s.diagnosticsViewerHasBasemap = false
 	s.diagnosticsViewerReport = ""
 	if name == "" {
 		return

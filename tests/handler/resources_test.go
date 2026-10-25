@@ -149,7 +149,7 @@ func TestResourcesPrepareCopiesMissingWeightFromLocalSource(t *testing.T) {
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Paths.WeightSource, _ = filepath.Abs(source)
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "ready")
@@ -182,7 +182,7 @@ func TestResourcesSkipWeightCopyWhenSHAAlreadyMatches(t *testing.T) {
 	cfg.Paths.Artifacts = artifacts
 	cfg.Paths.WeightSource = t.TempDir()
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	waitForExecution(t, server, "ready")
@@ -201,7 +201,7 @@ func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "failed")
@@ -223,7 +223,7 @@ func TestResourcesExplainMissingWeightSource(t *testing.T) {
 	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = t.TempDir()
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "failed")
@@ -249,7 +249,7 @@ func TestResourcesPrepareEmbeddedModelWithoutHostWeights(t *testing.T) {
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Paths.WeightSource = ""
 	server := resourceServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{"nib-diagnostics:automatic-flow": true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo-embedded": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo-embedded": true}}
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	waitForExecution(t, server, "ready")
 	if _, err := os.Stat(filepath.Join(cfg.Paths.Artifacts, "cma_radar", "nowcastnet", "NowcastNet.onnx")); !os.IsNotExist(err) {

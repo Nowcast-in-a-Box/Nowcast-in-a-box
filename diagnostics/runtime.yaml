@@ -1,7 +1,7 @@
 schema: nib.resource.v1
 kind: diagnostics
 container:
-  image: nib-diagnostics:automatic-flow
+  image: nib-diagnostics:automatic-flow-basemap-v1
   build:
     context: "."
     dockerfile: diagnostics/Dockerfile
@@ -14,5 +14,3 @@ container:
       target: /run/inputs
     - name: forecasts
       target: /run/forecasts
-    - name: basemap
-      target: /basemap

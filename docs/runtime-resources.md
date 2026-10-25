@@ -62,7 +62,6 @@ verification:
   level_min: 0
   level_max: 75
   unit: dBZ
-visualization_basemap: true
 container:
   image: nib-ingestion:cma-demo
   build:
@@ -116,7 +115,7 @@ data source.
 schema: nib.resource.v1
 kind: diagnostics
 container:
-  image: nib-diagnostics:automatic-flow
+  image: nib-diagnostics:automatic-flow-basemap-v1
   build:
     context: "."
     dockerfile: diagnostics/Dockerfile
@@ -129,21 +128,14 @@ container:
       target: /run/inputs
     - name: forecasts
       target: /run/forecasts
-    - name: basemap
-      target: /basemap
 ```
 
 `{{request}}` is replaced with the absolute path inside the mounted run
-directory. The `basemap` mount is omitted for data sources with
-`visualization_basemap: false`.
-
-The global map requires a prepared `artifacts/basemap/wmo/viewer/` cache in
-addition to the WMO `acquisition.json`. Its `basemap.json` references the terrain
-COG and physical WMO tiles; missing files and paths escaping the cache block
-visualization before execution. Metrics-only requests do not need a basemap.
-The result viewer mounts this same cache read-only when a run has map bundles.
-Maintainers prepare it using explicit, checksum-verified ETOPO/WMO inputs; see
-[global map preparation](../diagnostics/visualization/docs/map_viewer.md).
+directory. The diagnostics image contains the global terrain COG, WMO tiles and
+source notices under `/basemap/`; computation and the result viewer use that
+same read-only image content. No host basemap mount or data-source flag is used.
+Maintainers prepare the display assets using explicit, checksum-verified inputs;
+see [global map preparation](../diagnostics/visualization/docs/map_viewer.md).
 
 ## Allowed mounts
 
@@ -155,7 +147,6 @@ Maintainers prepare it using explicit, checksum-verified ETOPO/WMO inputs; see
 | `inputs` | `runs/<run-id>/inputs` |
 | `forecasts` | `runs/<run-id>/forecasts` |
 | `weights` | `artifacts/<data-id>/<model-id>/<file>` |
-| `basemap` | `artifacts/basemap/wmo` |
 
 Mount targets must be absolute container paths. Writes are read-only unless
 `write: true`. The Handler appends no implicit mounts except the job workspace

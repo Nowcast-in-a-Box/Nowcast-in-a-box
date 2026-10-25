@@ -108,7 +108,7 @@ def test_conflict_external_url_and_failed_export_do_not_succeed(tmp_path, monkey
 
 def test_missing_basemap_and_bad_hash_do_not_record_success(tmp_path):
     directory, forecast = _run(tmp_path, projected=False)
-    with pytest.raises(FileNotFoundError, match="prepare the offline global terrain"):
+    with pytest.raises(FileNotFoundError):
         visualization(directory, "nowcastnet", tmp_path / "missing")
     assert StoredFields(directory).manifest["diagnostics"] == []
 

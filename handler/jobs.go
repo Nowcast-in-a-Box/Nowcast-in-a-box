@@ -229,15 +229,6 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 409, err)
 		return
 	}
-	dataResource, err := s.dataResource(request.DataID)
-	if err != nil {
-		runtimeError(w, 409, err)
-		return
-	}
-	if request.Visualization && dataResource.VisualizationBasemap && !s.basemapReady() {
-		runtimeError(w, 409, fmt.Errorf("prepare the offline global terrain and WMO basemap cache"))
-		return
-	}
 	if len(s.Config.Runtime.AtlasRevision) != 40 {
 		runtimeError(w, 409, fmt.Errorf("configure the pinned atlas revision first"))
 		return
@@ -463,11 +454,6 @@ func (s *Server) executeJob(id string) {
 		s.updateJob(id, "failed", "preflight", err)
 		return
 	}
-	dataResource, err := s.dataResource(request.DataID)
-	if err != nil {
-		s.updateJob(id, "failed", "preflight", err)
-		return
-	}
 	// Ingestion creates a child run inside the job workspace, then publishes its contents.
 	args, err := s.dataCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 	if err != nil {
@@ -556,9 +542,9 @@ func (s *Server) executeJob(id string) {
 		config["verification_models"] = request.VerificationModels
 	}
 	if request.Visualization {
-		config["visualization"] = map[string]any{"models": request.VisualizationModels, "basemap": "/basemap"}
+		config["visualization"] = map[string]any{"models": request.VisualizationModels}
 	}
-	operation, err := s.prepareDiagnostics(id, config, request.Visualization && dataResource.VisualizationBasemap)
+	operation, err := s.prepareDiagnostics(id, config)
 	if err != nil {
 		s.updateJob(id, "partial", "diagnostics", err)
 		return
@@ -646,11 +632,6 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	data, catalog, err := s.dataPaths(request.DataID)
-	if err != nil {
-		s.updateJob(id, "failed", "preflight", err)
-		return
-	}
-	dataResource, err := s.dataResource(request.DataID)
 	if err != nil {
 		s.updateJob(id, "failed", "preflight", err)
 		return
@@ -771,9 +752,9 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 		config["verification_models"] = request.VerificationModels
 	}
 	if request.Visualization {
-		config["visualization"] = map[string]any{"models": request.VisualizationModels, "basemap": "/basemap"}
+		config["visualization"] = map[string]any{"models": request.VisualizationModels}
 	}
-	operation, err := s.prepareDiagnostics(id, config, request.Visualization && dataResource.VisualizationBasemap)
+	operation, err := s.prepareDiagnostics(id, config)
 	if err != nil {
 		s.updateJob(id, "partial", "diagnostics", err)
 		return
