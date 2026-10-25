@@ -159,3 +159,9 @@ foreground Handler path when no service is running. `start`, `connect` and
 `restart` can use that path; another invocation can query or stop it. They do
 not claim macOS-style terminal-independent persistence. Cross-builds and command
 regressions are not native platform acceptance.
+
+The CLI lifecycle regressions also run inside a Linux Go 1.22 container:
+`start`, `connect`, and `restart` start real child processes that the parent
+authenticates and stops. Both test child entrypoints must inherit the parent's
+isolated HOME/cache; resetting it in `TestMain` makes local control lose the
+child's session. This checks Linux CLI execution, not desktop URI integration.
