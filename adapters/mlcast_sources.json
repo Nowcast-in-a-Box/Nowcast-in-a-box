@@ -1,0 +1,65 @@
+{
+  "radklim_hourly": {
+    "source": "mlcast_radklim_hourly",
+    "title": "Germany DWD RADKLIM hourly",
+    "variable": "rainfall_amount",
+    "units_hint": "mm",
+    "cadence_minutes": 60,
+    "s3_path": "mlcast-source-datasets/radklim/v0.1.1/hourly.zarr",
+    "example_initial_time": "2010-01-02T12:00:00Z"
+  },
+  "radklim_5_minutes": {
+    "source": "mlcast_radklim_5_minutes",
+    "title": "Germany DWD RADKLIM 5 min",
+    "variable": "rainfall_amount",
+    "units_hint": "mm",
+    "cadence_minutes": 5,
+    "s3_path": "mlcast-source-datasets/radklim/v0.1.1/5_minutes.zarr",
+    "example_initial_time": "2010-01-02T12:00:00Z"
+  },
+  "dmi_10_minutes": {
+    "source": "mlcast_dmi_10_minutes",
+    "title": "Denmark DMI radar reflectivity",
+    "variable": "dbz",
+    "units_hint": "dBZ",
+    "cadence_minutes": 10,
+    "s3_path": "mlcast-source-datasets/dmi/v0.1.2/dmi_10_minutes.zarr",
+    "example_initial_time": "2024-12-31T12:00:00Z"
+  },
+  "it_dpc_sri_5min": {
+    "source": "mlcast_it_dpc_sri_5min",
+    "title": "Italy DPC surface rainfall intensity",
+    "variable": "RR",
+    "units_hint": "mm/h",
+    "cadence_minutes": 5,
+    "s3_path": "mlcast-source-datasets/IT-DPC-SRI/v0.1.0/italian-radar-dpc-sri.zarr",
+    "example_initial_time": "2023-07-01T12:00:00Z"
+  },
+  "uk_metoffice_5min": {
+    "source": "mlcast_uk_metoffice_5min",
+    "title": "UK Met Office radar precipitation",
+    "variable": "RR",
+    "units_hint": "mm/h",
+    "cadence_minutes": 5,
+    "s3_path": "mlcast-source-datasets/UK-METOFFICE-RADAR/v0.1.0/uk-metoffice-c-band-rain-radar.zarr",
+    "example_initial_time": "2020-10-03T12:00:00Z"
+  },
+  "be_rmi_radclim_mfb_5min": {
+    "source": "mlcast_be_rmi_radclim_mfb_5min",
+    "title": "Belgium RMI RADCLIM MFB",
+    "variable": "rain_rate",
+    "units_hint": "mm/h",
+    "cadence_minutes": 5,
+    "s3_path": "mlcast-source-datasets/radar_precipitation/BE-RMI-radclim-mfb/v0.1.1/5_minutes.zarr",
+    "example_initial_time": "2021-07-14T16:00:00Z"
+  },
+  "fr_mf_prate_5min": {
+    "source": "mlcast_fr_mf_prate_5min",
+    "title": "France Meteo-France radar precipitation",
+    "variable": "prate",
+    "units_hint": "mm/h",
+    "cadence_minutes": 5,
+    "s3_path": "mlcast-source-datasets/FR-MF-prate/v0.1.0/fr-mf-prate-5min.zarr",
+    "example_initial_time": "2022-07-01T12:00:00Z"
+  }
+}

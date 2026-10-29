@@ -1,0 +1,31 @@
+{
+  "id": "mlcast_dmi_10_minutes",
+  "version": "1.0.0",
+  "path": "mlcast_dmi_10_minutes",
+  "title": "Denmark DMI radar reflectivity",
+  "instrument": "radar composite",
+  "requirements": "mlcast_dmi_10_minutes/requirements.txt",
+  "channels": {
+    "mode": "closed",
+    "variables": [
+      {
+        "id": "dbz",
+        "long_name": "radar_reflectivity",
+        "units": "dBZ"
+      }
+    ]
+  },
+  "spatial": {
+    "crop": true,
+    "bbox_order": [
+      "west",
+      "south",
+      "east",
+      "north"
+    ]
+  },
+  "native_cadence_minutes": 10,
+  "formats": [
+    "zarr"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "mlcast_it_dpc_sri_5min",
+  "version": "1.0.0",
+  "path": "mlcast_it_dpc_sri_5min",
+  "title": "Italy DPC surface rainfall intensity",
+  "instrument": "radar composite",
+  "requirements": "mlcast_it_dpc_sri_5min/requirements.txt",
+  "channels": {
+    "mode": "closed",
+    "variables": [
+      {
+        "id": "RR",
+        "long_name": "surface_rainfall_intensity",
+        "units": "mm/h"
+      }
+    ]
+  },
+  "spatial": {
+    "crop": true,
+    "bbox_order": [
+      "west",
+      "south",
+      "east",
+      "north"
+    ]
+  },
+  "native_cadence_minutes": 5,
+  "formats": [
+    "zarr"
+  ]
+}

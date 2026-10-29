@@ -1,0 +1,31 @@
+{
+  "id": "mlcast_fr_mf_prate_5min",
+  "version": "1.0.0",
+  "path": "mlcast_fr_mf_prate_5min",
+  "title": "France Meteo-France radar precipitation",
+  "instrument": "radar composite",
+  "requirements": "mlcast_fr_mf_prate_5min/requirements.txt",
+  "channels": {
+    "mode": "closed",
+    "variables": [
+      {
+        "id": "prate",
+        "long_name": "rainfall_rate",
+        "units": "mm/h"
+      }
+    ]
+  },
+  "spatial": {
+    "crop": true,
+    "bbox_order": [
+      "west",
+      "south",
+      "east",
+      "north"
+    ]
+  },
+  "native_cadence_minutes": 5,
+  "formats": [
+    "zarr"
+  ]
+}
