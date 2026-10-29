@@ -1,0 +1,31 @@
+{
+  "id": "mlcast_radklim_hourly",
+  "version": "1.0.0",
+  "path": "mlcast_radklim_hourly",
+  "title": "Germany DWD RADKLIM hourly",
+  "instrument": "radar composite",
+  "requirements": "mlcast_radklim_hourly/requirements.txt",
+  "channels": {
+    "mode": "closed",
+    "variables": [
+      {
+        "id": "rainfall_amount",
+        "long_name": "radar-derived_hourly_precipitation_amount",
+        "units": "mm"
+      }
+    ]
+  },
+  "spatial": {
+    "crop": true,
+    "bbox_order": [
+      "west",
+      "south",
+      "east",
+      "north"
+    ]
+  },
+  "native_cadence_minutes": 60,
+  "formats": [
+    "zarr"
+  ]
+}
