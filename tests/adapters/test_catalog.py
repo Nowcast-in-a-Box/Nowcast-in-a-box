@@ -11,7 +11,13 @@ ROOT = Path(__file__).resolve().parents[2]
 ADAPTERS = ROOT / "adapters"
 CONTRACTS = ROOT / "contracts"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
-IDS = ("cma_radar", "gk2a", "himawari9", "fy4b", "mtg", "sevir")
+IDS = ("cma_radar", "gk2a", "himawari9", "fy4b", "mtg", "sevir") + tuple(
+    f"mlcast_{item}" for item in (
+        "radklim_hourly", "radklim_5_minutes", "dmi_10_minutes",
+        "it_dpc_sri_5min", "uk_metoffice_5min", "be_rmi_radclim_mfb_5min",
+        "fr_mf_prate_5min",
+    )
+)
 
 
 def _load(path: Path) -> dict:
@@ -42,7 +48,14 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual(item[key], contract[key], f"{item['id']}.{key}")
             self.assertTrue((ADAPTERS / item["path"] / "source.py").is_file())
             requirements = (ADAPTERS / item["requirements"]).read_text()
-            self.assertNotIn(">=", requirements)
+            # A Python environment marker (e.g. python_version >= "3.9")
+            # is not an unpinned runtime dependency. Check only package specs.
+            package_specs = [
+                line.split(";", 1)[0].strip()
+                for line in requirements.splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+            self.assertTrue(all(">=" not in line for line in package_specs))
             if item["id"] == "cma_radar":
                 self.assertEqual(
                     [model["id"] for model in item["models"]], ["nowcastnet"]
@@ -58,6 +71,10 @@ class CatalogTests(unittest.TestCase):
                     [model["id"] for model in item["models"]],
                     ["nowcastnet", "exprecast", "wadepre"],
                 )
+            elif item["id"].startswith("mlcast_"):
+                self.assertIn("zarr==", requirements)
+                self.assertNotIn("satpy", requirements)
+                self.assertEqual(item["models"], [])
             else:
                 self.assertIn("satpy==", requirements)
                 self.assertEqual(item["models"], [])

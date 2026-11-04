@@ -1,0 +1,31 @@
+{
+  "id": "mlcast_be_rmi_radclim_mfb_5min",
+  "version": "1.0.0",
+  "path": "mlcast_be_rmi_radclim_mfb_5min",
+  "title": "Belgium RMI RADCLIM MFB",
+  "instrument": "radar composite",
+  "requirements": "mlcast_be_rmi_radclim_mfb_5min/requirements.txt",
+  "channels": {
+    "mode": "closed",
+    "variables": [
+      {
+        "id": "rain_rate",
+        "long_name": "bias_corrected_rainfall_rate",
+        "units": "mm/h"
+      }
+    ]
+  },
+  "spatial": {
+    "crop": true,
+    "bbox_order": [
+      "west",
+      "south",
+      "east",
+      "north"
+    ]
+  },
+  "native_cadence_minutes": 5,
+  "formats": [
+    "zarr"
+  ]
+}
