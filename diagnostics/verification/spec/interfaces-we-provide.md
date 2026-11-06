@@ -227,3 +227,53 @@ print(stats.as_dict(), len(result["rows"]))
 - 库表由 `Store` 打开时自动创建（`nib_verify/store/schema.sql`）。
 - 包版本见 `nib_verify.__version__`。
 - 已核验：真实数据一次 run 的产物与上游既有产物 **3653 个数值逐值零差异**。
+
+---
+
+## 11. 数据到达探针（`nib_verify.monitor`）
+
+检验结果能回答"这一帧算过没有"，回答不了"这一帧到底到没到"。这两件事必须分开，
+否则页面上的空白分不清是**数据缺失**还是**程序没跑**。探针就是去问数据源的那一端。
+
+### 调用
+
+```python
+from nib_verify.monitor import probe_arrivals
+
+stats = probe_arrivals(access, store, cfg, *, since=None, until=None,
+                       window_hours=6.0, dataset=None)
+```
+
+```bash
+python -m nib_verify probe --config <config.json> --root <store 目录>     --access http --data-url http://<数据服务> --window-hours 6
+```
+
+| | |
+|---|---|
+| `access` | 任意 field-access 实现（探针要用**能问数据源的**那个，通常 `http`）|
+| 窗口 | 默认"现在往前 6 小时"，按 `ruler.time_step_minutes` 逐帧走 |
+| 写入 | `arrival(valid_time, dataset, kind, state, checked_at)`，`state` = `arrived` / `missing` |
+| 幂等 | 同一窗口跑多少次，表里结果一样（`ON CONFLICT DO UPDATE`）|
+| 返回 | `expected / arrived / missing / written` + `messages` |
+| 失败 | 数据源不可用时返回 `messages` 里记原因，**不抛异常**——源挂了是一次发现，不是一次崩溃 |
+| 退出码 | 有缺帧 → 1；全到 → 0 |
+
+### 上游必须提供三样
+
+| # | 提供什么 | 为什么 |
+|---|---|---|
+| ① | **可问的数据服务**：`GET /observations?name=&t0=&t1=`（规范见 `field-access-http.md`）| 探针要能独立于 run 问"这段时间有哪些帧" |
+| ② | **定时触发**：cron 或 handler 定时作业，每 10 分钟～1 小时调一次 | 探针是一次采样，不是常驻进程 |
+| ③ | **持久库**：`arrival` 表所在库要跨 run 累积 | 否则探针记录跟着 run 一起消失 |
+
+`arrival` 表**不带 `group_id`**：某帧到没到是数据源的属性，不是哪个配置的属性。
+
+### 有/没有探针数据，页面怎么表现
+
+| | 观测完整性 | 能否区分"未到 / 未跑" |
+|---|---|---|
+| 有 `arrival` 行 | 直接来自探针 | ✅ 能（`missing` = 未到；`arrived` 但无任务 = 未跑）|
+| 无 `arrival` 行 | 由既有结果反推 | ❌ 不能，页面按"无记录"显示 |
+
+页面的 `cause` 字段就是给这个用的：`null` 表示"不知道"，`missing_data` / `not_run`
+表示探针已经给出了答案。前端不需要因为探针上线而改。

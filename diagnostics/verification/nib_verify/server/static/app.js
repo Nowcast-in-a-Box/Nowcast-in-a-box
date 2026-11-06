@@ -107,13 +107,15 @@ function showView(name) {
   for (const button of $$(".result-tabs button")) {
     button.setAttribute("aria-selected", String(button.dataset.view === name));
   }
-<<<<<<< HEAD
   if (name !== "visualization") disposeVisualization();
   else if (state.visualization) renderVisualization(state.visualization, $("#viz-sample")?.value || state.visualization.sample_id);
   if (name === "metrics") {
     renderKindChips();
     syncMethodChips();
     openMetrics().catch(() => {});
+  }
+  if (name === "coverage") {
+    loadIntegrity();
   }
 }
 
@@ -131,10 +133,6 @@ function openMetrics() {
   });
   metricsReady = pending;
   return pending;
-=======
-  if (name === "metrics") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
-  if (name === "coverage") { loadIntegrity(); }
->>>>>>> 1afb003 (feat(review): a completeness page -- table, daily curve, day grid)
 }
 
 $$(".result-tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
