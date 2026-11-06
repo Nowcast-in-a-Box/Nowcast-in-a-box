@@ -15,6 +15,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from ..core.quantities import FAMILIES
 
+ARRIVAL_PATH = Path(__file__).with_name("schema-arrival.sql")
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 UTC = timezone.utc
@@ -114,6 +115,13 @@ class Store:
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='task'"
         ).fetchone():
             self.conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        # Tables added after a store already exists are applied one by one and
+        # only when absent: a store written before `arrival` existed has to gain
+        # it, and a store that has it must not be touched on every open.
+        if not self.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='arrival'"
+        ).fetchone():
+            self.conn.executescript(ARRIVAL_PATH.read_text(encoding="utf-8"))
         self.conn.commit()
 
     def _refuse_an_older_layout(self) -> None:
@@ -276,6 +284,39 @@ class Store:
             (group_id,),
         ).fetchall()
         return {r["state"]: int(r["n"]) for r in rows}
+
+    # -- arrivals ------------------------------------------------------
+    def mark_arrival(self, *, valid_time: str, dataset: str, kind: str,
+                     state: str, checked_at: str) -> None:
+        """One frame of one dataset: arrived or missing, as of ``checked_at``."""
+        self.conn.execute(
+            "INSERT INTO arrival (valid_time, dataset, kind, state, checked_at)"
+            " VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(valid_time, dataset) DO UPDATE SET"
+            " state = excluded.state, checked_at = excluded.checked_at",
+            (valid_time, dataset, kind, state, checked_at),
+        )
+
+    def arrivals(self, dataset: str, *, start: str, stop: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT valid_time, kind, state, checked_at FROM arrival"
+            " WHERE dataset = ? AND valid_time >= ? AND valid_time < ?"
+            " ORDER BY valid_time",
+            (dataset, start, stop),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def arrival_counts(self, dataset: str, *, start: str, stop: str) -> dict[str, int]:
+        rows = self.conn.execute(
+            "SELECT state, COUNT(*) AS n FROM arrival"
+            " WHERE dataset = ? AND valid_time >= ? AND valid_time < ? GROUP BY state",
+            (dataset, start, stop),
+        ).fetchall()
+        return {r["state"]: int(r["n"]) for r in rows}
+
+    def arrival_checked_at(self) -> str | None:
+        row = self.conn.execute("SELECT max(checked_at) FROM arrival").fetchone()
+        return str(row[0]) if row and row[0] else None
 
     # -- observation gaps ----------------------------------------------
     def mark_obs_gap(self, group_id: str, obs_name: str, valid_time: str) -> None:
