@@ -45,6 +45,7 @@ from ..config.schema import (
 from ..core.metrics import list_families, list_metrics as metric_list
 from ..core.planner import plan as plan_tasks
 from ..core.planner import planned_runs
+from ..query.integrity import daily_series, day_detail, integrity
 from ..query.service import QueryError, available_expansions, query_scores
 from ..runner.executor import RunRef, run_tasks
 from ..runner.lock import Locked, SingleInstanceLock
@@ -464,6 +465,63 @@ def create_app(
                 limit=int(params.get("limit") or 20000),
             ))
         return result
+
+    @app.get("/api/integrity")
+    def get_integrity(request: Request):
+        """The table: one row per dataset, all time and the last seven days."""
+        config_id = request.query_params.get("config")
+        if not config_id:
+            raise QueryError("config is required")
+        cfg = library.get(config_id)
+        # Not memoised: the cache stamp is file size, and deleting rows does not
+        # move it, so a punched store would keep showing yesterday's numbers.
+        # The aggregation itself is one SQL pass (under a second).
+        with store() as s:
+            return integrity(s, cfg)
+
+    @app.get("/api/integrity/daily.svg")
+    def get_integrity_daily(request: Request):
+        """One value per day for one dataset -- the curve under the number."""
+        from ..report.integrity import daily_curve_svg
+
+        params = request.query_params
+        config_id, dataset = params.get("config"), params.get("dataset")
+        if not config_id or not dataset:
+            raise QueryError("config and dataset are required")
+        days = params.get("days")
+        cfg = library.get(config_id)
+        with store() as s:
+            series = daily_series(s, cfg, dataset=dataset,
+                                  days=int(days) if days and days.isdigit() else None)
+        title = f"{dataset} · daily completeness"
+        if days and days.isdigit():
+            title += f" · last {days} days"
+        return Response(daily_curve_svg(series, width=_int_param(params, "width", 620),
+                                        height=_int_param(params, "height", 200),
+                                        title=title),
+                        media_type="image/svg+xml")
+
+    @app.get("/api/integrity/day.svg")
+    def get_integrity_day(request: Request):
+        """Inside one day: observation frames, or the init x lead mesh."""
+        from ..report.integrity import mesh_svg, obs_mesh_svg
+
+        params = request.query_params
+        config_id, dataset, day = params.get("config"), params.get("dataset"), params.get("date")
+        if not config_id or not dataset or not day:
+            raise QueryError("config, dataset and date are required")
+        cfg = library.get(config_id)
+        with store() as s:
+            detail = day_detail(s, cfg, dataset=dataset, day=day)
+        width = _int_param(params, "width", 620)
+        if detail["kind"] == "obs":
+            svg = obs_mesh_svg(detail, width=width,
+                               height=_int_param(params, "height", 260),
+                               title=f"{dataset} · frames on {day}")
+        else:
+            svg = mesh_svg(detail, width=width, height=_int_param(params, "height", 300),
+                           title=f"{dataset} · init x lead on {day}")
+        return Response(svg, media_type="image/svg+xml")
 
     @app.get("/api/chart")
     def get_chart(request: Request):

@@ -107,6 +107,7 @@ function showView(name) {
   for (const button of $$(".result-tabs button")) {
     button.setAttribute("aria-selected", String(button.dataset.view === name));
   }
+<<<<<<< HEAD
   if (name !== "visualization") disposeVisualization();
   else if (state.visualization) renderVisualization(state.visualization, $("#viz-sample")?.value || state.visualization.sample_id);
   if (name === "metrics") {
@@ -130,6 +131,10 @@ function openMetrics() {
   });
   metricsReady = pending;
   return pending;
+=======
+  if (name === "metrics") { renderKindChips(); syncMethodChips(); refreshResultsSelectors(); }
+  if (name === "coverage") { loadIntegrity(); }
+>>>>>>> 1afb003 (feat(review): a completeness page -- table, daily curve, day grid)
 }
 
 $$(".result-tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
@@ -1879,4 +1884,129 @@ async function resumeRun(cfg) {
   mount(ui.verdict, notice("warn", "A run under this config is in progress."));
   ui.button.disabled = true;
   watchRun(live.id, cfg, ui, 0);
+}
+
+// ---------------------------------------------------------------- integrity
+//
+// One row per dataset: completeness over the whole record and over the last
+// seven days. The number opens the daily curve; a point on the curve opens the
+// day itself -- observation frames as bars, forecast as an init x lead mesh.
+
+const PANEL = { dataset: null, kind: null };
+
+function integrityConfigId() {
+  const el = $("#q-config");
+  return el && el.value ? el.value : "";
+}
+
+async function loadIntegrity() {
+  const table = $("#integrity-table");
+  if (!table) { return; }
+  if (!integrityConfigId()) {
+    mount(table, empty("Pick a config to count completeness."));
+    return;
+  }
+  try {
+    const res = await fetch(`/api/integrity?config=${encodeURIComponent(integrityConfigId())}`,
+                            { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok) { throw new Error(data.error || `integrity returned ${res.status}`); }
+    renderIntegrity(data);
+  } catch (error) {
+    mount(table, notice("bad", error.message || "integrity failed"));
+  }
+}
+
+function integrityButton(pct, onClick) {
+  const button = h("button", { class: "pct", type: "button" });
+  button.textContent = pct == null ? "—" : `${pct}%`;
+  if (pct != null) { button.addEventListener("click", onClick); }
+  else { button.disabled = true; }
+  return button;
+}
+
+function renderIntegrity(data) {
+  const table = $("#integrity-table");
+  mount(table);
+  const head = h("tr");
+  head.append(h("th", { text: "Dataset" }));
+  head.append(h("th", { text: "All time" }));
+  head.append(h("th", { text: "Last 7 days" }));
+  table.append(h("thead", {}, head));
+
+  const groups = [["obs", "Observation"], ["forecast", "Forecast"]];
+  for (const [kind, title] of groups) {
+    const rows = data.rows.filter(row => row.kind === kind);
+    if (!rows.length) { continue; }
+    const body = h("tbody");
+    const banner = h("tr", { class: "group" });
+    banner.append(h("th", { colspan: "3", text: title }));
+    body.append(banner);
+    for (const row of rows) {
+      const tr = h("tr");
+      tr.append(h("td", { class: "name", text: row.label }));
+      const allTime = h("td");
+      allTime.append(integrityButton(row.all_time.pct, () => openDaily(row, null)));
+      tr.append(allTime);
+      const week = h("td");
+      week.append(integrityButton(row.last_week.pct, () => openDaily(row, 7)));
+      tr.append(week);
+      body.append(tr);
+    }
+    table.append(body);
+  }
+  const note = h("caption", { class: "muted tiny" });
+  note.textContent = `${data.span.from.slice(0, 10)} → ${data.span.to.slice(0, 10)}` +
+    ` · ${data.step_minutes} min frames`;
+  table.append(note);
+  for (const id of ["#panel-daily", "#panel-day"]) {
+    const panel = $(id);
+    if (panel) { panel.hidden = true; mount(panel); }
+  }
+  // Open the observation's curve straight away: an empty right column reads as
+  // "nothing loaded" rather than "pick a number".
+  const first = data.rows.find(row => row.kind === "obs") || data.rows[0];
+  if (first) { openDaily(first, null); }
+}
+
+async function openDaily(row, days) {
+  const panel = $("#panel-daily");
+  if (!panel) { return; }
+  PANEL.dataset = row.key;
+  PANEL.kind = row.kind;
+  const params = new URLSearchParams({
+    config: integrityConfigId(), dataset: row.key, width: "620", height: "210",
+  });
+  if (days) { params.set("days", String(days)); }
+  try {
+    const res = await fetch(`/api/integrity/daily.svg?${params.toString()}`, { cache: "no-store" });
+    const svg = await res.text();
+    panel.innerHTML = svg;
+    panel.hidden = false;
+    for (const point of panel.querySelectorAll(".day-point")) {
+      point.addEventListener("click", () => openDay(point.dataset.date));
+    }
+  } catch (error) {
+    mount(panel, notice("bad", error.message || "daily curve failed"));
+    panel.hidden = false;
+  }
+  const dayPanel = $("#panel-day");
+  if (dayPanel) { dayPanel.hidden = true; mount(dayPanel); }
+}
+
+async function openDay(date) {
+  const panel = $("#panel-day");
+  if (!panel || !PANEL.dataset) { return; }
+  const params = new URLSearchParams({
+    config: integrityConfigId(), dataset: PANEL.dataset, date: date,
+    width: "620", height: PANEL.kind === "obs" ? "260" : "320",
+  });
+  try {
+    const res = await fetch(`/api/integrity/day.svg?${params.toString()}`, { cache: "no-store" });
+    panel.innerHTML = await res.text();
+    panel.hidden = false;
+  } catch (error) {
+    mount(panel, notice("bad", error.message || "day view failed"));
+    panel.hidden = false;
+  }
 }

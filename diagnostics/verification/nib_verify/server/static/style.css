@@ -423,3 +423,31 @@ pre.log {
   .viz-picker { align-items: stretch; flex-direction: column; }
   .viz-picker > select { min-width: 0; width: 100%; }
 }
+
+/* -------------------------------------------------------------- integrity */
+.integrity-layout { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+.integrity-left { flex: 1 1 380px; min-width: 340px; }
+.integrity-panels { flex: 1 1 560px; min-width: 420px; display: flex; flex-direction: column; gap: 14px; }
+.integrity-panel {
+  margin: 0; padding: 6px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; overflow: auto;
+}
+.integrity-panel svg { display: block; max-width: 100%; height: auto; }
+.integrity-panel svg .day-point { cursor: pointer; }
+.integrity-panel svg .day-point:hover { r: 5; }
+.integrity-table { font-size: 13px; }
+.integrity-table th { text-align: left; font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.integrity-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.integrity-table td.name { font-weight: 600; }
+.integrity-table tr.group th {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); background: #f7f9fc; padding: 5px 10px;
+}
+.integrity-table caption { text-align: left; padding-top: 8px; }
+.integrity-table .pct {
+  font: inherit; font-variant-numeric: tabular-nums; font-weight: 600;
+  padding: 3px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+.integrity-table .pct:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.integrity-table .pct:disabled { color: var(--muted); cursor: default; }
