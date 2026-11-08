@@ -5,46 +5,78 @@
 annotated-doc==0.0.5
     # via fastapi
 annotated-types==0.8.0
-    # via pydantic
+    # via
+    #   -r direct-verify.in
+    #   pydantic
 anyio==4.15.1
     # via
+    #   -r direct-verify.in
     #   httpx
     #   starlette
 certifi==2026.7.22
     # via
+    #   -r direct-verify.in
     #   httpcore
     #   httpx
+click==8.5.0
+    # via
+    #   -r direct-verify.in
+    #   uvicorn
 fastapi==0.143.1
+    # via -r direct-verify.in
 h11==0.16.0
-    # via httpcore
+    # via
+    #   -r direct-verify.in
+    #   httpcore
+    #   uvicorn
 httpcore==1.0.9
-    # via httpx
+    # via
+    #   -r direct-verify.in
+    #   httpx
 httpx==0.28.1
+    # via -r direct-verify.in
 idna==3.20
     # via
+    #   -r direct-verify.in
     #   anyio
     #   httpx
 iniconfig==2.3.0
-    # via pytest
+    # via
+    #   -r direct-verify.in
+    #   pytest
 numpy==2.5.3
+    # via -r direct-verify.in
 opentelemetry-api==1.45.2
     # via fastapi
 packaging==26.3
-    # via pytest
+    # via
+    #   -r direct-verify.in
+    #   pytest
 pluggy==1.6.0
-    # via pytest
+    # via
+    #   -r direct-verify.in
+    #   pytest
 pydantic==2.14.1
-    # via fastapi
+    # via
+    #   -r direct-verify.in
+    #   fastapi
 pydantic-core==2.50.1
     # via pydantic
 pygments==2.21.0
-    # via pytest
+    # via
+    #   -r direct-verify.in
+    #   pytest
 pytest==9.1.1
+    # via -r direct-verify.in
 pyyaml==6.0.3
+    # via -r direct-verify.in
 starlette==1.8.0
-    # via fastapi
+    # via
+    #   -r direct-verify.in
+    #   fastapi
 typing-extensions==4.16.0
     # via
+    #   -r direct-verify.in
     #   anyio
     #   fastapi
     #   opentelemetry-api
@@ -56,3 +88,5 @@ typing-inspection==0.4.5
     # via
     #   fastapi
     #   pydantic
+uvicorn==0.54.0
+    # via -r direct-verify.in
