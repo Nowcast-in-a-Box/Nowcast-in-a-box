@@ -19,8 +19,20 @@ certifi==2026.7.22
     #   httpcore
     #   httpx
     #   pyproj
+contourpy==1.4.0
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+cycler==0.12.1
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
 fastapi==0.143.1
     # via -r direct-tests.in
+fonttools==4.65.0
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
 h11==0.16.0
     # via
     #   -r direct-tests.in
@@ -42,10 +54,18 @@ iniconfig==2.3.0
     # via
     #   -r direct-tests.in
     #   pytest
+kiwisolver==1.5.1
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+matplotlib==3.11.2
+    # via -r direct-tests.in
 numpy==2.5.3
     # via
     #   -r direct-tests.in
+    #   contourpy
     #   h5py
+    #   matplotlib
     #   pandas
     #   xarray
 opentelemetry-api==1.45.2
@@ -53,12 +73,17 @@ opentelemetry-api==1.45.2
 packaging==26.3
     # via
     #   -r direct-tests.in
+    #   matplotlib
     #   pytest
     #   xarray
 pandas==3.0.6
     # via
     #   -r direct-tests.in
     #   xarray
+pillow==12.3.0
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
 pluggy==1.6.0
     # via
     #   -r direct-tests.in
@@ -73,6 +98,10 @@ pygments==2.21.0
     # via
     #   -r direct-tests.in
     #   pytest
+pyparsing==3.3.3
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
 pyproj==3.8.0
     # via -r direct-tests.in
 pytest==9.1.1
@@ -80,6 +109,7 @@ pytest==9.1.1
 python-dateutil==2.9.0.post0
     # via
     #   -r direct-tests.in
+    #   matplotlib
     #   pandas
 pyyaml==6.0.3
     # via -r direct-tests.in
