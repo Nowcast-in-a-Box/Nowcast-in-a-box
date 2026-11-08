@@ -287,7 +287,10 @@ func stopRecordedInstance(cfg Config, session localSession) error {
 			return fmt.Errorf("Handler refused stop (HTTP %d): %s", response.StatusCode, body.Message)
 		}
 	}
-	deadline := time.Now().Add(12 * time.Second)
+	// The Handler's own shutdown budget is 10s (run.go); allow double that
+	// plus teardown so a slow machine never loses the race between this
+	// deadline and the Handler's own.
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		_, err := probeAddress(context.Background(), session.URL)
 		if errors.Is(err, errNotRunning) && listenerClosed(session.ReviewURL) {

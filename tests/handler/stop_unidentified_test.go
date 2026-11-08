@@ -98,6 +98,8 @@ func serveInTerminal(t *testing.T, cfg handler.Config) *serveChild {
 	}
 	process := exec.Command(os.Args[0], "-test.run=^TestServeCLIChild$", "--", "serve", "-config", cfg.Source)
 	process.Env = append(os.Environ(), "NIB_TEST_SERVE_CHILD=1")
+	process.Stdout = os.Stdout
+	process.Stderr = os.Stderr
 	if err := process.Start(); err != nil {
 		t.Fatal(err)
 	}

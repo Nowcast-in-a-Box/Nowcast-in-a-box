@@ -64,8 +64,12 @@ jobs:
           cache: pip
           cache-dependency-path: tests/requirements-dev.lock.txt
 
+      # The runtime suite reaches nib_visualization (matplotlib, cartopy at
+      # module level); the viewer lock is the pinned closure for that stack.
       - name: Install pinned dependencies
-        run: pip install -r tests/requirements-dev.lock.txt
+        run: |
+          pip install -r tests/requirements-dev.lock.txt
+          pip install -r diagnostics/visualization/requirements-viewer.lock.txt
 
       - name: Test
         run: PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/diagnostics/verification:$GITHUB_WORKSPACE/diagnostics/visualization:$GITHUB_WORKSPACE/diagnostics/visualization/src" pytest tests/adapters tests/runtime
