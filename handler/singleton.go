@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -71,7 +72,9 @@ func discoverSession(cfg Config) (localSession, error) {
 	var found *localSession
 	for _, path := range paths {
 		info, err := os.Stat(path)
-		if err != nil || info.Mode().Perm()&0077 != 0 {
+		// Windows files report 0666 regardless of ACLs; readSession exempts
+		// the platform from the privacy check for the same reason.
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0) {
 			continue
 		}
 		raw, err := os.ReadFile(path)
