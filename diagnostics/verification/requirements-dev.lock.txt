@@ -1,0 +1,58 @@
+# Pinned test dependencies for the verification suite (tests/verification).
+# Versions mirror the verified-green local environment.
+# Regenerate: uv pip compile <direct-pins.in> --python-version 3.12 \
+#   --python-platform x86_64-unknown-linux-gnu
+annotated-doc==0.0.5
+    # via fastapi
+annotated-types==0.8.0
+    # via pydantic
+anyio==4.15.1
+    # via
+    #   httpx
+    #   starlette
+certifi==2026.7.22
+    # via
+    #   httpcore
+    #   httpx
+fastapi==0.143.1
+h11==0.16.0
+    # via httpcore
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+idna==3.20
+    # via
+    #   anyio
+    #   httpx
+iniconfig==2.3.0
+    # via pytest
+numpy==2.5.3
+opentelemetry-api==1.45.2
+    # via fastapi
+packaging==26.3
+    # via pytest
+pluggy==1.6.0
+    # via pytest
+pydantic==2.14.1
+    # via fastapi
+pydantic-core==2.50.1
+    # via pydantic
+pygments==2.21.0
+    # via pytest
+pytest==9.1.1
+pyyaml==6.0.3
+starlette==1.8.0
+    # via fastapi
+typing-extensions==4.16.0
+    # via
+    #   anyio
+    #   fastapi
+    #   opentelemetry-api
+    #   pydantic
+    #   pydantic-core
+    #   starlette
+    #   typing-inspection
+typing-inspection==0.4.5
+    # via
+    #   fastapi
+    #   pydantic

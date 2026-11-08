@@ -55,8 +55,9 @@ Observation samples stay outside git. File-backed tests use
 
 ## Commands
 
-Users run a prebuilt binary. They do not install Go. CI and release
-workflows are parked until there is code worth building.
+Users run a prebuilt binary. They do not install Go. CI runs the full
+test matrix on every pull request and push to main; the release workflow
+stays parked.
 
 ```sh
 bin/linux/run.sh           # Linux
@@ -73,9 +74,17 @@ Release. Host and port come from `config.yaml`.
 the local Handler installation. They preserve runs, artifacts, and user data
 by default; `--purge` is explicit.
 
+All suites, one entry (contributors; local precheck, GitHub checks are the
+gate; Python suites need the lock installs from the script header):
+
+```sh
+scripts/run-tests.sh
+```
+
 Handler source only (contributors with Go 1.22+):
 
 ```sh
+go vet ./...
 go test ./...
 go build -o "bin/nib-handler$(go env GOEXE)" ./handler/cmd/nib-handler
 scripts/cross-build.sh

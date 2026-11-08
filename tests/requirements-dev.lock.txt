@@ -1,0 +1,32 @@
+# Pinned test dependencies for the adapters and runtime suites (tests/adapters,
+# tests/runtime). Versions mirror the verified-green local environment.
+# Regenerate: uv pip compile <direct-pins.in> --python-version 3.12 \
+#   --python-platform x86_64-unknown-linux-gnu
+certifi==2026.7.22
+    # via pyproj
+h5py==3.16.0
+iniconfig==2.3.0
+    # via pytest
+numpy==2.5.3
+    # via
+    #   h5py
+    #   pandas
+    #   xarray
+packaging==26.3
+    # via
+    #   pytest
+    #   xarray
+pandas==3.0.6
+    # via xarray
+pluggy==1.6.0
+    # via pytest
+pygments==2.21.0
+    # via pytest
+pyproj==3.8.0
+pytest==9.1.1
+python-dateutil==2.9.0.post0
+    # via pandas
+pyyaml==6.0.3
+six==1.17.0
+    # via python-dateutil
+xarray==2026.7.0
