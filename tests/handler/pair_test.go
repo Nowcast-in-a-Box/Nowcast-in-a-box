@@ -39,7 +39,7 @@ func liveHandler(t *testing.T) (*handler.Server, handler.Config, *httptest.Serve
 	cfg := handler.DefaultConfig()
 	cfg.Handler.Port = port
 	cfg.Source = filepath.Join(t.TempDir(), "config.yaml")
-	cfg.Paths.Runs, cfg.Paths.Artifacts = t.TempDir(), t.TempDir()
+	cfg.Paths.Runs, cfg.Paths.Artifacts, cfg.Paths.Orders = t.TempDir(), t.TempDir(), t.TempDir()
 	cfg.Paths.Resources = testResourcesPath(t)
 	cfg.Runtime.Token = "local-token"
 	cfg.Runtime.AllowedOrigins = []string{"http://hub.example:8123"}

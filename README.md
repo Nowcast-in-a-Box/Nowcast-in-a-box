@@ -64,6 +64,8 @@ Start the Handler with the file for your system.
 
 The Handler keeps running after you close Terminal or the Hub page. It doesn't start at login and doesn't restart after a crash.
 
+Each release zip also has an `Open NiB.<os>` file next to the start entry. It opens the offline console page (`http://127.0.0.1:8765/` by default) in your browser, starting the Handler in the background first if needed. On Linux and Windows, a Handler started this way stops again if you close the window that started it; use `Start NiB.<os>` to keep it running. See [the local console](docs/local-console.md).
+
 ```sh
 # e.g. macOS
 bin/macos/start.command status
@@ -132,6 +134,7 @@ Diagnostics run after the models finish. A model can be selected without diagnos
 | --- | --- |
 | `artifacts/` | Weight files and generated Docker files. You can delete this folder because the next run downloads the files again. |
 | `runs/` | One folder per run: forecast files, `job.json`, container logs, and diagnostic output. |
+| `orders/` | Order packages (`<package_id>.zip`) saved for offline start from the local console. |
 | `nib-settings.json` | The data folder that you selected for each data source. Written with mode 0600. |
 | `config.yaml` | Host settings for this installation. |
 
@@ -148,6 +151,7 @@ These paths are relative to `config.yaml`. Delete `nib-settings.json` to make th
 | `diagnostics.host`, `diagnostics.port` | Loopback address of the diagnostics container. Default `127.0.0.1:8767`. |
 | `paths.artifacts` | Weight and Docker file cache. |
 | `paths.runs` | Root folder for run output. |
+| `paths.orders` | Root folder for saved order packages. Default `orders`. |
 | `paths.resources` | Root that holds the `runtime.yaml` manifests. |
 | `runtime.image_registry` | Registry for missing images. Default `ghcr.io/nowcast-in-a-box`. |
 | `runtime.image_mirror` | Optional read-only mirror. Default `ghcr.nju.edu.cn/nowcast-in-a-box`. |
@@ -182,6 +186,7 @@ The release packages are built by the release workflow from a `v*` tag on `main`
 | [docs/models.md](docs/models.md) | Model list, weights, and checksums. |
 | [docs/weights.md](docs/weights.md) | How weights are pinned and checked. |
 | [docs/handler-lifecycle.md](docs/handler-lifecycle.md) | Start, stop, ports, and platform limits. |
+| [docs/local-console.md](docs/local-console.md) | Offline orders and runs in the browser. |
 | [docs/runtime-resources.md](docs/runtime-resources.md) | `runtime.yaml` schema and the resources tree. |
 | [docs/local-acceptance-runbook.md](docs/local-acceptance-runbook.md) | Steps for a manual acceptance test. |
 | [docs/](docs/) | All architecture notes. |

@@ -42,6 +42,10 @@ resources/
 runs/*
 !runs/.gitkeep
 
+# Saved offline order packages. Keep the directory.
+orders/*
+!orders/.gitkeep
+
 # model weights
 # *.bin is intentionally omitted: CMA radar observations use that suffix.
 *.onnx

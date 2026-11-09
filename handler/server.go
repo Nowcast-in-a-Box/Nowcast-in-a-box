@@ -84,6 +84,8 @@ func randomToken() string {
 // rejected.
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", s.handleConsole)
+	mux.HandleFunc("GET /console/fonts/{name}", handleConsoleFont)
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /v1/identity", s.handleIdentity)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)

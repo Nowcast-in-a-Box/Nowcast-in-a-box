@@ -105,6 +105,34 @@ func TestFailedCleanupBlocksNewExecutionAndStopAcrossRestart(t *testing.T) {
 		})
 	}
 }
+
+// offlineDockerRunner answers the container probe the way a stopped daemon does.
+type offlineDockerRunner struct{ runtimeRunner }
+
+func (f *offlineDockerRunner) Run(ctx context.Context, args ...string) (int, []byte, error) {
+	if len(args) > 0 && args[0] == "ps" {
+		return 1, []byte("Cannot connect to the Docker daemon"), nil
+	}
+	return f.runtimeRunner.Run(ctx, args...)
+}
+
+// Stopping must not depend on Docker: a daemon that is not running holds no
+// containers, so it cannot be hiding an orphan.
+func TestStopDoesNotRequireDocker(t *testing.T) {
+	server, cfg := automaticServer(t)
+	directory := filepath.Join(cfg.Paths.Runs, "prior-run")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "compose-wadepre.yaml"), []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server.Runner = &offlineDockerRunner{runtimeRunner{root: cfg.Paths.Runs}}
+	if stopped := stopRequest(server, "", "token"); stopped.Code != 202 {
+		t.Fatalf("stop must not require Docker: %d %s", stopped.Code, stopped.Body.String())
+	}
+}
+
 func TestHistoricalJobPollCannotHidePriorInferenceContainer(t *testing.T) {
 	server, cfg := automaticServer(t)
 	directory := filepath.Join(cfg.Paths.Runs, "historical-run")

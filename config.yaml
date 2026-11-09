@@ -23,6 +23,8 @@ paths:
   artifacts: artifacts
   # One unique directory per inference run; diagnostic attempts stay below it.
   runs: runs
+  # Saved offline order packages (<package_id>.zip) for local start without the Hub.
+  orders: orders
   # Root containing adapters/<data>/runtime.yaml and diagnostics/runtime.yaml.
   # In a release bundle this is the shipped resources/ directory.
   resources: .

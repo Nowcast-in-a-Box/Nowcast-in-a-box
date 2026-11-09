@@ -27,6 +27,7 @@ bin/              prebuilt binaries and OS entry points
   windows/        run.ps1, uninstall.ps1
 diagnostics/      image scaffold and rendering library; computation entry pending
 runs/             diagnostics run outputs (gitignored)
+orders/           saved offline order packages (gitignored)
 artifacts/        downloaded weights and docker config (not committed)
 contracts/        YAML/manifest schemas. Not a Python package.
   data/           data-reader declarations
@@ -42,6 +43,7 @@ scripts/          maintainer tooling only (cross-build, format, package, export)
 tests/             handler, runtime, verification, and visualization tests
 config.yaml       bind addresses, ports, paths
 Start NiB.*       user-facing start shims (macOS, Windows, Linux)
+Open NiB.*        user-facing console-page openers (macOS, Windows, Linux)
 Uninstall NiB.*   user-facing uninstall shims
 ```
 
