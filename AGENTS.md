@@ -16,6 +16,15 @@ Work IDs are GitHub issue numbers. Branches `feat/short-slug`, commits
 `feat: … (#12)`, PRs `Closes #12`. Letter codes such as E1 or C2 are a
 planning map in `docs/modules.yaml`, not git ids.
 
+## Approach
+
+Read existing files before writing. Don't re-read unless changed.
+Thorough in reasoning, concise in output.
+Skip files over 100KB unless required.
+No sycophantic openers or closing fluff.
+No emojis or em-dashes.
+Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by reading code or docs before asserting.
+
 ## Layout
 
 ```text
