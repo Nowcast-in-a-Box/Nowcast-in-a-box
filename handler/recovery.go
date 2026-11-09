@@ -3,12 +3,18 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+// errDockerUnreachable means the daemon could not be enumerated. A daemon that
+// is not running cannot hold containers, so this never proves an orphan exists:
+// stopping the Handler must not require Docker (only starting a run does).
+var errDockerUnreachable = errors.New("cannot verify prior Docker projects are stopped; start Docker and retry")
 
 // A dead Handler does not prove its offline Docker project has stopped.
 func (s *Server) reconcileExecutions() error {
@@ -66,7 +72,7 @@ func (s *Server) reconcileExecutions() error {
 	code, out, err := s.docker(ctx, "ps", "--all", "--filter", "label=com.docker.compose.project", "--format", `{{.Label "com.docker.compose.project"}} {{.State}}`)
 	cancel()
 	if err != nil || code != 0 {
-		return fmt.Errorf("cannot verify prior Docker projects are stopped; start Docker and retry")
+		return errDockerUnreachable
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		parts := strings.Fields(line)

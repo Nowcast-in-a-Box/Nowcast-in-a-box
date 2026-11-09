@@ -22,18 +22,28 @@ type localSettings struct {
 	ImageSource string            `json:"image_source,omitempty"`
 }
 
-func settingsPath(cfg Config) (string, error) {
-	dir := ""
+// localStateDir is where this install keeps the small files next to config.yaml.
+func localStateDir(cfg Config) (string, error) {
 	if cfg.Source != "" {
-		dir = filepath.Dir(cfg.Source)
-	} else {
-		executable, err := os.Executable()
-		if err != nil {
-			return "", fmt.Errorf("locate the Handler program directory: %w", err)
-		}
-		dir = filepath.Dir(executable)
+		return filepath.Dir(cfg.Source), nil
 	}
-	return filepath.Join(dir, settingsFileName), nil
+	executable, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate the Handler program directory: %w", err)
+	}
+	return filepath.Dir(executable), nil
+}
+
+func statePath(cfg Config, name string) (string, error) {
+	dir, err := localStateDir(cfg)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name), nil
+}
+
+func settingsPath(cfg Config) (string, error) {
+	return statePath(cfg, settingsFileName)
 }
 
 func readSettings(cfg Config) (localSettings, error) {

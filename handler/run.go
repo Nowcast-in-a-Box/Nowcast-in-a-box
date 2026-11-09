@@ -187,6 +187,7 @@ func Main(args []string) int {
 		}
 		if err == nil {
 			fmt.Fprintf(os.Stdout, "Handler %s: %s; results %s; config %s\n", identity.State, identity.URL, identity.ReviewURL, sourceName(cfg))
+			fmt.Fprintf(os.Stdout, "console %s/\n", identity.URL)
 			if directory, dirErr := sessionDirectory(cfg); dirErr == nil {
 				fmt.Fprintf(os.Stdout, "Local service files: %s\n", directory)
 			}
@@ -205,6 +206,7 @@ func serve(cfg Config, release func()) int {
 	needsStart, err := prepareStart(cfg)
 	if err == nil && !needsStart {
 		fmt.Fprintf(os.Stdout, "Using running Handler at %s (config %s)\n", addressURL(cfg.Handler), sourceName(cfg))
+		fmt.Fprintf(os.Stdout, "console %s/\n", addressURL(cfg.Handler))
 		return 0
 	}
 	if err != nil {
@@ -258,8 +260,10 @@ func serve(cfg Config, release func()) int {
 	go func() { errs <- reviewServer.Serve(reviewListener) }()
 	srv.note("handler ready at " + addressURL(cfg.Handler))
 	go srv.RefreshResources()
+	go srv.StartTriggers()
 	go srv.ensureDiagnosticsImage()
 	fmt.Fprintf(os.Stderr, "nib-handler %s ready on %s (config %s); results %s\n", Version, addressURL(cfg.Handler), sourceName(cfg), addressURL(cfg.Review))
+	fmt.Fprintf(os.Stdout, "console %s/\n", addressURL(cfg.Handler))
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
