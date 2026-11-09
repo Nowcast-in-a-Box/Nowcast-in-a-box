@@ -260,6 +260,7 @@ func serve(cfg Config, release func()) int {
 	go func() { errs <- reviewServer.Serve(reviewListener) }()
 	srv.note("handler ready at " + addressURL(cfg.Handler))
 	go srv.RefreshResources()
+	go srv.StartTriggers()
 	go srv.ensureDiagnosticsImage()
 	fmt.Fprintf(os.Stderr, "nib-handler %s ready on %s (config %s); results %s\n", Version, addressURL(cfg.Handler), sourceName(cfg), addressURL(cfg.Review))
 	fmt.Fprintf(os.Stdout, "console %s/\n", addressURL(cfg.Handler))

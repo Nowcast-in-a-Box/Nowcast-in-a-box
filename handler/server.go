@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Version is the handler release identifier reported on /v1/status.
@@ -15,14 +16,19 @@ const Version = "0.1.0"
 
 // Server is the loopback HTTP API.
 type Server struct {
-	Config                     Config
-	Preflight                  []func() Check
-	Runner                     CommandRunner
-	Token                      string
-	PickFolder                 func() (string, error)
-	configMu                   sync.RWMutex
-	jobsMu                     sync.Mutex
-	jobs                       map[string]*Job
+	Config         Config
+	Preflight      []func() Check
+	Runner         CommandRunner
+	Token          string
+	PickFolder     func() (string, error)
+	configMu       sync.RWMutex
+	jobsMu         sync.Mutex
+	jobs           map[string]*Job
+	triggersMu     sync.Mutex
+	triggers       []*Trigger
+	triggersLoaded bool
+	// TriggerTick is the firing loop interval; tests shorten it.
+	TriggerTick                time.Duration
 	executionMu                sync.Mutex
 	recoveryMu                 sync.Mutex
 	resourcesMu                sync.Mutex

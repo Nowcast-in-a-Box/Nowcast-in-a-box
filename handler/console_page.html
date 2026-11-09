@@ -187,6 +187,19 @@
   .run-log-json-literal { color: #ff9b91; }
   .run-log-empty { padding: 14px 12px; color: #8497aa; }
 
+  /* ------------------------------------------------------------ triggers */
+  /* A trigger is one short row of choices; the table below only reports what
+     the Handler did, so the form stays flat instead of becoming a wizard. */
+  .trigger-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; margin-top: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > span { font-size: 11px; font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase; color: var(--muted); }
+  .field select, .field input { min-height: 40px; width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: #fff; font-size: 13.5px; }
+  .field select:focus-visible, .field input:focus-visible { outline: 3px solid #78aaff; outline-offset: 1px; }
+  .field .field-hint { font-size: 11.5px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .form-actions { display: flex; align-items: center; gap: 10px; }
+  .trigger-flag { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+  .trigger-flag--missed { color: #a35c00; }
+
   @media (max-width: 680px) {
     /* Phones get a stacked card per row: a table of long unbreakable ids is
        unreadable at 300px, and it forced a page-wide horizontal scrollbar. */
@@ -239,6 +252,10 @@
       <a class="nav-item nav-item--active" href="#orders">
         <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
         Orders <span class="nav-count" id="nav-order-count" hidden>0</span>
+      </a>
+      <a class="nav-item" href="#triggers">
+        <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3"/><path d="M12 18v3"/><path d="M5.6 5.6l2.1 2.1"/><path d="M16.3 16.3l2.1 2.1"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="M5.6 18.4l2.1 -2.1"/><path d="M16.3 7.7l2.1 -2.1"/><circle cx="12" cy="12" r="3"/></svg></span>
+        Triggers <span class="nav-count" id="nav-trigger-count" hidden>0</span>
       </a>
       <a class="nav-item" href="#runs">
         <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16l13 -8l-13 -8"/></svg></span>
@@ -296,6 +313,74 @@
           </table>
         </div>
         <div id="orders-empty" hidden></div>
+      </section>
+
+      <section class="panel" id="triggers" style="margin-top:22px" aria-label="Triggers">
+        <div class="section-heading">
+          <h2>Triggers</h2>
+          <span class="heading-note" id="triggers-note">run a saved order again on its own</span>
+        </div>
+        <p class="muted">A trigger re-runs one saved order when new data lands, or when the clock says so. The Handler decides; it needs Docker and the local data folder. A time it missed while stopped is recorded here, never caught up automatically.</p>
+        <div id="triggers-error"></div>
+        <form class="trigger-form" id="trigger-form">
+          <label class="field">
+            <span>Saved order</span>
+            <select id="trigger-package" required></select>
+          </label>
+          <label class="field">
+            <span>When</span>
+            <select id="trigger-kind">
+              <option value="new_data">New data arrives</option>
+              <option value="schedule">On a schedule</option>
+            </select>
+          </label>
+          <label class="field" id="trigger-poll-field">
+            <span>Check every (minutes)</span>
+            <input id="trigger-poll" type="number" min="1" max="1440" step="1" value="10">
+          </label>
+          <label class="field" id="trigger-schedule-mode-field" hidden>
+            <span>Schedule</span>
+            <select id="trigger-schedule-mode">
+              <option value="interval">Every N minutes</option>
+              <option value="daily">Every day at</option>
+            </select>
+          </label>
+          <label class="field" id="trigger-interval-field" hidden>
+            <span>Interval (minutes)</span>
+            <input id="trigger-interval" type="number" min="5" max="1440" step="5" value="60">
+          </label>
+          <label class="field" id="trigger-daily-field" hidden>
+            <span>Local time</span>
+            <input id="trigger-daily" type="time" value="08:00">
+          </label>
+          <label class="field" id="trigger-source-field" hidden>
+            <span>Start window</span>
+            <select id="trigger-source">
+              <option value="latest_ready">Newest ready data</option>
+              <option value="order">The order's own time</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Windows per run</span>
+            <select id="trigger-window">
+              <option value="latest">Newest only</option>
+              <option value="all">All new windows</option>
+            </select>
+          </label>
+          <div class="form-actions">
+            <button class="primary" id="trigger-add" type="submit">Add trigger</button>
+          </div>
+        </form>
+        <div id="trigger-action-error"></div>
+        <div id="triggers-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading triggers"></div></div>
+        <div class="orders-table-wrap" id="triggers-wrap" hidden tabindex="0" style="margin-top:16px">
+          <table class="orders-table">
+            <colgroup><col style="width:19%"><col style="width:24%"><col style="width:12%"><col style="width:17%"><col style="width:28%"></colgroup>
+            <thead><tr><th>Order</th><th>When</th><th class="optional">Windows</th><th>Last / next</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="triggers-body"></tbody>
+          </table>
+        </div>
+        <div id="triggers-empty" hidden></div>
       </section>
 
       <section class="panel" id="runs" aria-label="Recent runs">
@@ -391,7 +476,7 @@ function paint(tableBodyId, wrapId, emptyId, rows, emptyBlock) {
   document.getElementById(wrapId).hidden = !has;
   document.getElementById(emptyId).hidden = has;
   if (!has && emptyBlock) document.getElementById(emptyId).replaceChildren(emptyBlock);
-  const key = tableBodyId === "orders-body" ? "orders" : "runs";
+  const key = tableBodyId.replace(/-body$/, "");
   if (!painted[key]) {
     painted[key] = true;
     rows.forEach((row, index) => { row.classList.add("enter"); row.style.animationDelay = Math.min(index * 24, 240) + "ms"; });
@@ -799,8 +884,236 @@ async function saveOrder() {
   }
 }
 
+// ---------------------------------------------------------------- triggers
+
+let triggersCache = [];
+
+const OUTCOME_TONES = { started: "badge--success", skipped: "badge--neutral", busy: "badge--info", failed: "badge--danger" };
+
+function triggerWhenLabel(trigger) {
+  if (trigger.kind === "new_data") return "New data · checks every " + trigger.poll_minutes + " min";
+  if (trigger.daily_at) return "Every day at " + trigger.daily_at;
+  return "Every " + trigger.interval_minutes + " min";
+}
+
+function triggerWindowLabel(trigger) {
+  const windows = trigger.window_mode === "all" ? "All new windows" : "Newest only";
+  if (trigger.kind === "schedule") {
+    return windows + (trigger.start_source === "order" ? " · order's time" : " · newest data");
+  }
+  return windows;
+}
+
+function triggerState(trigger) {
+  const box = el("div");
+  const badge = el("span", trigger.last_fired_at ? (trigger.last_outcome || "unknown") : "never ran");
+  badge.className = "badge " + (OUTCOME_TONES[trigger.last_outcome] || "badge--neutral");
+  box.append(badge);
+  if (trigger.last_fired_at) {
+    const when = el("span", formatTime(trigger.last_fired_at));
+    when.className = "trigger-flag";
+    box.append(when);
+  }
+  if (trigger.enabled && trigger.next_due) {
+    const next = el("span", "next " + formatTime(trigger.next_due));
+    next.className = "trigger-flag";
+    box.append(next);
+  }
+  // A stopped Handler never catches up, so say what it skipped instead.
+  if (trigger.missed_count) {
+    const missed = el("span", "missed " + trigger.missed_count + (trigger.missed_count === 1 ? " scheduled run" : " scheduled runs") + " while the Handler was stopped" + (trigger.last_missed_at ? " (last " + formatTime(trigger.last_missed_at) + ")" : ""));
+    missed.className = "trigger-flag trigger-flag--missed";
+    box.append(missed);
+  }
+  if (trigger.kind === "new_data" && trigger.last_skipped) {
+    const skipped = el("span", trigger.last_skipped + " older window" + (trigger.last_skipped === 1 ? "" : "s") + " skipped on the last run");
+    skipped.className = "trigger-flag";
+    box.append(skipped);
+  }
+  if (trigger.last_error) box.append(noteBlock(trigger.last_error));
+  return box;
+}
+
+function triggerRow(trigger) {
+  const row = document.createElement("tr");
+  if (!trigger.enabled) row.style.opacity = "0.62";
+  const identity = el("div");
+  identity.append(identityCode(trigger.package_id), (() => { const id = el("span", trigger.id); id.className = "trigger-flag"; return id; })());
+  const actions = el("div");
+  actions.className = "cell-actions";
+  const fire = el("button", "Run now");
+  fire.className = "primary table-button";
+  fire.type = "button";
+  fire.addEventListener("click", () => fireTrigger(trigger.id, fire));
+  const toggle = el("button", trigger.enabled ? "Pause" : "Resume");
+  toggle.className = "secondary table-button";
+  toggle.type = "button";
+  toggle.addEventListener("click", () => patchTrigger(trigger.id, { enabled: !trigger.enabled }, toggle));
+  const remove = el("button", "Delete");
+  remove.className = "secondary table-button";
+  remove.type = "button";
+  remove.addEventListener("click", () => deleteTrigger(trigger.id, remove));
+  actions.append(fire, toggle, remove);
+  row.append(
+    cell(identity, "identity"),
+    cell(triggerWhenLabel(trigger)),
+    cell(triggerWindowLabel(trigger), "optional"),
+    cell(triggerState(trigger)),
+    cell(actions, "actions-cell")
+  );
+  return row;
+}
+
+function emptyTriggersBlock() {
+  const block = el("div");
+  block.className = "state-block";
+  const title = el("span", "No triggers yet.");
+  title.className = "empty-title";
+  block.append(title, el("span", "Pick a saved order above and choose when the Handler should run it again."));
+  return block;
+}
+
+async function loadTriggers() {
+  const errorBox = document.getElementById("triggers-error");
+  const loading = document.getElementById("triggers-loading");
+  try {
+    const page = await api("/v1/triggers");
+    triggersCache = page.triggers || [];
+    errorBox.replaceChildren();
+  } catch (cause) {
+    loading.hidden = true;
+    errorBox.replaceChildren(noteBlock(String(cause)));
+    return;
+  }
+  loading.hidden = true;
+  const count = document.getElementById("nav-trigger-count");
+  count.textContent = String(triggersCache.length);
+  count.hidden = triggersCache.length === 0;
+  note("triggers-note", triggersCache.length ? triggersCache.length + (triggersCache.length === 1 ? " trigger" : " triggers") : "run a saved order again on its own");
+  paint("triggers-body", "triggers-wrap", "triggers-empty", triggersCache.map(triggerRow), emptyTriggersBlock());
+}
+
+// The order list is the only source of valid package ids.
+function paintTriggerOrderOptions() {
+  const select = document.getElementById("trigger-package");
+  const previous = select.value;
+  const usable = ordersCache.filter(order => !order.error);
+  const options = usable.map(order => {
+    const option = el("option", order.package_id);
+    option.value = order.package_id;
+    return option;
+  });
+  if (options.length === 0) {
+    const option = el("option", "No saved order on this machine");
+    option.value = "";
+    options.push(option);
+  }
+  select.replaceChildren(...options);
+  if (previous && usable.some(order => order.package_id === previous)) select.value = previous;
+  document.getElementById("trigger-add").disabled = usable.length === 0;
+}
+
+// Only the fields the chosen condition needs stay visible.
+function syncTriggerForm() {
+  const scheduled = document.getElementById("trigger-kind").value === "schedule";
+  const daily = scheduled && document.getElementById("trigger-schedule-mode").value === "daily";
+  document.getElementById("trigger-poll-field").hidden = scheduled;
+  document.getElementById("trigger-schedule-mode-field").hidden = !scheduled;
+  document.getElementById("trigger-source-field").hidden = !scheduled;
+  document.getElementById("trigger-interval-field").hidden = !scheduled || daily;
+  document.getElementById("trigger-daily-field").hidden = !daily;
+}
+
+function showTriggerError(message) {
+  const box = document.getElementById("trigger-action-error");
+  box.replaceChildren(message ? noteBlock(message) : "");
+}
+
+async function addTrigger() {
+  const button = document.getElementById("trigger-add");
+  const packageId = document.getElementById("trigger-package").value;
+  showTriggerError("");
+  if (!packageId) {
+    showTriggerError("Choose a saved order first.");
+    return;
+  }
+  const kind = document.getElementById("trigger-kind").value;
+  const body = {
+    package_id: packageId,
+    kind,
+    window_mode: document.getElementById("trigger-window").value,
+    enabled: true,
+  };
+  if (kind === "new_data") {
+    body.poll_minutes = Number(document.getElementById("trigger-poll").value);
+  } else {
+    body.start_source = document.getElementById("trigger-source").value;
+    if (document.getElementById("trigger-schedule-mode").value === "daily") {
+      body.daily_at = document.getElementById("trigger-daily").value;
+    } else {
+      body.interval_minutes = Number(document.getElementById("trigger-interval").value);
+    }
+  }
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Adding…";
+  try {
+    await api("/v1/triggers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (cause) {
+    showTriggerError("Could not add the trigger: " + cause.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
+    await refresh();
+  }
+}
+
+async function fireTrigger(id, button) {
+  showTriggerError("");
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Running…";
+  try {
+    const result = await api("/v1/triggers/" + encodeURIComponent(id) + "/fire", { method: "POST" });
+    if (result.last_outcome === "failed") showTriggerError("Run now failed: " + (result.last_error || "see the run log"));
+    else if (result.last_outcome === "skipped") showTriggerError("Nothing new to run: the newest window already ran.");
+    else if (result.last_outcome === "busy") showTriggerError("Its previous run is still active; try again when it finishes.");
+  } catch (cause) {
+    showTriggerError("Run now failed: " + cause.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
+    await refresh();
+  }
+}
+
+async function patchTrigger(id, patch, button) {
+  showTriggerError("");
+  button.disabled = true;
+  try {
+    await api("/v1/triggers/" + encodeURIComponent(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  } catch (cause) {
+    showTriggerError("Could not update the trigger: " + cause.message);
+  } finally {
+    await refresh();
+  }
+}
+
+async function deleteTrigger(id, button) {
+  showTriggerError("");
+  button.disabled = true;
+  try {
+    await api("/v1/triggers/" + encodeURIComponent(id), { method: "DELETE" });
+  } catch (cause) {
+    showTriggerError("Could not delete the trigger: " + cause.message);
+  } finally {
+    await refresh();
+  }
+}
+
 async function refresh() {
-  await Promise.allSettled([loadStatus(), loadOrders(), loadRuns()]);
+  await Promise.allSettled([loadStatus(), loadOrders(), loadRuns(), loadTriggers()]);
+  paintTriggerOrderOptions();
   updateDockerNotice();
   if (openLogId) await loadRunLog(openLogId);
 }
@@ -813,6 +1126,10 @@ fileInput.addEventListener("change", () => {
   document.getElementById("save-order").disabled = !file;
 });
 document.getElementById("save-order").addEventListener("click", () => { saveOrder(); });
+document.getElementById("trigger-form").addEventListener("submit", (event) => { event.preventDefault(); addTrigger(); });
+document.getElementById("trigger-kind").addEventListener("change", syncTriggerForm);
+document.getElementById("trigger-schedule-mode").addEventListener("change", syncTriggerForm);
+syncTriggerForm();
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 5000);
 </script>

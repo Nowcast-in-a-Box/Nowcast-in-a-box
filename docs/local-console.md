@@ -84,6 +84,62 @@ message as its submit error.
 
 The page refreshes every five seconds while it is open.
 
+## Triggers
+
+A trigger re-runs one saved order on its own. The Handler owns this: it is the
+only process that can tell whether new data landed or the clock passed. The Hub
+never evaluates a trigger, and a trigger never edits an order — it only
+replaces the start window of the package it points at.
+
+Two conditions:
+
+- **New data arrives**: every *N* minutes the Handler asks the data reader for
+  the windows it declares (`--list-samples`, the same call the sample endpoint
+  uses) and runs the ones it has not run yet. Polling needs Docker and the
+  configured data folder for that data source, because the answer comes from the
+  reader container, not from a file timestamp.
+- **On a schedule**: every *N* minutes, or every day at a local `HH:MM`. The
+  start window is either the newest ready data at that moment, or the time
+  frozen in the order itself (that is how you re-run one fixed window).
+
+Each trigger also chooses how many windows one fire covers: **newest only**, or
+**all new windows** in one batch run (bounded by `runtime.max_batch_samples`; a
+batch carries one event id, so windows from another event are reported as
+skipped instead of run).
+
+State lives in `nib-triggers.json` next to `config.yaml`, beside
+`nib-settings.json`. It is not part of an order and not part of `config.yaml`,
+because it changes while the Handler runs.
+
+Behaviour worth knowing:
+
+- A trigger that already has a queued or running job skips its turn instead of
+  queueing another run; the next tick tries again. `stop` therefore never waits
+  on a trigger-built queue.
+- Each fire uses the idempotency key `trigger:<id>:<start window>` (or
+  `trigger:<id>:order:<scheduled point>` for the order's own window), so the
+  same window never runs twice, not even across a Handler restart.
+- A scheduled point that passed while the Handler was not running is **not**
+  caught up. It is counted in the trigger's `missed_count` and shown in the
+  console ("missed 2 scheduled runs while the Handler was stopped"). `Run now`
+  is the manual catch-up.
+- A failed fire (Docker down, data folder missing, order package deleted by
+  `--purge`) records `last_error` and leaves the trigger enabled; the next point
+  or poll tries again.
+- Triggers only fire while the Handler runs. On Linux and Windows that is the
+  same background window as `Start NiB`.
+
+The console lists each trigger with its last outcome, next due time, missed
+count, and `Run now` / `Pause` / `Delete`. The API:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /v1/triggers` | Stored triggers plus the firing-loop interval. |
+| `POST /v1/triggers` | Create one: `package_id`, `kind`, `poll_minutes` or `interval_minutes`/`daily_at`, `window_mode`, `start_source`. |
+| `PATCH /v1/triggers/{id}` | Change the condition or `enabled`. The order is fixed; delete and re-create to point elsewhere. |
+| `DELETE /v1/triggers/{id}` | Remove it. Runs it already started stay. |
+| `POST /v1/triggers/{id}/fire` | Fire now, regardless of the condition. The outcome is in `last_outcome` / `last_error`. |
+
 ## Security shape
 
 - Everything stays loopback-only; non-loopback Host headers are refused as
@@ -108,6 +164,11 @@ The page refreshes every five seconds while it is open.
 | `GET /v1/orders` | Saved packages plus packages of past runs. |
 | `POST /v1/orders` | Save `{package, sha256}` (same body as `POST /v1/jobs`). Idempotent per content; same id with different content is refused. |
 | `POST /v1/orders/{package_id}/runs` | Start a saved package. `Idempotency-Key` header as in `/v1/jobs`. |
+| `GET /v1/triggers` | Stored triggers and their state. |
+| `POST /v1/triggers` | Create a trigger for a saved order. |
+| `PATCH /v1/triggers/{id}` | Change condition or enable/disable. |
+| `DELETE /v1/triggers/{id}` | Remove a trigger. |
+| `POST /v1/triggers/{id}/fire` | Run the trigger now. |
 
 A later Hub slice can call `POST /v1/orders` directly ("save to this
 computer") so the download step disappears; this repository needs no Hub

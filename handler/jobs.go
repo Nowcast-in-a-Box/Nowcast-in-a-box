@@ -27,6 +27,7 @@ type Job struct {
 	Request               RuntimeRequest `json:"request"`
 	CreatedAt             time.Time      `json:"created_at"`
 	IdempotencyKey        string         `json:"idempotency_key,omitempty"`
+	TriggerID             string         `json:"trigger_id,omitempty"`
 	UpdatedAt             time.Time      `json:"updated_at"`
 }
 
@@ -42,6 +43,7 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/resources", s.authorize(s.handleResources))
 	mux.HandleFunc("POST /v1/resources/prepare", s.authorize(s.handlePrepareResources))
 	mux.HandleFunc("GET /v1/datasets/{dataset}/samples", s.authorize(s.handleSamples))
+	s.triggerRoutes(mux)
 	mux.HandleFunc("GET /v1/orders", s.authorize(s.handleOrdersList))
 	mux.HandleFunc("POST /v1/orders", s.authorize(s.handleOrderSave))
 	mux.HandleFunc("POST /v1/orders/{package_id}/runs", s.authorize(s.handleOrderRun))
@@ -158,34 +160,46 @@ func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, err)
 		return
 	}
-	data, catalog, err := s.dataPaths(dataset)
-	if err != nil {
+	if _, _, err := s.dataPaths(dataset); err != nil {
 		runtimeError(w, 409, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	value, err := s.listSamples(r.Context(), dataset, offset, limit, strings.TrimSpace(r.URL.Query().Get("day")))
+	if err != nil {
+		runtimeError(w, 502, err)
+		return
+	}
+	writeJSON(w, 200, value)
+}
+
+// listSamples asks the data reader which windows exist. It is the only way to
+// answer that question: the Handler never parses the data files itself. The
+// sample route and the trigger poller share this one call.
+func (s *Server) listSamples(ctx context.Context, dataID string, offset, limit int, day string) (map[string]any, error) {
+	data, catalog, err := s.dataPaths(dataID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	extra := []string{"--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit)}
-	if day := strings.TrimSpace(r.URL.Query().Get("day")); day != "" {
+	if day != "" {
 		extra = append(extra, "--day", day)
 	}
-	args, err := s.dataCommandArgs(dataset, data, catalog, extra...)
+	args, err := s.dataCommandArgs(dataID, data, catalog, extra...)
 	if err != nil {
-		runtimeError(w, 500, err)
-		return
+		return nil, err
 	}
 	args = append([]string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}, args...)
 	code, out, err := s.docker(ctx, args...)
 	if err != nil || code != 0 {
-		runtimeError(w, 502, fmt.Errorf("sample reader failed: %v %s", err, out))
-		return
+		return nil, fmt.Errorf("sample reader failed: %v %s", err, out)
 	}
-	var value any
+	var value map[string]any
 	if json.Unmarshal(containerJSON(out), &value) != nil {
-		runtimeError(w, 502, fmt.Errorf("invalid sample reader response"))
-		return
+		return nil, fmt.Errorf("invalid sample reader response")
 	}
-	writeJSON(w, 200, value)
+	return value, nil
 }
 
 func pagination(r *http.Request) (int, int, error) {
@@ -241,6 +255,13 @@ func (s *Server) createJobFromPackage(pkg []byte, expected, key string) (*Job, i
 	if err != nil {
 		return nil, 422, err
 	}
+	return s.admitJob(request, pkg, key, "")
+}
+
+// admitJob validates one request and starts it. A trigger calls it after
+// replacing the start window in a parsed package; triggerID is empty for the
+// Hub upload and saved-order paths.
+func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID string) (*Job, int, error) {
 	if err := s.requireDataSupported(request.DataID); err != nil {
 		return nil, 422, err
 	}
@@ -331,7 +352,7 @@ func (s *Server) createJobFromPackage(pkg []byte, expected, key string) (*Job, i
 	if err = os.Mkdir(directory, 0o755); err != nil {
 		return nil, 500, err
 	}
-	job := &Job{ID: id, Status: "queued", Stage: "queued", Request: request, IdempotencyKey: key, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	job := &Job{ID: id, Status: "queued", Stage: "queued", Request: request, IdempotencyKey: key, TriggerID: triggerID, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	if err := writeJob(directory, job); err != nil {
 		return nil, 500, err
 	}
