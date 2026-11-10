@@ -75,9 +75,11 @@ scripts/fetch-demo-data.py
 python -m pytest tests/adapters
 ```
 
-That fills `testdata/demo-data/` (gitignored) and the adapter tests pick it up
-through `NIB_DATA_ROOT`. Tests that need files or ONNX Runtime skip when those
-are absent, and a source without a sample skips by name.
+The samples repository is private: the script reads `NIB_DEMO_DATA_TOKEN`, or the
+`gh` CLI token when that is unset. That fills `testdata/demo-data/` (gitignored)
+and the adapter tests pick it up through `NIB_DATA_ROOT`.
+Tests that need files or ONNX Runtime skip when those are absent, and a source
+without a sample skips by name.
 
 ## External scan
 

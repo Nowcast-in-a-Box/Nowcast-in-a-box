@@ -78,7 +78,14 @@ jobs:
           key: nib-demo-data-${{ hashFiles('scripts/fetch-demo-data.py') }}
 
       - name: Fetch demo samples
-        run: python scripts/fetch-demo-data.py
+        env:
+          NIB_DEMO_DATA_TOKEN: ${{ secrets.NIB_DEMO_DATA_TOKEN }}
+        run: |
+          if [ -z "$NIB_DEMO_DATA_TOKEN" ]; then
+            echo "::warning::NIB_DEMO_DATA_TOKEN is not set; adapter sample tests will skip"
+            exit 0
+          fi
+          python scripts/fetch-demo-data.py
 
       - name: Test
         run: PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/diagnostics/verification:$GITHUB_WORKSPACE/diagnostics/visualization:$GITHUB_WORKSPACE/diagnostics/visualization/src" pytest tests/adapters tests/runtime
