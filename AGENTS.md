@@ -50,8 +50,9 @@ inside a Model Container, or in the diagnostics image.
 `adapters/` is that packaging source. The handler does not import it.
 Data directory names are data names. Model adapters live only under the
 data source they were paired with. `catalog.json` is the web index.
-Observation samples stay outside git. File-backed tests use
-`NIB_DATA_ROOT`, which this repository does not set.
+Observation samples stay outside git. `scripts/fetch-demo-data.py` downloads a
+small set into the gitignored `testdata/demo-data/`; file-backed tests read
+`NIB_DATA_ROOT` and skip when nothing is there.
 
 ## Commands
 

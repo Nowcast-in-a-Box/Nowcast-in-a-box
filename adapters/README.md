@@ -64,10 +64,20 @@ Linux. The handler never invents a data root.
 
 ## Tests
 
-Request YAML is under `tests/adapters/requests/`. Observation files and
-weight files stay outside git. Set `NIB_DATA_ROOT` when a test should
-read files. Tests that need files or ONNX Runtime skip when those are
-absent.
+Request YAML is under `tests/adapters/requests/`. Observation files and weight
+files stay outside git. `tests/adapters/data/` holds the reader checks,
+`tests/adapters/model/` the forecast checks.
+
+Fetch the demo samples once, then run the suite:
+
+```sh
+scripts/fetch-demo-data.py
+python -m pytest tests/adapters
+```
+
+That fills `testdata/demo-data/` (gitignored) and the adapter tests pick it up
+through `NIB_DATA_ROOT`. Tests that need files or ONNX Runtime skip when those
+are absent, and a source without a sample skips by name.
 
 ## External scan
 

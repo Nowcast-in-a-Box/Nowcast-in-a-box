@@ -54,6 +54,11 @@ py_suite() { # label, args...
     if "$PY" -m pytest "$@"; then record "pytest $label" "PASS"; else record "pytest $label" "FAIL"; fi
 }
 
+if [ ! -d testdata/demo-data ]; then
+    echo "note: adapter demo samples not fetched; file-backed checks will skip" >&2
+    echo "      scripts/fetch-demo-data.py downloads them into testdata/demo-data" >&2
+fi
+
 py_suite "adapters+runtime" tests/adapters tests/runtime
 py_suite "verification" tests/verification
 py_suite "visualization" tests/visualization
