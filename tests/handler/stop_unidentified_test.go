@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -74,7 +75,19 @@ func writeInstallSettings(t *testing.T, cfg handler.Config, imageSource string) 
 	}
 }
 
-func serveInTerminal(t *testing.T, cfg handler.Config) *exec.Cmd {
+// serveChild reaps a spawned serve child exactly once: a second
+// os.Process.Wait on Windows blocks forever on the released handle (-1),
+// so cleanup and waitProcessExit share one reap.
+type serveChild struct {
+	cmd  *exec.Cmd
+	once sync.Once
+}
+
+func (c *serveChild) reap() {
+	c.once.Do(func() { _, _ = c.cmd.Process.Wait() })
+}
+
+func serveInTerminal(t *testing.T, cfg handler.Config) *serveChild {
 	t.Helper()
 	if runtime.GOOS != "windows" {
 		if _, err := exec.LookPath("lsof"); err != nil {
@@ -85,15 +98,18 @@ func serveInTerminal(t *testing.T, cfg handler.Config) *exec.Cmd {
 	}
 	process := exec.Command(os.Args[0], "-test.run=^TestServeCLIChild$", "--", "serve", "-config", cfg.Source)
 	process.Env = append(os.Environ(), "NIB_TEST_SERVE_CHILD=1")
+	process.Stdout = os.Stdout
+	process.Stderr = os.Stderr
 	if err := process.Start(); err != nil {
 		t.Fatal(err)
 	}
+	child := &serveChild{cmd: process}
 	t.Cleanup(func() {
 		_ = process.Process.Kill()
-		_, _ = process.Process.Wait()
+		child.reap()
 	})
 	waitForIdentity(t, cfg)
-	return process
+	return child
 }
 
 func waitForIdentity(t *testing.T, cfg handler.Config) {
@@ -116,11 +132,11 @@ func waitForIdentity(t *testing.T, cfg handler.Config) {
 	t.Fatal("serve child never answered /v1/identity")
 }
 
-func waitProcessExit(t *testing.T, process *exec.Cmd) {
+func waitProcessExit(t *testing.T, child *serveChild) {
 	t.Helper()
 	done := make(chan struct{})
 	go func() {
-		_, _ = process.Process.Wait()
+		child.reap()
 		close(done)
 	}()
 	select {

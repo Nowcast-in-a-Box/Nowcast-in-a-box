@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,24 @@ import (
 
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler"
 )
+
+// sameDir compares two existing directory paths regardless of the platform's
+// path normalization: Windows may hand back 8.3 short names (RUNNER~1) where
+// the test created a long one, differing only in form.
+func sameDir(t *testing.T, got, want string) bool {
+	t.Helper()
+	if resolved, err := filepath.EvalSymlinks(got); err == nil {
+		got = resolved
+	}
+	if resolved, err := filepath.EvalSymlinks(want); err == nil {
+		want = resolved
+	}
+	got, want = filepath.Clean(got), filepath.Clean(want)
+	if os.PathSeparator == '\\' { // Windows paths are case-insensitive
+		return strings.EqualFold(got, want)
+	}
+	return got == want
+}
 
 func settingsConfig(t *testing.T) string {
 	t.Helper()
@@ -138,26 +157,27 @@ func TestPickDataRootSavesPerDataIDWithoutAcceptingABrowserPath(t *testing.T) {
 	if response := post(`{"data_root":"/tmp"}`); response.Code != 400 {
 		t.Fatal(response.Code, response.Body.String())
 	}
-	if response := post(`{"data_id":"sevir"}`); response.Code != 200 || !strings.Contains(response.Body.String(), first) {
+	if response := post(`{"data_id":"sevir"}`); response.Code != 200 {
 		t.Fatal(response.Code, response.Body.String())
+	}
+	reloaded, err := handler.Load(source)
+	if err != nil || !sameDir(t, reloaded.DataRoots["sevir"], first) {
+		t.Fatal(reloaded.DataRoots, err)
 	}
 	server.PickFolder = func() (string, error) { return second, nil }
 	if response := post(`{"data_id":"sevir"}`); response.Code != 200 {
 		t.Fatal(response.Code, response.Body.String())
 	}
-	reloaded, err := handler.Load(source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reloaded.DataRoots["sevir"] != second {
-		t.Fatal(reloaded.DataRoots)
+	reloaded, err = handler.Load(source)
+	if err != nil || !sameDir(t, reloaded.DataRoots["sevir"], second) {
+		t.Fatal(reloaded.DataRoots, err)
 	}
 	server.PickFolder = func() (string, error) { return "", fmt.Errorf("folder selection was canceled") }
 	if response := post(`{"data_id":"sevir"}`); response.Code != 409 {
 		t.Fatal(response.Code, response.Body.String())
 	}
 	reloaded, err = handler.Load(source)
-	if err != nil || reloaded.DataRoots["sevir"] != second {
+	if err != nil || !sameDir(t, reloaded.DataRoots["sevir"], second) {
 		t.Fatal(reloaded.DataRoots, err)
 	}
 }
@@ -169,27 +189,36 @@ func TestSettingsReadPerDataAndLegacyFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	sevirRoot, cmaRoot := t.TempDir(), t.TempDir()
-	settings := `{"data_roots":{"sevir":"` + sevirRoot + `","cma_radar":"` + cmaRoot + `"}}`
-	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), []byte(settings), 0o600); err != nil {
+	settings, err := json.Marshal(map[string]map[string]string{
+		"data_roots": {"sevir": sevirRoot, "cma_radar": cmaRoot},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), settings, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := handler.Load(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DataRoots["sevir"] != sevirRoot || cfg.DataRoots["cma_radar"] != cmaRoot {
+	if !sameDir(t, cfg.DataRoots["sevir"], sevirRoot) || !sameDir(t, cfg.DataRoots["cma_radar"], cmaRoot) {
 		t.Fatal(cfg.DataRoots)
 	}
 
 	legacyRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), []byte(`{"data_root":"`+legacyRoot+`"}`), 0o600); err != nil {
+	legacy, err := json.Marshal(map[string]string{"data_root": legacyRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(source), "nib-settings.json"), legacy, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = handler.Load(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DataRootFallback != legacyRoot || len(cfg.DataRoots) != 0 {
+	if !sameDir(t, cfg.DataRootFallback, legacyRoot) || len(cfg.DataRoots) != 0 {
 		t.Fatal(cfg.DataRootFallback, cfg.DataRoots)
 	}
 
@@ -199,7 +228,7 @@ func TestSettingsReadPerDataAndLegacyFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DataRootFallback != envRoot {
+	if !sameDir(t, cfg.DataRootFallback, envRoot) {
 		t.Fatalf("fallback=%q want env", cfg.DataRootFallback)
 	}
 }

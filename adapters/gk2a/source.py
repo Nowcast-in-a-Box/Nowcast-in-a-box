@@ -96,7 +96,7 @@ def find_gk2a_file(data_dir: Path, requested_time: datetime, channel: str) -> Pa
     time_tag = requested_time.strftime("%Y%m%d%H%M")
     channel = channel.lower()
 
-    all_files = sorted(data_dir.glob("gk2a_ami_le1b_*.nc"))
+    all_files = sorted(data_dir.rglob("gk2a_ami_le1b_*.nc"))
 
     if not all_files:
         raise FileNotFoundError(

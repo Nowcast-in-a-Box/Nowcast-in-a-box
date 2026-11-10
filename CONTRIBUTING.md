@@ -75,7 +75,7 @@ Please keep each branch limited to related work*.*
 
 Most code should be tested before committing to Git.
 
-Tests live under `tests/`. Run `go test ./...` for the handler; each diagnostics module documents its Python suite.
+Tests live under `tests/`. Run `scripts/run-tests.sh` for every suite at once (Go handler plus the Python suites; the header lists the lock installs for the Python interpreter). CI runs the same suites on every pull request. `go test ./...` covers the handler alone.
 
 ### Commit
 

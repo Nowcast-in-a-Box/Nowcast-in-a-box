@@ -61,13 +61,15 @@ inside a Model Container, or in the diagnostics image.
 `adapters/` is that packaging source. The handler does not import it.
 Data directory names are data names. Model adapters live only under the
 data source they were paired with. `catalog.json` is the web index.
-Observation samples stay outside git. File-backed tests use
-`NIB_DATA_ROOT`, which this repository does not set.
+Observation samples stay outside git. `scripts/fetch-demo-data.py` downloads a
+small set into the gitignored `testdata/demo-data/`; file-backed tests read
+`NIB_DATA_ROOT` and skip when nothing is there.
 
 ## Commands
 
-Users run a prebuilt binary. They do not install Go. CI and release
-workflows are parked until there is code worth building.
+Users run a prebuilt binary. They do not install Go. CI runs the full
+test matrix on every pull request and push to main; the release workflow
+stays parked.
 
 ```sh
 bin/linux/run.sh           # Linux
@@ -84,9 +86,17 @@ Release. Host and port come from `config.yaml`.
 the local Handler installation. They preserve runs, artifacts, and user data
 by default; `--purge` is explicit.
 
+All suites, one entry (contributors; local precheck, GitHub checks are the
+gate; Python suites need the lock installs from the script header):
+
+```sh
+scripts/run-tests.sh
+```
+
 Handler source only (contributors with Go 1.22+):
 
 ```sh
+go vet ./...
 go test ./...
 go build -o "bin/nib-handler$(go env GOEXE)" ./handler/cmd/nib-handler
 scripts/cross-build.sh
