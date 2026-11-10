@@ -21,6 +21,7 @@ const (
 	defaultMaxBatchSamples = 32
 	defaultArtifacts       = "artifacts"
 	defaultRuns            = "runs"
+	defaultOrders          = "orders"
 	defaultResources       = "."
 	configFileName         = "config.yaml"
 	settingsFileName       = "nib-settings.json"
@@ -37,6 +38,7 @@ type Addr struct {
 type Paths struct {
 	Artifacts    string `yaml:"artifacts" json:"artifacts"`
 	Runs         string `yaml:"runs,omitempty" json:"runs,omitempty"`
+	Orders       string `yaml:"orders,omitempty" json:"orders,omitempty"`
 	Resources    string `yaml:"resources,omitempty" json:"resources,omitempty"`
 	WeightSource string `yaml:"weight_source,omitempty" json:"weight_source,omitempty"`
 }
@@ -73,7 +75,7 @@ func DefaultConfig() Config {
 		Handler:     Addr{Host: defaultHandlerHost, Port: defaultHandlerPort},
 		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
 		Diagnostics: Addr{Host: defaultDiagnosticsHost, Port: defaultDiagnosticsPort},
-		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Resources: defaultResources},
+		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Orders: defaultOrders, Resources: defaultResources},
 		Runtime:     Runtime{ImageSource: "auto"},
 	}
 }
@@ -166,6 +168,9 @@ func (c *Config) applyDefaults() {
 	if c.Paths.Runs == "" {
 		c.Paths.Runs = d.Paths.Runs
 	}
+	if c.Paths.Orders == "" {
+		c.Paths.Orders = d.Paths.Orders
+	}
 	if c.Paths.Resources == "" {
 		c.Paths.Resources = d.Paths.Resources
 	}
@@ -177,6 +182,7 @@ func (c *Config) applyDefaults() {
 func (c *Config) resolvePaths(baseDir string) {
 	c.Paths.Artifacts = resolveAgainst(baseDir, c.Paths.Artifacts)
 	c.Paths.Runs = resolveAgainst(baseDir, c.Paths.Runs)
+	c.Paths.Orders = resolveAgainst(baseDir, c.Paths.Orders)
 	c.Paths.Resources = resolveAgainst(baseDir, c.Paths.Resources)
 	c.Paths.WeightSource = resolveAgainst(baseDir, c.Paths.WeightSource)
 }

@@ -1,0 +1,1137 @@
+<!doctype html>
+<!-- Visual language mirrors the NiB Hub provisioning interface: Inter,
+     #0057dc primary, light canvas #f6f8fc, white panels, 12px radius.
+     Fonts: Inter (SIL OFL 1.1, see console_assets/fonts/LICENSE).
+     Icons: Tabler (MIT), same stroke set the Hub uses. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NiB local console</title>
+<style>
+  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-400-normal.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
+  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-500-normal.woff2") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; }
+  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-600-normal.woff2") format("woff2"); font-style: normal; font-weight: 600; font-display: swap; }
+
+  :root {
+    color-scheme: light;
+    --blue: #0057dc; --blue-deep: #0047bc; --blue-soft: #eff5ff;
+    --ink: #17212b; --muted: #5f7086;
+    --line: #dce5f0; --line-strong: #c6d4e6; --bg: #f6f8fc;
+    --green: #05ae51; --green-soft: #effaf3;
+    --orange: #ef8000; --orange-soft: #fff5eb;
+    --red: #c43b30; --red-soft: #fdf1ef;
+    --radius: 12px; --rail: 228px;
+    font-family: Inter, Arial, Helvetica, sans-serif;
+    color: var(--ink); font-size: 14px; line-height: 1.5;
+    background: var(--bg);
+  }
+  * { box-sizing: border-box; }
+  /* .state-block and .orders-table-wrap set their own display, which would
+     otherwise win over the UA [hidden] rule and leave hidden nodes visible. */
+  [hidden] { display: none !important; }
+  body { margin: 0; min-width: 320px; background: var(--bg); }
+  ::selection { background: #dceaff; color: var(--ink); }
+  h1, h2, p { margin: 0; }
+  h1 { font-size: clamp(24px, 2vw, 30px); line-height: 1.15; letter-spacing: -0.5px; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 20px; line-height: 1.25; letter-spacing: -0.3px; font-weight: 600; text-wrap: balance; }
+  a { color: var(--blue); text-underline-offset: 3px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; color: #3d5573; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); line-height: 1.5; }
+  .ui-icon { display: inline-block; flex: 0 0 auto; width: 20px; height: 20px; line-height: 0; }
+  .ui-icon svg { width: 100%; height: 100%; stroke: currentColor; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+  * { scrollbar-width: thin; scrollbar-color: #c9d6e6 transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: #c9d6e6; border-radius: 6px; border: 2px solid var(--bg); }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  .skip-link { position: fixed; top: 12px; left: 12px; z-index: 10; padding: 10px 16px; border-radius: 7px; background: var(--blue); color: #fff; transform: translateY(calc(-100% - 16px)); }
+  .skip-link:focus { transform: none; }
+
+  /* ------------------------------------------------------------- shell */
+  .app-frame { display: flex; min-height: 100vh; }
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--rail); background: #fff; border-right: 1px solid var(--line); z-index: 5; overflow-y: auto; display: flex; flex-direction: column; padding: 0 14px 18px; }
+  .brand { min-height: 88px; display: flex; align-items: center; gap: 12px; padding: 0 8px; }
+  .brand-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: var(--blue); color: #fff; font-weight: 600; font-size: 14px; letter-spacing: 0.02em; box-shadow: 0 8px 18px rgb(0 87 220 / 16%); }
+  .brand-copy { display: flex; flex-direction: column; min-width: 0; }
+  .brand-copy strong { font-size: 14px; letter-spacing: -0.2px; white-space: nowrap; }
+  .brand-copy span { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .sidebar nav { padding: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
+  .nav-section-title { min-height: 36px; display: flex; align-items: center; padding: 0 10px; color: #5b6f88; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }
+  .nav-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 42px; padding: 8px 10px; border-left: 2px solid transparent; border-radius: 8px; color: #4f627a; font-size: 13px; text-decoration: none; }
+  .nav-item:hover { background: #f3f7fc; }
+  .nav-item--active { background: var(--blue-soft); border-left-color: var(--blue); color: var(--blue); font-weight: 600; }
+  .nav-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--blue); color: #fff; font-size: 11px; font-weight: 600; }
+  .nav-item:not(.nav-item--active) .nav-count { background: #e3eaf3; color: #51637a; }
+  .sidebar-note { display: flex; align-items: center; gap: 8px; margin: auto 8px 0; padding-top: 18px; color: var(--muted); font-size: 11px; }
+  .sidebar-note strong { color: #5c6c80; background: #eef2f7; border-radius: 4px; padding: 3px 6px; text-transform: uppercase; }
+
+  .app-shell { margin-left: var(--rail); flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { width: 100%; min-height: 88px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 14px 28px; border-bottom: 1px solid var(--line); background: #fff; }
+  .title-group { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+  .title-group p { color: var(--muted); line-height: 1.4; max-width: 72ch; }
+  .topbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+
+  .runtime-status { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 999px; background: #f2f5f9; color: #52667f; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .runtime-status-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #98a7b8; }
+  .runtime-status--connected { background: var(--green-soft); color: #0b6b3a; }
+  .runtime-status--connected .runtime-status-dot { background: var(--green); box-shadow: 0 0 0 3px rgb(5 174 81 / 12%); }
+  .runtime-status--reconnecting { background: var(--orange-soft); color: #8a5900; }
+  .runtime-status--reconnecting .runtime-status-dot { background: var(--orange); }
+  .runtime-status--disconnected { background: var(--red-soft); color: #8d342b; }
+  .runtime-status--disconnected .runtime-status-dot { background: var(--red); }
+
+  main { width: 100%; max-width: 1480px; margin: 0 auto; padding: 28px clamp(20px, 2.5vw, 36px) 44px; flex: 1; min-width: 0; }
+
+  /* ------------------------------------------------------------- panels */
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 1px 2px rgb(41 60 85 / 4%); padding: 22px 22px 24px; min-width: 0; }
+  .panel + .panel { margin-top: 22px; }
+  .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .heading-note { font-size: 12px; color: var(--muted); }
+
+  /* ------------------------------------------------------------- buttons */
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  button:focus-visible, a:focus-visible, summary:focus-visible, .orders-table-wrap:focus-visible { outline: 3px solid #78aaff; outline-offset: 2px; }
+  .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid transparent; border-radius: 7px; padding: 10px 18px; line-height: 1.3; text-decoration: none; transition: transform 160ms ease-out; }
+  .primary .ui-icon, .secondary .ui-icon { width: 18px; height: 18px; }
+  .primary { background: var(--blue); color: #fff; font-weight: 600; }
+  .primary:hover:not(:disabled) { background: var(--blue-deep); }
+  .primary:disabled { background: #e3e7ed; color: #8c98a7; }
+  .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: scale(0.97); }
+  .secondary { background: #fff; border-color: var(--line-strong); color: var(--ink); }
+  .secondary:hover:not(:disabled) { border-color: #a9bede; background: #f6f9fd; }
+  .secondary:disabled { color: var(--muted); background: #f2f5f9; border-color: var(--line); }
+  .table-button { min-height: 32px; padding: 6px 12px; font-size: 13px; }
+
+  /* ------------------------------------------------------------- badges */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; border: 1px solid transparent; }
+  .badge--neutral { color: #66768a; background: #eef2f6; border-color: #dbe3ec; }
+  .badge--info { color: #1c5fd6; background: #eff5ff; border-color: #c9dcfb; }
+  .badge--success { color: #0a8a3f; background: var(--green-soft); border-color: #c6ead4; }
+  .badge--warning { color: #a35c00; background: var(--orange-soft); border-color: #ffdcb9; }
+  .badge--danger { color: var(--red); background: var(--red-soft); border-color: #efb9b3; }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge--live .badge-dot { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  /* ------------------------------------------------------------- tables */
+  .orders-table-wrap { max-width: 100%; overflow-x: auto; }
+  .orders-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13.5px; }
+  .orders-table-wrap .orders-table { min-width: 720px; }
+  .orders-table th { text-align: left; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .orders-table td { padding: 13px 12px; border-bottom: 1px solid #edf2f8; vertical-align: middle; }
+  .orders-table tr:last-child td { border-bottom: 0; }
+  .orders-table tbody tr:hover td { background: #f7fafd; }
+  .orders-table td.numeric, .orders-table td.time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* Identifiers are long and unbreakable: clip them instead of letting every
+     row grow to two lines. The full value stays in the title attribute. */
+  .orders-table td.identity { overflow: hidden; }
+  .orders-table td.identity code, .orders-table td.identity span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .orders-table td { overflow: hidden; text-overflow: ellipsis; }
+  .orders-table th.sticky-head { position: sticky; top: 0; z-index: 1; background: #fff; }
+  .orders-table td.muted-cell { color: var(--muted); font-size: 12px; }
+  .source-tag { display: inline-block; padding: 2px 7px; border-radius: 4px; background: #eef3f9; color: #4f6b8a; font-size: 11px; font-weight: 600; }
+  .source-tag--run { background: #f3efff; color: #6a45c8; }
+  .row-link { color: var(--blue); font-weight: 500; text-decoration: none; }
+  .row-link:hover { text-decoration: underline; }
+  .cell-code code { display: block; }
+  .cell-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+  /* ------------------------------------------------------------- states */
+  .state-block { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+  .empty-title { font-weight: 600; }
+  .error-note { display: flex; gap: 10px; align-items: baseline; margin: 12px 0 0; padding: 12px 14px; border: 1px solid #efb9b3; border-radius: 8px; background: var(--red-soft); color: #7c2d24; line-height: 1.55; overflow-wrap: anywhere; }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #d8e3f2; border-top-color: var(--blue); animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* first data paint is the page's one motion moment */
+  .enter { animation: rise 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+
+  /* ------------------------------------------------------------- import */
+  .import-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .file-label { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 10px 16px; border: 1px dashed var(--line-strong); border-radius: 7px; background: #f8fafc; color: #4f627a; font-size: 13px; cursor: pointer; }
+  .file-label:hover { border-color: #a9bede; background: #f6f9fd; color: var(--blue); }
+  .file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .file-name { color: var(--ink); font-weight: 500; }
+  .file-name:empty::after { content: "no file chosen"; color: var(--muted); font-weight: 400; }
+
+  /* ------------------------------------------------------------- log */
+  /* A run log is terminal output, so it gets Hub's dark technical panel and
+     opens as a full-width row instead of widening a table cell. */
+  .run-detail > td { padding: 0 0 16px; background: #f7fafd; }
+  .run-detail .run-log { margin: 0 12px; }
+  .run-log-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border: 1px solid #24364b; border-bottom: 0; border-radius: 9px 9px 0 0; background: #172536; color: #aebdd0; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+  .run-log-output { max-height: 320px; margin: 0; padding: 7px 0; overflow: auto; border: 1px solid #24364b; border-top: 0; border-radius: 0 0 9px 9px; background: #101b29; color: #d6e2ee; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.55; white-space: normal; }
+  .run-log-line { display: flex; align-items: flex-start; gap: 10px; padding: 1px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .run-log-line:hover { background: #162638; }
+  .run-log-number { flex: 0 0 26px; color: #5e7085; text-align: right; user-select: none; }
+  .run-log-prefix { flex: 0 0 150px; max-width: 150px; overflow: hidden; color: #71859b; text-overflow: ellipsis; white-space: nowrap; }
+  .run-log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .run-log-line--file { margin-top: 8px; padding-top: 8px; border-top: 1px solid #24364b; }
+  .run-log-line--file:first-child { margin-top: 0; padding-top: 1px; border-top: 0; }
+  .run-log-file { padding: 1px 6px; border-radius: 4px; background: #1a2c42; color: #8ec0ff; font-size: 10px; font-weight: 600; }
+  .run-log-line--success .run-log-message { color: #7be0a0; }
+  .run-log-line--warning .run-log-message { color: #ffc56e; }
+  .run-log-line--error .run-log-message { color: #ff9b91; }
+  .run-log-line--json .run-log-message { color: #a8c7ff; }
+  .run-log-line--muted .run-log-message { color: #8497aa; }
+  .run-log-json-key { color: #9cc8ff; }
+  .run-log-json-string { color: #9bdfb2; }
+  .run-log-json-number { color: #ffc56e; }
+  .run-log-json-literal { color: #ff9b91; }
+  .run-log-empty { padding: 14px 12px; color: #8497aa; }
+
+  /* ------------------------------------------------------------ triggers */
+  /* A trigger is one short row of choices; the table below only reports what
+     the Handler did, so the form stays flat instead of becoming a wizard. */
+  .trigger-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; margin-top: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > span { font-size: 11px; font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase; color: var(--muted); }
+  .field select, .field input { min-height: 40px; width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: #fff; font-size: 13.5px; }
+  .field select:focus-visible, .field input:focus-visible { outline: 3px solid #78aaff; outline-offset: 1px; }
+  .field .field-hint { font-size: 11.5px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .form-actions { display: flex; align-items: center; gap: 10px; }
+  .trigger-flag { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+  .trigger-flag--missed { color: #a35c00; }
+
+  @media (max-width: 680px) {
+    /* Phones get a stacked card per row: a table of long unbreakable ids is
+       unreadable at 300px, and it forced a page-wide horizontal scrollbar. */
+    .orders-table-wrap .orders-table { min-width: 0; width: 100%; }
+    .orders-table { font-size: 13px; }
+    .orders-table thead { display: none; }
+    .orders-table, .orders-table tbody, .orders-table tr, .orders-table td { display: block; width: auto; }
+    .orders-table tr { padding: 13px 0; border-bottom: 1px solid #edf2f8; }
+    .orders-table tr:last-child { border-bottom: 0; }
+    .orders-table tbody tr:hover td { background: transparent; }
+    .orders-table td { padding: 1px 0; border: 0; overflow: hidden; }
+    .orders-table td.identity code, .orders-table td.identity span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .orders-table td.cell-code.identity code { font-size: 11.5px; }
+    .orders-table td.actions-cell { margin-top: 9px; }
+    .orders-table .optional { display: none; }
+    .run-detail > td { padding: 0 0 12px; }
+    .run-detail .run-log { margin: 0; }
+    .run-log-output { max-height: 260px; }
+    .run-log-prefix { display: none; }
+    main { padding-top: 18px; }
+  }
+
+  @media (max-width: 880px) {
+    /* The rail becomes a top bar, so the frame must stack instead of staying a row. */
+    .app-frame { flex-direction: column; }
+    .sidebar { position: static; width: auto; flex-direction: row; align-items: center; gap: 10px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { min-height: 0; padding: 0; }
+    .sidebar nav { flex-direction: row; padding: 0 0 0 8px; }
+    .nav-section-title, .sidebar-note { display: none; }
+    .app-shell { margin-left: 0; }
+    .topbar { min-height: 0; flex-wrap: wrap; }
+  }
+
+  @media (max-width: 560px) {
+    .brand-copy { display: none; }
+    .sidebar { gap: 6px; padding: 8px 12px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="app-frame">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">NiB</span>
+      <span class="brand-copy"><strong>Nowcast-in-a-Box</strong><span>Local console</span></span>
+    </div>
+    <nav aria-label="This machine">
+      <div class="nav-section-title">This machine</div>
+      <a class="nav-item nav-item--active" href="#orders">
+        <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
+        Orders <span class="nav-count" id="nav-order-count" hidden>0</span>
+      </a>
+      <a class="nav-item" href="#triggers">
+        <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3"/><path d="M12 18v3"/><path d="M5.6 5.6l2.1 2.1"/><path d="M16.3 16.3l2.1 2.1"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="M5.6 18.4l2.1 -2.1"/><path d="M16.3 7.7l2.1 -2.1"/><circle cx="12" cy="12" r="3"/></svg></span>
+        Triggers <span class="nav-count" id="nav-trigger-count" hidden>0</span>
+      </a>
+      <a class="nav-item" href="#runs">
+        <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16l13 -8l-13 -8"/></svg></span>
+        Runs <span class="nav-count" id="nav-run-count" hidden>0</span>
+      </a>
+    </nav>
+    <p class="sidebar-note"><strong>Offline</strong> no Hub needed</p>
+  </aside>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="title-group">
+        <h1>Local console</h1>
+        <p id="status-detail" aria-live="polite">checking handler…</p>
+      </div>
+      <div class="topbar-actions">
+        <span id="status-chip" class="runtime-status" aria-live="polite"><span class="runtime-status-dot"></span><span id="status-chip-text">checking…</span></span>
+        <button id="refresh" class="secondary" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="panel" id="import" aria-label="Import order package">
+        <div class="section-heading">
+          <h2>Import order package</h2>
+          <span class="heading-note">max 8 MiB · saved under orders/</span>
+        </div>
+        <p class="muted">Save a package ZIP downloaded from the Hub on this machine. Saved orders start here without the Hub.</p>
+        <div class="import-row">
+          <label class="file-label">
+            <input type="file" id="package-file" accept=".zip">
+            <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
+            <span>Choose ZIP…</span>
+            <span class="file-name" id="file-name"></span>
+          </label>
+          <button id="save-order" class="primary" type="button" disabled>Save order</button>
+        </div>
+        <div id="import-error"></div>
+      </section>
+
+      <section class="panel" id="orders" aria-label="Saved orders" style="margin-top:22px">
+        <div class="section-heading">
+          <h2>Saved orders</h2>
+          <span class="heading-note" id="orders-note"></span>
+        </div>
+        <div id="orders-error"></div>
+        <div id="orders-docker" hidden></div>
+        <div id="orders-action-error"></div>
+        <div id="orders-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading orders"></div></div>
+        <div class="orders-table-wrap" id="orders-wrap" hidden tabindex="0">
+          <table class="orders-table">
+            <colgroup><col style="width:22%"><col style="width:18%"><col style="width:11%"><col style="width:11%"><col style="width:7%"><col style="width:12%"><col style="width:19%"></colgroup>
+            <thead><tr><th>Package</th><th>Order</th><th class="optional">Data</th><th class="optional">Models</th><th class="optional">Samples</th><th class="optional">Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="orders-body"></tbody>
+          </table>
+        </div>
+        <div id="orders-empty" hidden></div>
+      </section>
+
+      <section class="panel" id="triggers" style="margin-top:22px" aria-label="Triggers">
+        <div class="section-heading">
+          <h2>Triggers</h2>
+          <span class="heading-note" id="triggers-note">run a saved order again on its own</span>
+        </div>
+        <p class="muted">A trigger re-runs one saved order when new data lands, or when the clock says so. The Handler decides; it needs Docker and the local data folder. A time it missed while stopped is recorded here, never caught up automatically.</p>
+        <div id="triggers-error"></div>
+        <form class="trigger-form" id="trigger-form">
+          <label class="field">
+            <span>Saved order</span>
+            <select id="trigger-package" required></select>
+          </label>
+          <label class="field">
+            <span>When</span>
+            <select id="trigger-kind">
+              <option value="new_data">New data arrives</option>
+              <option value="schedule">On a schedule</option>
+            </select>
+          </label>
+          <label class="field" id="trigger-poll-field">
+            <span>Check every (minutes)</span>
+            <input id="trigger-poll" type="number" min="1" max="1440" step="1" value="10">
+          </label>
+          <label class="field" id="trigger-schedule-mode-field" hidden>
+            <span>Schedule</span>
+            <select id="trigger-schedule-mode">
+              <option value="interval">Every N minutes</option>
+              <option value="daily">Every day at</option>
+            </select>
+          </label>
+          <label class="field" id="trigger-interval-field" hidden>
+            <span>Interval (minutes)</span>
+            <input id="trigger-interval" type="number" min="5" max="1440" step="5" value="60">
+          </label>
+          <label class="field" id="trigger-daily-field" hidden>
+            <span>Local time</span>
+            <input id="trigger-daily" type="time" value="08:00">
+          </label>
+          <label class="field" id="trigger-source-field" hidden>
+            <span>Start window</span>
+            <select id="trigger-source">
+              <option value="latest_ready">Newest ready data</option>
+              <option value="order">The order's own time</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Windows per run</span>
+            <select id="trigger-window">
+              <option value="latest">Newest only</option>
+              <option value="all">All new windows</option>
+            </select>
+          </label>
+          <div class="form-actions">
+            <button class="primary" id="trigger-add" type="submit">Add trigger</button>
+          </div>
+        </form>
+        <div id="trigger-action-error"></div>
+        <div id="triggers-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading triggers"></div></div>
+        <div class="orders-table-wrap" id="triggers-wrap" hidden tabindex="0" style="margin-top:16px">
+          <table class="orders-table">
+            <colgroup><col style="width:19%"><col style="width:24%"><col style="width:12%"><col style="width:17%"><col style="width:28%"></colgroup>
+            <thead><tr><th>Order</th><th>When</th><th class="optional">Windows</th><th>Last / next</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="triggers-body"></tbody>
+          </table>
+        </div>
+        <div id="triggers-empty" hidden></div>
+      </section>
+
+      <section class="panel" id="runs" aria-label="Recent runs">
+        <div class="section-heading">
+          <h2>Recent runs</h2>
+          <span class="heading-note">results open in the diagnostics page</span>
+        </div>
+        <div id="runs-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading runs"></div></div>
+        <div class="orders-table-wrap" id="runs-wrap" hidden tabindex="0">
+          <table class="orders-table">
+            <colgroup><col style="width:24%"><col style="width:19%"><col style="width:13%"><col style="width:13%"><col style="width:31%"></colgroup>
+            <thead><tr><th>Run</th><th>Order</th><th>Status</th><th class="optional">Updated</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="runs-body"></tbody>
+          </table>
+        </div>
+        <div id="runs-empty" hidden></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+"use strict";
+const TOKEN = "__NIB_TOKEN__";
+
+async function api(path, options) {
+  const response = await fetch(path, Object.assign({ headers: { Authorization: "Bearer " + TOKEN } }, options));
+  let body = null;
+  try { body = await response.json(); } catch { /* empty body */ }
+  if (!response.ok) throw new Error((body && (body.message || body.error)) || (path + " failed: " + response.status));
+  return body;
+}
+
+function el(tag, text) {
+  const node = document.createElement(tag);
+  if (text !== undefined && text !== null && text !== "") node.textContent = String(text);
+  return node;
+}
+function cell(child, className) {
+  const td = el("td");
+  if (className) td.className = className;
+  if (Array.isArray(child)) child.forEach(c => c && td.append(c)); else if (child) td.append(child);
+  return td;
+}
+function code(text) { return el("code", text); }
+function icon(svgPath, className) {
+  const span = el("span");
+  span.className = "ui-icon" + (className ? " " + className : "");
+  span.setAttribute("aria-hidden", "true");
+  span.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + svgPath + "</svg>";
+  return span;
+}
+const ARROW = '<path d="M5 12l14 0"/><path d="M13 18l6 -6"/><path d="M13 6l6 6"/>';
+
+const TONES = {
+  queued: "badge--neutral", running: "badge--info", succeeded: "badge--success",
+  partial: "badge--warning", failed: "badge--danger", interrupted: "badge--danger",
+};
+function statusBadge(status) {
+  const value = status || "unknown";
+  const badge = el("span", value.replaceAll("_", " "));
+  badge.className = "badge " + (TONES[status] || "badge--neutral");
+  if (status === "running" || status === "queued") {
+    badge.prepend(el("span"));
+    badge.firstChild.className = "badge-dot";
+    badge.classList.add("badge--live");
+  }
+  return badge;
+}
+function formatTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleString(undefined, {
+    month: "short", day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+function note(id, text) {
+  const node = document.getElementById(id);
+  node.textContent = text || "";
+  node.hidden = !text;
+}
+
+let ordersCache = [];
+let dockerReady = null;
+let painted = { orders: false, runs: false };
+function paint(tableBodyId, wrapId, emptyId, rows, emptyBlock) {
+  document.getElementById(tableBodyId).replaceChildren(...rows);
+  const has = rows.length > 0;
+  document.getElementById(wrapId).hidden = !has;
+  document.getElementById(emptyId).hidden = has;
+  if (!has && emptyBlock) document.getElementById(emptyId).replaceChildren(emptyBlock);
+  const key = tableBodyId.replace(/-body$/, "");
+  if (!painted[key]) {
+    painted[key] = true;
+    rows.forEach((row, index) => { row.classList.add("enter"); row.style.animationDelay = Math.min(index * 24, 240) + "ms"; });
+  }
+}
+
+async function loadStatus() {
+  const chip = document.getElementById("status-chip");
+  const chipText = document.getElementById("status-chip-text");
+  const detail = document.getElementById("status-detail");
+  try {
+    const status = await api("/v1/status");
+    const docker = status.docker || {};
+    dockerReady = Boolean(docker.ok);
+    chip.className = docker.ok ? "runtime-status runtime-status--connected" : "runtime-status runtime-status--reconnecting";
+    chipText.textContent = docker.ok ? "Handler up · Docker ready" : "Handler up · Docker not running";
+    detail.replaceChildren();
+    detail.append(docker.ok
+      ? "Saved orders run on this machine; results open in the diagnostics page."
+      : "Saved orders are listed and can be imported, but starting a run needs Docker.");
+    if (status.resources_error) detail.append(" " + status.resources_error);
+  } catch (cause) {
+    dockerReady = null;
+    chip.className = "runtime-status runtime-status--disconnected";
+    chipText.textContent = "Handler unreachable";
+    detail.replaceChildren(el("span", String(cause)));
+  }
+}
+
+function emptyOrdersBlock() {
+  const block = el("div");
+  block.className = "state-block";
+  const title = el("span", "No orders saved on this machine yet."); title.className = "empty-title";
+  block.append(title, el("span", "Import a package ZIP above. Orders started here before appear automatically from their run copy."));
+  return block;
+}
+
+async function loadOrders() {
+  const errorBox = document.getElementById("orders-error");
+  const loading = document.getElementById("orders-loading");
+  try {
+    const page = await api("/v1/orders");
+    ordersCache = page.orders || [];
+    errorBox.replaceChildren();
+  } catch (cause) {
+    loading.hidden = true;
+    errorBox.replaceChildren(noteBlock(String(cause)));
+    return;
+  }
+  loading.hidden = true;
+  const count = document.getElementById("nav-order-count");
+  count.textContent = String(ordersCache.length);
+  count.hidden = ordersCache.length === 0;
+  note("orders-note", ordersCache.length + (ordersCache.length === 1 ? " order" : " orders"));
+  const rows = [];
+  for (const order of ordersCache) {
+    const row = document.createElement("tr");
+    if (order.error) {
+      const actions = el("div"); actions.className = "cell-actions";
+      const badge = el("span", "cannot start"); badge.className = "badge badge--danger";
+      actions.append(badge, el("span", order.error));
+      row.append(
+        cell(order.package_id, "identity"),
+        cell("", "cell-code optional"), cell("", "cell-code optional"), cell("", "optional"), cell("", "numeric optional"),
+        cell(sourceTag(order), "optional"),
+        cell(actions, "actions-cell")
+      );
+    } else {
+      const actions = el("div"); actions.className = "cell-actions";
+      const start = el("button", "Start"); start.className = "primary table-button"; start.type = "button";
+      start.addEventListener("click", () => startOrder(order.package_id, false, start));
+      const again = el("button", "Run again"); again.className = "secondary table-button"; again.type = "button";
+      again.addEventListener("click", () => startOrder(order.package_id, true, again));
+      actions.append(start, again);
+      row.append(
+        cell(identityCode(order.package_id), "cell-code identity"),
+        cell(identityCode(order.order_id), "cell-code identity"),
+        cell([order.data_id, order.event_id].filter(Boolean).map(code), "cell-code optional"),
+        cell((order.models || []).join(", "), "optional"),
+        cell(order.samples, "numeric optional"),
+        cell(sourceTag(order), "optional"),
+        cell(actions, "actions-cell")
+      );
+    }
+    rows.push(row);
+  }
+  paint("orders-body", "orders-wrap", "orders-empty", rows, emptyOrdersBlock());
+}
+
+function noteBlock(message) {
+  const block = el("div", message);
+  block.className = "error-note";
+  return block;
+}
+
+async function loadRuns() {
+  const loading = document.getElementById("runs-loading");
+  let page;
+  try { page = await api("/v1/runs?limit=500"); }
+  catch (cause) {
+    loading.hidden = true;
+    document.getElementById("runs-body").replaceChildren();
+    return;
+  }
+  loading.hidden = true;
+  const runs = page.runs || [];
+  const count = document.getElementById("nav-run-count");
+  count.textContent = String(runs.length);
+  count.hidden = runs.length === 0;
+  const rows = [];
+  for (const run of runs) {
+    const job = run.job || {};
+    const request = job.request || {};
+    const row = document.createElement("tr");
+    row.dataset.runId = run.id;
+    row.append(
+      cell(identityCode(run.id), "cell-code identity"),
+      cell(identityCode(request.order_id || ""), "cell-code identity"),
+      (() => {
+        const td = cell(statusBadge(run.status));
+        if (job.stage && (run.status === "running" || run.status === "queued")) { const s = el("div", job.stage); s.className = "muted"; s.style.fontSize = "12px"; s.style.marginTop = "4px"; td.append(s); }
+        if (job.error) td.append(noteBlock(job.error));
+        return td;
+      })(),
+      cell(formatTime(job.updated_at), "time optional"),
+      (() => {
+        const td = cell();
+        td.className = "actions-cell";
+        const actions = el("div"); actions.className = "cell-actions";
+        const report = reportEntry(run);
+        if (report) {
+          const link = el("a", "Open results");
+          link.className = "row-link";
+          link.href = "/v1/runs/" + encodeURIComponent(run.id) + "/files/" + report.split("/").map(encodeURIComponent).join("/");
+          link.target = "_blank"; link.rel = "noopener";
+          link.append(icon(ARROW));
+          actions.append(link);
+        }
+        const toggle = el("button", openLogId === run.id ? "Hide log" : "Log");
+        toggle.type = "button";
+        toggle.className = "secondary table-button";
+        toggle.setAttribute("aria-expanded", openLogId === run.id ? "true" : "false");
+        toggle.addEventListener("click", () => toggleRunLog(run.id));
+        actions.append(toggle);
+        td.append(actions);
+        return td;
+      })()
+    );
+    rows.push(row);
+  }
+  paint("runs-body", "runs-wrap", "runs-empty", rows, (() => {
+    const block = el("div"); block.className = "state-block";
+    const title = el("span", "No runs yet."); title.className = "empty-title";
+    block.append(title, el("span", "Start a saved order above; runs appear here."));
+    return block;
+  })());
+  // Repainting must not close an open log: re-insert it under its run.
+  if (openLogId) {
+    const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(openLogId) + '"]');
+    if (row) row.after(renderRunLog(openLogId, openLogLines, openLogError));
+    else openLogId = null;
+  }
+}
+
+// A long identifier is clipped in the cell but stays complete on hover.
+function identityCode(text) {
+  if (!text) return el("span");
+  const node = code(text);
+  const holder = el("span");
+  holder.title = text;
+  holder.append(node);
+  return holder;
+}
+
+// Orders come from a saved ZIP or from a previous run's copy.
+function sourceTag(order) {
+  const tag = el("span", order.source === "orders" ? "Saved copy" : "Run copy");
+  tag.className = "source-tag" + (order.source === "orders" ? "" : " source-tag--run");
+  if (order.run_id) tag.title = "runs/" + order.run_id;
+  return tag;
+}
+
+let openLogId = null;
+let openLogLines = null;
+let openLogError = "";
+
+function toggleRunLog(runId) {
+  const previous = openLogId;
+  openLogId = openLogId === runId ? null : runId;
+  openLogLines = null;
+  openLogError = "";
+  closeLogRow(previous);
+  if (!openLogId) { void paintRunLogButtons(); return; }
+  const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(openLogId) + '"]');
+  if (row) row.after(renderRunLog(openLogId, null, ""));
+  void paintRunLogButtons();
+  void loadRunLog(openLogId);
+}
+
+function closeLogRow(runId) {
+  if (!runId) return;
+  const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(runId) + '"]');
+  row?.nextElementSibling?.classList.contains("run-detail") && row.nextElementSibling.remove();
+}
+
+async function paintRunLogButtons() {
+  for (const button of document.querySelectorAll("#runs-body tr:not(.run-detail) .cell-actions button")) {
+    const row = button.closest("tr");
+    const open = row.dataset.runId === openLogId;
+    button.textContent = open ? "Hide log" : "Log";
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+}
+
+function renderRunLog(runId, lines, error) {
+  const row = document.createElement("tr");
+  row.className = "run-detail";
+  row.dataset.logFor = runId;
+  const td = el("td");
+  td.colSpan = 5;
+  const panel = el("div"); panel.className = "run-log";
+  const toolbar = el("div"); toolbar.className = "run-log-toolbar";
+  const label = el("span", "Container output");
+  const count = el("span", lines === null ? "loading…" : lines.length + (lines.length === 1 ? " line" : " lines"));
+  toolbar.append(label, count);
+  panel.append(toolbar);
+  const pre = el("pre"); pre.className = "run-log-output";
+  pre.setAttribute("aria-label", "Technical log output");
+  if (error) pre.append(runLogLine({ text: error, tone: "error" }, 0));
+  else if (lines === null) pre.append(runLogLine({ text: "Loading the log…", tone: "muted" }, 0));
+  else if (lines.length === 0) pre.append(runLogLine({ text: "No log output yet.", tone: "muted" }, 0));
+  else lines.forEach((line, index) => pre.append(runLogLine(line, index)));
+  panel.append(pre);
+  td.append(panel);
+  row.append(td);
+  return row;
+}
+
+function runLogLine(line, index) {
+  const node = el("span");
+  node.className = "run-log-line run-log-line--" + line.tone + (line.file ? " run-log-line--file" : "");
+  if (!line.file) {
+    const number = el("span", String(index + 1).padStart(2, "0"));
+    number.className = "run-log-number";
+    number.setAttribute("aria-hidden", "true");
+    node.append(number);
+  }
+  if (line.file) {
+    const file = el("span", line.file); file.className = "run-log-file";
+    node.append(file);
+    return node;
+  }
+  if (line.prefix) {
+    const prefix = el("span", line.prefix);
+    prefix.className = "run-log-prefix"; prefix.title = line.prefix;
+    node.append(prefix);
+  }
+  const message = el("span");
+  message.className = "run-log-message";
+  if (line.tone === "json") highlightJSON(line.text, message);
+  else message.textContent = line.text;
+  node.append(message);
+  return node;
+}
+
+const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+function highlightJSON(text, holder) {
+  let last = 0;
+  for (const match of text.matchAll(JSON_TOKEN)) {
+    const index = match.index ?? 0;
+    if (index > last) holder.append(text.slice(last, index));
+    if (match[1]) {
+      const node = el("span", match[1]);
+      node.className = match[2] ? "run-log-json-key" : "run-log-json-string";
+      holder.append(node);
+      if (match[2]) holder.append(match[2]);
+    } else if (match[3]) {
+      const node = el("span", match[3]); node.className = "run-log-json-literal"; holder.append(node);
+    } else if (match[4]) {
+      const node = el("span", match[4]); node.className = "run-log-json-number"; holder.append(node);
+    }
+    last = index + match[0].length;
+  }
+  if (last < text.length) holder.append(text.slice(last));
+}
+
+// Same reading rules as the Hub log panel: file separators, container prefixes,
+// pretty-printed JSON payloads, and tone by outcome.
+function prettyJSON(value) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+  try { return JSON.stringify(JSON.parse(trimmed), null, 2); } catch { return null; }
+}
+function toneOf(value) {
+  const text = value.toLowerCase();
+  if (/\bexited with code [1-9]\d*\b/.test(text)) return "error";
+  if (/\bexited with code 0\b/.test(text)) return "success";
+  if (/\b(error|failed|failure|traceback|exception|fatal)\b/.test(text)) return "error";
+  if (/\bwarn(?:ing)?\b/.test(text)) return "warning";
+  if (/^(container|attaching|aborting|stopping|stopped)\b/.test(text)) return "muted";
+  return "plain";
+}
+function parseLog(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  while (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  return lines.map((line) => {
+    if (/^(?:[\w./-]+\.(?:log|json)|diagnostics-[\wTZ-]+)$/.test(line.trim())) return { file: line.trim(), text: line.trim(), tone: "muted" };
+    if (line.trim() === "[earlier output truncated]") return { text: line.trim(), tone: "muted" };
+    const match = line.match(/^(\S+)\s+\|\s?(.*)$/);
+    const content = match ? match[2] : line;
+    const json = prettyJSON(content);
+    return { prefix: match?.[1], text: json ?? content, tone: json ? "json" : toneOf(content || line) };
+  });
+}
+
+async function loadRunLog(runId) {
+  let lines = null;
+  let error = "";
+  try {
+    const out = await api("/v1/jobs/" + encodeURIComponent(runId) + "/log");
+    lines = parseLog(out.tail || "");
+  } catch (cause) {
+    error = String(cause.message || cause);
+  }
+  if (openLogId !== runId) return;
+  openLogLines = lines;
+  openLogError = error;
+  closeLogRow(runId);
+  const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(runId) + '"]');
+  if (row) row.after(renderRunLog(runId, lines, error));
+}
+function reportEntry(run) {
+  const attempts = Array.isArray(run.diagnostics) ? run.diagnostics : [];
+  let entry = "";
+  for (const attempt of attempts) {
+    if (attempt && attempt.kind === "report" && (attempt.status === "succeeded" || attempt.status === "partial")) entry = attempt.entry || "";
+  }
+  return entry;
+}
+
+async function startOrder(packageId, rerun, button) {
+  // Starting a run is the only action that needs Docker; say so instead of
+  // creating a run that fails immediately.
+  if (dockerReady === false) {
+    showActionError("Docker is not running. Start Docker, then press " + (rerun ? "Run again" : "Start") + " again.");
+    return;
+  }
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Starting…";
+  try {
+    const key = rerun ? "rerun:" + packageId + ":" + crypto.randomUUID() : "package:" + packageId;
+    await api("/v1/orders/" + encodeURIComponent(packageId) + "/runs", { method: "POST", headers: { "Idempotency-Key": key } });
+    await refresh();
+  } catch (cause) {
+    showActionError("Could not start " + packageId + ": " + cause.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
+  }
+}
+
+function showActionError(message) {
+  const box = document.getElementById("orders-action-error");
+  box.replaceChildren(noteBlock(message));
+}
+
+// The status poll already knows whether Docker answers; surface it next to the
+// orders so the Start button is never a silent no-op.
+function updateDockerNotice() {
+  const box = document.getElementById("orders-docker");
+  if (dockerReady !== false) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  box.hidden = false;
+  box.replaceChildren(noteBlock("Docker is not running. Saved orders stay listed; start Docker before running one."));
+}
+
+async function saveOrder() {
+  const input = document.getElementById("package-file");
+  const button = document.getElementById("save-order");
+  const errorBox = document.getElementById("import-error");
+  errorBox.replaceChildren();
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) { errorBox.append(noteBlock("The package exceeds the local 8 MiB limit.")); return; }
+  button.disabled = true; button.textContent = "Saving…";
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const sha256 = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    await api("/v1/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ package: btoa(binary), sha256 }) });
+    input.value = "";
+    document.getElementById("file-name").textContent = "";
+    await refresh();
+  } catch (cause) {
+    errorBox.append(noteBlock("Save failed: " + cause.message));
+  } finally {
+    button.disabled = !input.files || !input.files[0];
+    button.textContent = "Save order";
+  }
+}
+
+// ---------------------------------------------------------------- triggers
+
+let triggersCache = [];
+
+const OUTCOME_TONES = { started: "badge--success", skipped: "badge--neutral", busy: "badge--info", failed: "badge--danger" };
+
+function triggerWhenLabel(trigger) {
+  if (trigger.kind === "new_data") return "New data · checks every " + trigger.poll_minutes + " min";
+  if (trigger.daily_at) return "Every day at " + trigger.daily_at;
+  return "Every " + trigger.interval_minutes + " min";
+}
+
+function triggerWindowLabel(trigger) {
+  const windows = trigger.window_mode === "all" ? "All new windows" : "Newest only";
+  if (trigger.kind === "schedule") {
+    return windows + (trigger.start_source === "order" ? " · order's time" : " · newest data");
+  }
+  return windows;
+}
+
+function triggerState(trigger) {
+  const box = el("div");
+  const badge = el("span", trigger.last_fired_at ? (trigger.last_outcome || "unknown") : "never ran");
+  badge.className = "badge " + (OUTCOME_TONES[trigger.last_outcome] || "badge--neutral");
+  box.append(badge);
+  if (trigger.last_fired_at) {
+    const when = el("span", formatTime(trigger.last_fired_at));
+    when.className = "trigger-flag";
+    box.append(when);
+  }
+  if (trigger.enabled && trigger.next_due) {
+    const next = el("span", "next " + formatTime(trigger.next_due));
+    next.className = "trigger-flag";
+    box.append(next);
+  }
+  // A stopped Handler never catches up, so say what it skipped instead.
+  if (trigger.missed_count) {
+    const missed = el("span", "missed " + trigger.missed_count + (trigger.missed_count === 1 ? " scheduled run" : " scheduled runs") + " while the Handler was stopped" + (trigger.last_missed_at ? " (last " + formatTime(trigger.last_missed_at) + ")" : ""));
+    missed.className = "trigger-flag trigger-flag--missed";
+    box.append(missed);
+  }
+  if (trigger.kind === "new_data" && trigger.last_skipped) {
+    const skipped = el("span", trigger.last_skipped + " older window" + (trigger.last_skipped === 1 ? "" : "s") + " skipped on the last run");
+    skipped.className = "trigger-flag";
+    box.append(skipped);
+  }
+  if (trigger.last_error) box.append(noteBlock(trigger.last_error));
+  return box;
+}
+
+function triggerRow(trigger) {
+  const row = document.createElement("tr");
+  if (!trigger.enabled) row.style.opacity = "0.62";
+  const identity = el("div");
+  identity.append(identityCode(trigger.package_id), (() => { const id = el("span", trigger.id); id.className = "trigger-flag"; return id; })());
+  const actions = el("div");
+  actions.className = "cell-actions";
+  const fire = el("button", "Run now");
+  fire.className = "primary table-button";
+  fire.type = "button";
+  fire.addEventListener("click", () => fireTrigger(trigger.id, fire));
+  const toggle = el("button", trigger.enabled ? "Pause" : "Resume");
+  toggle.className = "secondary table-button";
+  toggle.type = "button";
+  toggle.addEventListener("click", () => patchTrigger(trigger.id, { enabled: !trigger.enabled }, toggle));
+  const remove = el("button", "Delete");
+  remove.className = "secondary table-button";
+  remove.type = "button";
+  remove.addEventListener("click", () => deleteTrigger(trigger.id, remove));
+  actions.append(fire, toggle, remove);
+  row.append(
+    cell(identity, "identity"),
+    cell(triggerWhenLabel(trigger)),
+    cell(triggerWindowLabel(trigger), "optional"),
+    cell(triggerState(trigger)),
+    cell(actions, "actions-cell")
+  );
+  return row;
+}
+
+function emptyTriggersBlock() {
+  const block = el("div");
+  block.className = "state-block";
+  const title = el("span", "No triggers yet.");
+  title.className = "empty-title";
+  block.append(title, el("span", "Pick a saved order above and choose when the Handler should run it again."));
+  return block;
+}
+
+async function loadTriggers() {
+  const errorBox = document.getElementById("triggers-error");
+  const loading = document.getElementById("triggers-loading");
+  try {
+    const page = await api("/v1/triggers");
+    triggersCache = page.triggers || [];
+    errorBox.replaceChildren();
+  } catch (cause) {
+    loading.hidden = true;
+    errorBox.replaceChildren(noteBlock(String(cause)));
+    return;
+  }
+  loading.hidden = true;
+  const count = document.getElementById("nav-trigger-count");
+  count.textContent = String(triggersCache.length);
+  count.hidden = triggersCache.length === 0;
+  note("triggers-note", triggersCache.length ? triggersCache.length + (triggersCache.length === 1 ? " trigger" : " triggers") : "run a saved order again on its own");
+  paint("triggers-body", "triggers-wrap", "triggers-empty", triggersCache.map(triggerRow), emptyTriggersBlock());
+}
+
+// The order list is the only source of valid package ids.
+function paintTriggerOrderOptions() {
+  const select = document.getElementById("trigger-package");
+  const previous = select.value;
+  const usable = ordersCache.filter(order => !order.error);
+  const options = usable.map(order => {
+    const option = el("option", order.package_id);
+    option.value = order.package_id;
+    return option;
+  });
+  if (options.length === 0) {
+    const option = el("option", "No saved order on this machine");
+    option.value = "";
+    options.push(option);
+  }
+  select.replaceChildren(...options);
+  if (previous && usable.some(order => order.package_id === previous)) select.value = previous;
+  document.getElementById("trigger-add").disabled = usable.length === 0;
+}
+
+// Only the fields the chosen condition needs stay visible.
+function syncTriggerForm() {
+  const scheduled = document.getElementById("trigger-kind").value === "schedule";
+  const daily = scheduled && document.getElementById("trigger-schedule-mode").value === "daily";
+  document.getElementById("trigger-poll-field").hidden = scheduled;
+  document.getElementById("trigger-schedule-mode-field").hidden = !scheduled;
+  document.getElementById("trigger-source-field").hidden = !scheduled;
+  document.getElementById("trigger-interval-field").hidden = !scheduled || daily;
+  document.getElementById("trigger-daily-field").hidden = !daily;
+}
+
+function showTriggerError(message) {
+  const box = document.getElementById("trigger-action-error");
+  box.replaceChildren(message ? noteBlock(message) : "");
+}
+
+async function addTrigger() {
+  const button = document.getElementById("trigger-add");
+  const packageId = document.getElementById("trigger-package").value;
+  showTriggerError("");
+  if (!packageId) {
+    showTriggerError("Choose a saved order first.");
+    return;
+  }
+  const kind = document.getElementById("trigger-kind").value;
+  const body = {
+    package_id: packageId,
+    kind,
+    window_mode: document.getElementById("trigger-window").value,
+    enabled: true,
+  };
+  if (kind === "new_data") {
+    body.poll_minutes = Number(document.getElementById("trigger-poll").value);
+  } else {
+    body.start_source = document.getElementById("trigger-source").value;
+    if (document.getElementById("trigger-schedule-mode").value === "daily") {
+      body.daily_at = document.getElementById("trigger-daily").value;
+    } else {
+      body.interval_minutes = Number(document.getElementById("trigger-interval").value);
+    }
+  }
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Adding…";
+  try {
+    await api("/v1/triggers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (cause) {
+    showTriggerError("Could not add the trigger: " + cause.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
+    await refresh();
+  }
+}
+
+async function fireTrigger(id, button) {
+  showTriggerError("");
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Running…";
+  try {
+    const result = await api("/v1/triggers/" + encodeURIComponent(id) + "/fire", { method: "POST" });
+    if (result.last_outcome === "failed") showTriggerError("Run now failed: " + (result.last_error || "see the run log"));
+    else if (result.last_outcome === "skipped") showTriggerError("Nothing new to run: the newest window already ran.");
+    else if (result.last_outcome === "busy") showTriggerError("Its previous run is still active; try again when it finishes.");
+  } catch (cause) {
+    showTriggerError("Run now failed: " + cause.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
+    await refresh();
+  }
+}
+
+async function patchTrigger(id, patch, button) {
+  showTriggerError("");
+  button.disabled = true;
+  try {
+    await api("/v1/triggers/" + encodeURIComponent(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  } catch (cause) {
+    showTriggerError("Could not update the trigger: " + cause.message);
+  } finally {
+    await refresh();
+  }
+}
+
+async function deleteTrigger(id, button) {
+  showTriggerError("");
+  button.disabled = true;
+  try {
+    await api("/v1/triggers/" + encodeURIComponent(id), { method: "DELETE" });
+  } catch (cause) {
+    showTriggerError("Could not delete the trigger: " + cause.message);
+  } finally {
+    await refresh();
+  }
+}
+
+async function refresh() {
+  await Promise.allSettled([loadStatus(), loadOrders(), loadRuns(), loadTriggers()]);
+  paintTriggerOrderOptions();
+  updateDockerNotice();
+  if (openLogId) await loadRunLog(openLogId);
+}
+
+document.getElementById("refresh").addEventListener("click", () => { refresh(); });
+const fileInput = document.getElementById("package-file");
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files && fileInput.files[0];
+  document.getElementById("file-name").textContent = file ? file.name : "";
+  document.getElementById("save-order").disabled = !file;
+});
+document.getElementById("save-order").addEventListener("click", () => { saveOrder(); });
+document.getElementById("trigger-form").addEventListener("submit", (event) => { event.preventDefault(); addTrigger(); });
+document.getElementById("trigger-kind").addEventListener("change", syncTriggerForm);
+document.getElementById("trigger-schedule-mode").addEventListener("change", syncTriggerForm);
+syncTriggerForm();
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 5000);
+</script>
+</body>
+</html>

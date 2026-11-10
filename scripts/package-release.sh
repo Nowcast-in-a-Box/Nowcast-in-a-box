@@ -43,17 +43,17 @@ trap cleanup EXIT
 
 for os in "${oses[@]}"; do
   stage="$(mktemp -d "${TMPDIR:-/tmp}/nib-release-${os}.XXXXXX")"
-  mkdir -p "$stage/bin/$os" "$stage/artifacts" "$stage/runs"
+  mkdir -p "$stage/bin/$os" "$stage/artifacts" "$stage/runs" "$stage/orders"
   cp "$ROOT/README.md" "$ROOT/config.yaml" "$stage/"
   case "$os" in
     macos)
-      cp "$ROOT/Start NiB.command" "$ROOT/Uninstall NiB.command" "$stage/"
+      cp "$ROOT/Start NiB.command" "$ROOT/Uninstall NiB.command" "$ROOT/Open NiB.command" "$stage/"
       ;;
     linux)
-      cp "$ROOT/Start NiB.sh" "$ROOT/Uninstall NiB.sh" "$stage/"
+      cp "$ROOT/Start NiB.sh" "$ROOT/Uninstall NiB.sh" "$ROOT/Open NiB.sh" "$stage/"
       ;;
     windows)
-      cp "$ROOT/Start NiB.cmd" "$ROOT/Uninstall NiB.cmd" "$stage/"
+      cp "$ROOT/Start NiB.cmd" "$ROOT/Uninstall NiB.cmd" "$ROOT/Open NiB.cmd" "$stage/"
       ;;
   esac
   cp -R "$ROOT/bin/$os/." "$stage/bin/$os/"
@@ -62,6 +62,7 @@ for os in "${oses[@]}"; do
   cp "$ROOT/docs/logo.jpg" "$stage/docs/logo.jpg"
   cp "$ROOT/artifacts/.gitkeep" "$stage/artifacts/.gitkeep"
   cp "$ROOT/runs/.gitkeep" "$stage/runs/.gitkeep"
+  cp "$ROOT/orders/.gitkeep" "$stage/orders/.gitkeep"
 
   find "$stage" -name '.DS_Store' -delete
   find "$stage" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} +

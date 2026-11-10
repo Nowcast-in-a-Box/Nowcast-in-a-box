@@ -27,6 +27,7 @@ type Job struct {
 	Request               RuntimeRequest `json:"request"`
 	CreatedAt             time.Time      `json:"created_at"`
 	IdempotencyKey        string         `json:"idempotency_key,omitempty"`
+	TriggerID             string         `json:"trigger_id,omitempty"`
 	UpdatedAt             time.Time      `json:"updated_at"`
 }
 
@@ -42,6 +43,10 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/resources", s.authorize(s.handleResources))
 	mux.HandleFunc("POST /v1/resources/prepare", s.authorize(s.handlePrepareResources))
 	mux.HandleFunc("GET /v1/datasets/{dataset}/samples", s.authorize(s.handleSamples))
+	s.triggerRoutes(mux)
+	mux.HandleFunc("GET /v1/orders", s.authorize(s.handleOrdersList))
+	mux.HandleFunc("POST /v1/orders", s.authorize(s.handleOrderSave))
+	mux.HandleFunc("POST /v1/orders/{package_id}/runs", s.authorize(s.handleOrderRun))
 	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))
 	mux.HandleFunc("GET /v1/jobs/{id}", s.authorize(s.handleJob))
 	mux.HandleFunc("GET /v1/jobs/{id}/log", s.authorize(s.handleJobLog))
@@ -61,6 +66,29 @@ func (s *Server) docker(ctx context.Context, args ...string) (int, []byte, error
 		args = append([]string{"--context", s.Config.Runtime.DockerContext}, args...)
 	}
 	return s.Runner.Run(ctx, args...)
+}
+
+// requireDocker refuses a new run when the daemon cannot be reached. Starting a
+// run is the only operation that needs Docker; stopping, restarting and browsing
+// saved orders do not. The message reaches both the Hub and the local console.
+func (s *Server) requireDocker() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	code, out, err := s.docker(ctx, "info", "--format", "{{.ServerVersion}}")
+	if err == nil && code == 0 {
+		return nil
+	}
+	detail := strings.TrimSpace(string(out))
+	if line, _, more := strings.Cut(detail, "\n"); more {
+		detail = line
+	}
+	if detail == "" && err != nil {
+		detail = err.Error()
+	}
+	if detail == "" {
+		return fmt.Errorf("Docker is not running; start Docker and retry")
+	}
+	return fmt.Errorf("Docker is not running; start Docker and retry (%s)", detail)
 }
 
 func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
@@ -132,34 +160,46 @@ func (s *Server) handleSamples(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, err)
 		return
 	}
-	data, catalog, err := s.dataPaths(dataset)
-	if err != nil {
+	if _, _, err := s.dataPaths(dataset); err != nil {
 		runtimeError(w, 409, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	value, err := s.listSamples(r.Context(), dataset, offset, limit, strings.TrimSpace(r.URL.Query().Get("day")))
+	if err != nil {
+		runtimeError(w, 502, err)
+		return
+	}
+	writeJSON(w, 200, value)
+}
+
+// listSamples asks the data reader which windows exist. It is the only way to
+// answer that question: the Handler never parses the data files itself. The
+// sample route and the trigger poller share this one call.
+func (s *Server) listSamples(ctx context.Context, dataID string, offset, limit int, day string) (map[string]any, error) {
+	data, catalog, err := s.dataPaths(dataID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	extra := []string{"--list-samples", "--offset", strconv.Itoa(offset), "--limit", strconv.Itoa(limit)}
-	if day := strings.TrimSpace(r.URL.Query().Get("day")); day != "" {
+	if day != "" {
 		extra = append(extra, "--day", day)
 	}
-	args, err := s.dataCommandArgs(dataset, data, catalog, extra...)
+	args, err := s.dataCommandArgs(dataID, data, catalog, extra...)
 	if err != nil {
-		runtimeError(w, 500, err)
-		return
+		return nil, err
 	}
 	args = append([]string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}, args...)
 	code, out, err := s.docker(ctx, args...)
 	if err != nil || code != 0 {
-		runtimeError(w, 502, fmt.Errorf("sample reader failed: %v %s", err, out))
-		return
+		return nil, fmt.Errorf("sample reader failed: %v %s", err, out)
 	}
-	var value any
+	var value map[string]any
 	if json.Unmarshal(containerJSON(out), &value) != nil {
-		runtimeError(w, 502, fmt.Errorf("invalid sample reader response"))
-		return
+		return nil, fmt.Errorf("invalid sample reader response")
 	}
-	writeJSON(w, 200, value)
+	return value, nil
 }
 
 func pagination(r *http.Request) (int, int, error) {
@@ -199,14 +239,31 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, fmt.Errorf("idempotency key is too long"))
 		return
 	}
-	request, err := ParseRuntimePackage(upload.Package, upload.SHA256, s.Resources)
+	job, status, err := s.createJobFromPackage(upload.Package, upload.SHA256, key)
 	if err != nil {
-		runtimeError(w, 422, err)
+		runtimeError(w, status, err)
 		return
 	}
+	writeJSON(w, status, *job)
+}
+
+// createJobFromPackage admits a verified package ZIP as a new run, or returns
+// the existing job when the idempotency key repeats. It is shared by the Hub
+// upload path and the local console's saved-order start.
+func (s *Server) createJobFromPackage(pkg []byte, expected, key string) (*Job, int, error) {
+	request, err := ParseRuntimePackage(pkg, expected, s.Resources)
+	if err != nil {
+		return nil, 422, err
+	}
+	return s.admitJob(request, pkg, key, "")
+}
+
+// admitJob validates one request and starts it. A trigger calls it after
+// replacing the start window in a parsed package; triggerID is empty for the
+// Hub upload and saved-order paths.
+func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID string) (*Job, int, error) {
 	if err := s.requireDataSupported(request.DataID); err != nil {
-		runtimeError(w, 422, err)
-		return
+		return nil, 422, err
 	}
 	if len(request.SampleStarts) == 0 {
 		request.SampleStarts = []string{request.StartTime}
@@ -216,46 +273,36 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		limit = defaultMaxBatchSamples
 	}
 	if len(request.SampleStarts) > limit {
-		runtimeError(w, 422, fmt.Errorf("this Handler allows at most %d sample windows per run", limit))
-		return
+		return nil, 422, fmt.Errorf("this Handler allows at most %d sample windows per run", limit)
 	}
 	initial, parseErr := time.Parse(time.RFC3339, request.StartTime)
 	_, zoneOffset := initial.Zone()
 	if parseErr != nil || zoneOffset != 0 {
-		runtimeError(w, 422, fmt.Errorf("sample context time must be explicit UTC"))
-		return
+		return nil, 422, fmt.Errorf("sample context time must be explicit UTC")
 	}
 	if _, _, err := s.dataPaths(request.DataID); err != nil {
-		runtimeError(w, 409, err)
-		return
+		return nil, 409, err
 	}
 	if len(s.Config.Runtime.AtlasRevision) != 40 {
-		runtimeError(w, 409, fmt.Errorf("configure the pinned atlas revision first"))
-		return
+		return nil, 409, fmt.Errorf("configure the pinned atlas revision first")
 	}
 	if err := s.reconcileExecutions(); err != nil {
-		runtimeError(w, http.StatusConflict, err)
-		return
+		return nil, http.StatusConflict, err
 	}
 	s.jobsMu.Lock()
+	defer s.jobsMu.Unlock()
 	if s.stopping {
-		s.jobsMu.Unlock()
-		runtimeError(w, http.StatusServiceUnavailable, fmt.Errorf("Handler is stopping; reconnect after starting it again"))
-		return
+		return nil, http.StatusServiceUnavailable, fmt.Errorf("Handler is stopping; reconnect after starting it again")
 	}
 	// A frozen package is idempotent; explicit rerun is a separate request identity.
 	if key != "" {
 		for _, job := range s.jobs {
 			if job.IdempotencyKey == key {
 				if job.Request.PackageSHA256 != request.PackageSHA256 {
-					s.jobsMu.Unlock()
-					runtimeError(w, 409, fmt.Errorf("idempotency key belongs to another package"))
-					return
+					return nil, 409, fmt.Errorf("idempotency key belongs to another package")
 				}
 				copy := *job
-				s.jobsMu.Unlock()
-				writeJSON(w, 200, copy)
-				return
+				return &copy, 200, nil
 			}
 		}
 		entries, _ := os.ReadDir(s.Config.Paths.Runs)
@@ -263,23 +310,19 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 			if !entry.IsDir() || !idPattern.MatchString(entry.Name()) {
 				continue
 			}
-			raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, entry.Name(), "job.json"))
+			recordedRaw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, entry.Name(), "job.json"))
 			if readErr != nil {
 				continue
 			}
 			var recorded Job
-			if json.Unmarshal(raw, &recorded) != nil || recorded.ID != entry.Name() || recorded.IdempotencyKey != key {
+			if json.Unmarshal(recordedRaw, &recorded) != nil || recorded.ID != entry.Name() || recorded.IdempotencyKey != key {
 				continue
 			}
 			if recorded.Request.PackageSHA256 != request.PackageSHA256 {
-				s.jobsMu.Unlock()
-				runtimeError(w, 409, fmt.Errorf("idempotency key belongs to another package"))
-				return
+				return nil, 409, fmt.Errorf("idempotency key belongs to another package")
 			}
 			if live := s.jobs[recorded.ID]; live != nil && (live.Status == "queued" || live.Status == "running") {
-				s.jobsMu.Unlock()
-				runtimeError(w, http.StatusConflict, fmt.Errorf("this run has a newer active request; observe it in Runs before retrying an older request"))
-				return
+				return nil, http.StatusConflict, fmt.Errorf("this run has a newer active request; observe it in Runs before retrying an older request")
 			}
 			if recorded.Status == "running" || recorded.Status == "queued" {
 				recorded.Status = "interrupted"
@@ -287,51 +330,39 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 				_ = writeJob(filepath.Join(s.Config.Paths.Runs, entry.Name()), &recorded)
 			}
 			s.jobs[recorded.ID] = &recorded
-			s.jobsMu.Unlock()
-			writeJSON(w, 200, recorded)
-			return
+			return &recorded, 200, nil
 		}
 	}
 	for _, job := range s.jobs {
 		if job.Request.PackageSHA256 == request.PackageSHA256 && (job.Status == "queued" || job.Status == "running") {
-			s.jobsMu.Unlock()
-			runtimeError(w, http.StatusConflict, fmt.Errorf("this package is already queued or running; observe it in Runs and wait before rerunning"))
-			return
+			return nil, http.StatusConflict, fmt.Errorf("this package is already queued or running; observe it in Runs and wait before rerunning")
 		}
+	}
+	if err := s.requireDocker(); err != nil {
+		return nil, http.StatusServiceUnavailable, err
 	}
 	id, err := newRunID(time.Now())
 	if err != nil {
-		s.jobsMu.Unlock()
-		runtimeError(w, 500, err)
-		return
+		return nil, 500, err
 	}
 	directory := filepath.Join(s.Config.Paths.Runs, id)
 	if err = os.MkdirAll(s.Config.Paths.Runs, 0o755); err != nil {
-		s.jobsMu.Unlock()
-		runtimeError(w, 500, err)
-		return
+		return nil, 500, err
 	}
 	if err = os.Mkdir(directory, 0o755); err != nil {
-		s.jobsMu.Unlock()
-		runtimeError(w, 500, err)
-		return
+		return nil, 500, err
 	}
-	job := &Job{ID: id, Status: "queued", Stage: "queued", Request: request, IdempotencyKey: key, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	job := &Job{ID: id, Status: "queued", Stage: "queued", Request: request, IdempotencyKey: key, TriggerID: triggerID, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	if err := writeJob(directory, job); err != nil {
-		s.jobsMu.Unlock()
-		runtimeError(w, 500, err)
-		return
+		return nil, 500, err
 	}
-	if err := os.WriteFile(filepath.Join(directory, "package.zip"), upload.Package, 0o600); err != nil {
-		s.jobsMu.Unlock()
-		runtimeError(w, 500, err)
-		return
+	if err := os.WriteFile(filepath.Join(directory, "package.zip"), pkg, 0o600); err != nil {
+		return nil, 500, err
 	}
 	s.jobs[id] = job
 	copy := *job
-	s.jobsMu.Unlock()
 	go s.executeJob(id)
-	writeJSON(w, http.StatusAccepted, copy)
+	return &copy, http.StatusAccepted, nil
 }
 
 func writeJob(directory string, job *Job) error {

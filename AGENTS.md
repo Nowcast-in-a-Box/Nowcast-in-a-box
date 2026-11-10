@@ -16,6 +16,15 @@ Work IDs are GitHub issue numbers. Branches `feat/short-slug`, commits
 `feat: … (#12)`, PRs `Closes #12`. Letter codes such as E1 or C2 are a
 planning map in `docs/modules.yaml`, not git ids.
 
+## Approach
+
+Read existing files before writing. Don't re-read unless changed.
+Thorough in reasoning, concise in output.
+Skip files over 100KB unless required.
+No sycophantic openers or closing fluff.
+No emojis or em-dashes.
+Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by reading code or docs before asserting.
+
 ## Layout
 
 ```text
@@ -27,6 +36,7 @@ bin/              prebuilt binaries and OS entry points
   windows/        run.ps1, uninstall.ps1
 diagnostics/      image scaffold and rendering library; computation entry pending
 runs/             diagnostics run outputs (gitignored)
+orders/           saved offline order packages (gitignored)
 artifacts/        downloaded weights and docker config (not committed)
 contracts/        YAML/manifest schemas. Not a Python package.
   data/           data-reader declarations
@@ -42,6 +52,7 @@ scripts/          maintainer tooling only (cross-build, format, package, export)
 tests/             handler, runtime, verification, and visualization tests
 config.yaml       bind addresses, ports, paths
 Start NiB.*       user-facing start shims (macOS, Windows, Linux)
+Open NiB.*        user-facing console-page openers (macOS, Windows, Linux)
 Uninstall NiB.*   user-facing uninstall shims
 ```
 

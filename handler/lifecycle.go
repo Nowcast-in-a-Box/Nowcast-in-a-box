@@ -94,6 +94,7 @@ func configID(cfg Config) string {
 	cfg.DataRoots = nil
 	cfg.DataRootFallback = ""
 	cfg.Paths.Runs = canonicalPath(cfg.Paths.Runs)
+	cfg.Paths.Orders = canonicalPath(cfg.Paths.Orders)
 	cfg.Paths.Artifacts = canonicalPath(cfg.Paths.Artifacts)
 	cfg.Paths.Resources = canonicalPath(cfg.Paths.Resources)
 	cfg.Paths.WeightSource = canonicalPath(cfg.Paths.WeightSource)
@@ -369,8 +370,9 @@ func (s *Server) requestShutdown() error {
 	}
 	defer s.executionMu.Unlock()
 	// Reconcile after holding the lock: an execution that just failed cleanup has
-	// released it and must no longer be exempt from the container check.
-	if err := s.reconcileExecutions(); err != nil {
+	// released it and must no longer be exempt from the container check. An
+	// unreachable daemon is not a reason to stay up: it cannot hold containers.
+	if err := s.reconcileExecutions(); err != nil && !errors.Is(err, errDockerUnreachable) {
 		return err
 	}
 	s.jobsMu.Lock()

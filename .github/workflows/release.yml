@@ -64,23 +64,26 @@ jobs:
               macos)
                 start="Start NiB.command"
                 uninstall="Uninstall NiB.command"
+                open_console="Open NiB.command"
                 launcher="bin/macos/start.command"
                 uninstaller="bin/macos/uninstall.command"
                 ;;
               linux)
                 start="Start NiB.sh"
                 uninstall="Uninstall NiB.sh"
+                open_console="Open NiB.sh"
                 launcher="bin/linux/run.sh"
                 uninstaller="bin/linux/uninstall.sh"
                 ;;
               windows)
                 start="Start NiB.cmd"
                 uninstall="Uninstall NiB.cmd"
+                open_console="Open NiB.cmd"
                 launcher="bin/windows/run.ps1"
                 uninstaller="bin/windows/uninstall.ps1"
                 ;;
             esac
-            for required in "$start" "$uninstall" config.yaml "$launcher" "$uninstaller"; do
+            for required in "$start" "$uninstall" "$open_console" config.yaml "$launcher" "$uninstaller"; do
               grep -Fxq -- "$required" <<< "$entries" || {
                 echo "::error::$os archive is missing $required"
                 exit 1
@@ -92,6 +95,7 @@ jobs:
             }
             grep -Fxq 'artifacts/.gitkeep' <<< "$entries" || exit 1
             grep -Fxq 'runs/.gitkeep' <<< "$entries" || exit 1
+            grep -Fxq 'orders/.gitkeep' <<< "$entries" || exit 1
             case "$os" in
               macos) binaries=("bin/macos/nib-handler-darwin-amd64" "bin/macos/nib-handler-darwin-arm64") ;;
               linux) binaries=("bin/linux/nib-handler-linux-amd64" "bin/linux/nib-handler-linux-arm64") ;;

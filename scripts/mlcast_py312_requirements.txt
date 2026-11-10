@@ -1,0 +1,9 @@
+# Dedicated Python 3.12 environment for MLCast remote V2/V3 downloads and NiB local QA.
+# One environment for remote Zarr V2/V3 downloads and local Zarr V2 readback.
+numpy>=2.0,<3
+xarray>=2025.6,<2027
+zarr>=3.1,<4
+s3fs>=2025.5,<2027
+dask[array]>=2025.5,<2027
+pyproj>=3.7,<4
+PyYAML>=6.0.2,<7

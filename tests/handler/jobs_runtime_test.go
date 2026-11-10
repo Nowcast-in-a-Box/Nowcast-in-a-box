@@ -155,11 +155,17 @@ func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
 	}
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
+	// The Docker availability probe is not an execution; count only run stages.
+	executions := make([][]string, 0, len(runner.calls))
 	joined := ""
 	for _, call := range runner.calls {
+		if len(call) > 0 && call[0] == "info" {
+			continue
+		}
+		executions = append(executions, call)
 		joined += strings.Join(call, " ")
 	}
-	if len(runner.calls) != 4 || strings.Contains(joined, "diagnostics") {
+	if len(executions) != 4 || strings.Contains(joined, "diagnostics") {
 		t.Fatalf("calls=%v", runner.calls)
 	}
 	for _, stage := range []string{"ingestion", "wadepre"} {

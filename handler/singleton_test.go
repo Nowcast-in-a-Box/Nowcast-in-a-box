@@ -47,6 +47,7 @@ func TestConfigIdentityDoesNotDependOnWorkingDirectoryForEmptyPaths(t *testing.T
 	cfg.Paths.Resources = filepath.Dir(cfg.Source)
 	cfg.Paths.Runs = cfg.Paths.Resources
 	cfg.Paths.Artifacts = cfg.Paths.Resources
+	cfg.Paths.Orders = cfg.Paths.Resources
 	before := configID(cfg)
 	original, err := os.Getwd()
 	if err != nil {
