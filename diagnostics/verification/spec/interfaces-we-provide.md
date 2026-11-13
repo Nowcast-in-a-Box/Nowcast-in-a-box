@@ -230,80 +230,90 @@ print(stats.as_dict(), len(result["rows"]))
 
 ---
 
-## 11. 数据到达探针（`nib_verify.monitor`）
+## 11. 数据到达监控（`nib_verify.monitor`）
 
-检验结果能回答"这一帧算过没有"，回答不了"这一帧到底到没到"。这两件事必须分开，
-否则页面上的空白分不清是**数据缺失**还是**程序没跑**。探针就是去问数据源的那一端。
+检验结果能回答"这一帧算过没有"，回答不了"这一帧到底到没到"。两件事必须分开，
+否则页面上的空白分不清是**数据缺失**还是**程序没跑**。数据到达监控 = 一条命令
+（探针）定时去问数据源，把答案写进 `arrival` 表；页面（同一个服务的 Coverage 标签）
+只读这张表。
 
-### 调用
+### 11.1 `probe_arrivals()` — 问数据源，写答案
 
 ```python
-from nib_verify.monitor import probe_arrivals
-
-stats = probe_arrivals(access, store, cfg, *, since=None, until=None,
-                       window_hours=6.0, dataset=None)
+probe_arrivals(access, store, cfg, *,
+               since: datetime | None = None,
+               until: datetime | None = None,
+               window_hours: float = 6.0,
+               dataset: str | None = None) -> ProbeStats
 ```
+
+| | |
+|---|---|
+| 输入 | `access`（能问数据源的 field-access，通常 `http`）；`store`；`cfg`（定 cadence）|
+| 行为 | 按 `ruler.time_step_minutes` 逐帧走窗口 → `access.list_observations(name, t0, t1)` 问数据源实际有哪些帧 → 每帧写 `arrived` / `missing` |
+| 窗口 | 默认"现在往前 6 小时"；`since`/`until` 可显式指定（回填历史）|
+| 返回 | `expected / arrived / missing / written` + `messages`（`ProbeStats.as_dict()` 可直接落 JSON）|
+| 幂等 | 同一窗口跑多少次，表里结果一样（`ON CONFLICT DO UPDATE`）|
+| 错误 | 数据源不可用 → `messages` 里记原因，**不抛异常**：源挂了是一次发现，不是一次崩溃 |
+
+### 11.2 `nib_verify probe` — 同一件事的命令行
 
 ```bash
 python -m nib_verify probe --config <config.json> --root <store 目录>     --access http --data-url http://<数据服务> --window-hours 6
 ```
 
-| | |
+| 退出码 | 含义 |
 |---|---|
-| `access` | 任意 field-access 实现（探针要用**能问数据源的**那个，通常 `http`）|
-| 窗口 | 默认"现在往前 6 小时"，按 `ruler.time_step_minutes` 逐帧走 |
-| 写入 | `arrival(valid_time, dataset, kind, state, checked_at)`，`state` = `arrived` / `missing` |
-| 幂等 | 同一窗口跑多少次，表里结果一样（`ON CONFLICT DO UPDATE`）|
-| 返回 | `expected / arrived / missing / written` + `messages` |
-| 失败 | 数据源不可用时返回 `messages` 里记原因，**不抛异常**——源挂了是一次发现，不是一次崩溃 |
-| 退出码 | 有缺帧 → 1；全到 → 0 |
+| `0` | 全到（或源不可用——此时 `messages` 里写明原因）|
+| `1` | 有缺帧（可据此触发告警，也可忽略）|
 
-### 上游必须提供三样
+### 11.3 `arrival` 表（探针写、页面读）
 
-| # | 提供什么 | 为什么 |
-|---|---|---|
-| ① | **可问的数据服务**：`GET /observations?name=&t0=&t1=`（规范见 `field-access-http.md`）| 探针要能独立于 run 问"这段时间有哪些帧" |
-| ② | **定时触发**：cron 或 handler 定时作业，每 10 分钟～1 小时调一次 | 探针是一次采样，不是常驻进程 |
-| ③ | **持久库**：`arrival` 表所在库要跨 run 累积 | 否则探针记录跟着 run 一起消失 |
-
-`arrival` 表**不带 `group_id`**：某帧到没到是数据源的属性，不是哪个配置的属性。
-
-### 有/没有探针数据，页面怎么表现
-
-| | 观测完整性 | 能否区分"未到 / 未跑" |
-|---|---|---|
-| 有 `arrival` 行 | 直接来自探针 | ✅ 能（`missing` = 未到；`arrived` 但无任务 = 未跑）|
-| 无 `arrival` 行 | 由既有结果反推 | ❌ 不能，页面按"无记录"显示 |
-
-页面的 `cause` 字段就是给这个用的：`null` 表示"不知道"，`missing_data` / `not_run`
-表示探针已经给出了答案。前端不需要因为探针上线而改。
-
-### 接入清单（照这个做，别的地方不用动）
-
-| # | 谁做 | 做什么 | 工作量 |
-|---|---|---|---|
-| 1 | 上游 | 提供或确认可问的数据服务 `GET /observations?name=&t0=&t1=`（`field-access-http.md` 的形状）| 已有则 0 |
-| 2 | 上游 | 加一条定时任务调 `nib_verify probe`（建议每 10–30 分钟一次，窗口不小于 2 小时）| 一行 cron |
-| 3 | 上游 | 让探针用的库跨 run 持久（与检验结果同库即可）| 一处挂载 |
-| 4 | 不用做 | 页面和接口无需接入：第三个标签、3 个端点随服务自带 | 0 |
-| 5 | 不用做 | 老库不需要迁移脚本：`Store` 打开时按需建 `arrival` 表 | 0 |
-
-**窗口为什么要大于两倍触发间隔**：探针按窗口逐帧写，两次触发之间若留缝，
-缝里的帧就永远没有记录。窗口重叠一点没有代价，因为写入是幂等的。
-
-**库为什么必须持久**：`arrival` 和检验结果一样，只有跨 run 累积，
-「过去所有时间 / 过去一周」这两列才有意义。单 run 的库打开页面只有当前一小时。
-
-### 部署形态（两种都行，选一种）
-
-```bash
-# A. 宿主机 cron（最简单）
-*/15 * * * * cd /opt/nib && python -m nib_verify probe     --config /data/configs/<gid>.json --root /data/verification     --access http --data-url http://field-service:8080 --window-hours 3     >> /var/log/nib-probe.log 2>&1
-
-# B. 一次性容器（与检验容器同一镜像，跑完即退）
-docker run --rm     -v /data/configs:/configs:ro -v /data/verification-store:/store     nib-diagnostics:local -m nib_verify probe     --config /configs/<gid>.json --root /store     --access http --data-url http://field-service:8080 --window-hours 3
+```sql
+CREATE TABLE arrival (
+    valid_time TEXT NOT NULL,      -- 那一帧的时刻
+    dataset    TEXT NOT NULL,      -- 观测名（如 cma_radar）
+    kind       TEXT NOT NULL,      -- obs | forecast
+    state      TEXT NOT NULL,      -- arrived | missing
+    checked_at TEXT NOT NULL,      -- 探针何时确认的
+    PRIMARY KEY (valid_time, dataset)
+);
 ```
 
-退出码：全到 → `0`；有缺帧 → `1`（可据此告警，也可忽略）；
-数据源不可用 → `0`，但 `messages` 里写明原因：源挂了是一次发现，不是探针的失败。
+**没有 `group_id`**：某帧到没到是数据源的属性，不是哪个配置的属性。
+**老库不用迁移**：`Store` 打开时按需建这张表。
 
+### 11.4 最小接入示例（调度方照抄）
+
+```python
+# 定时任务（cron 每 15 分钟）调一次；窗口 ≥ 2 × 触发间隔，否则帧会掉缝里
+from nib_verify.monitor import probe_arrivals
+from nib_verify.store import Store
+
+with Store("/data/verification/verify.sqlite") as store:
+    stats = probe_arrivals(access, store, cfg)   # 默认回看 6 小时
+if stats.missing:
+    log.warning("%s missing on %s", stats.dataset, stats.checked_at)
+```
+
+```bash
+# 或直接用命令行（宿主机 cron 一行）
+*/15 * * * * cd /opt/nib && python -m nib_verify probe     --config /data/configs/<gid>.json --root /data/verification     --access http --data-url http://field-service:8080 --window-hours 3
+```
+
+### 11.5 分工边界
+
+| 我们负责 | 调用方（上游）负责 |
+|---|---|
+| 采样逻辑、幂等、`arrival` 表结构 | **什么时候调、多久调一次**（cron / handler 定时作业）|
+| 页面与 3 个查询接口（随服务自带，不用接入）| **数据服务地址**（`GET /observations`，见 `field-access-http.md`）|
+| 老库自动建表 | **库放哪、是否跨 run 持久**（不持久则"全部时间/近一周"两列无意义）|
+
+### 11.6 兼容性
+
+| 场景 | 行为 |
+|---|---|
+| 无 `arrival` 行 | 页面回退为"由检验结果反推"，`obs_source = "derived"`，照常可用 |
+| 有 `arrival` 行 | 页面用探针答案，`obs_source = "probe"`，能区分"未到 / 未跑" |
+| 同一窗口重复跑 | 结果不变（幂等）|
+| 数据源短暂不可用 | 不写新行、不崩溃，`messages` 记录原因 |
