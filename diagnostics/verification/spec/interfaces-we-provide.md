@@ -277,3 +277,33 @@ python -m nib_verify probe --config <config.json> --root <store 目录>     --ac
 
 页面的 `cause` 字段就是给这个用的：`null` 表示"不知道"，`missing_data` / `not_run`
 表示探针已经给出了答案。前端不需要因为探针上线而改。
+
+### 接入清单（照这个做，别的地方不用动）
+
+| # | 谁做 | 做什么 | 工作量 |
+|---|---|---|---|
+| 1 | 上游 | 提供或确认可问的数据服务 `GET /observations?name=&t0=&t1=`（`field-access-http.md` 的形状）| 已有则 0 |
+| 2 | 上游 | 加一条定时任务调 `nib_verify probe`（建议每 10–30 分钟一次，窗口不小于 2 小时）| 一行 cron |
+| 3 | 上游 | 让探针用的库跨 run 持久（与检验结果同库即可）| 一处挂载 |
+| 4 | 不用做 | 页面和接口无需接入：第三个标签、3 个端点随服务自带 | 0 |
+| 5 | 不用做 | 老库不需要迁移脚本：`Store` 打开时按需建 `arrival` 表 | 0 |
+
+**窗口为什么要大于两倍触发间隔**：探针按窗口逐帧写，两次触发之间若留缝，
+缝里的帧就永远没有记录。窗口重叠一点没有代价，因为写入是幂等的。
+
+**库为什么必须持久**：`arrival` 和检验结果一样，只有跨 run 累积，
+「过去所有时间 / 过去一周」这两列才有意义。单 run 的库打开页面只有当前一小时。
+
+### 部署形态（两种都行，选一种）
+
+```bash
+# A. 宿主机 cron（最简单）
+*/15 * * * * cd /opt/nib && python -m nib_verify probe     --config /data/configs/<gid>.json --root /data/verification     --access http --data-url http://field-service:8080 --window-hours 3     >> /var/log/nib-probe.log 2>&1
+
+# B. 一次性容器（与检验容器同一镜像，跑完即退）
+docker run --rm     -v /data/configs:/configs:ro -v /data/verification-store:/store     nib-diagnostics:local -m nib_verify probe     --config /configs/<gid>.json --root /store     --access http --data-url http://field-service:8080 --window-hours 3
+```
+
+退出码：全到 → `0`；有缺帧 → `1`（可据此告警，也可忽略）；
+数据源不可用 → `0`，但 `messages` 里写明原因：源挂了是一次发现，不是探针的失败。
+
