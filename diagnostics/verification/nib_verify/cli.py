@@ -450,6 +450,33 @@ def cmd_run(args) -> int:
 # ======================================================================
 # query
 # ======================================================================
+def cmd_probe(args) -> int:
+    """Ask the source which frames it holds, and record the answers."""
+    from .monitor.probe import probe_arrivals
+
+    cfg = load(args.config)
+    access = _make_access(args)
+    store = Store(Path(args.root) / "verify.sqlite")
+    try:
+        stats = probe_arrivals(
+            access, store, cfg,
+            window_hours=args.window_hours,
+            dataset=args.dataset,
+        )
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(stats.as_dict(), indent=2, ensure_ascii=False))
+        return EXIT_OK if stats.missing == 0 else EXIT_FAILURE
+
+    print(f"# {stats.dataset} {stats.window_from} .. {stats.window_to}")
+    print(f"  expected {stats.expected} · arrived {stats.arrived} · missing {stats.missing}")
+    for message in stats.messages:
+        print(f"  {message}")
+    return EXIT_OK if stats.missing == 0 else EXIT_FAILURE
+
+
 def cmd_query(args) -> int:
     root = Path(args.root)
     cfg = load(args.config) if args.config else None
@@ -892,6 +919,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
     add_plan_args(ts.add_parser("plan", help="what this config would do, and what it cannot"))
     add_plan_args(sub.add_parser("plan", help="alias for `task plan`"))
+
+    # -- probe ----------------------------------------------------------
+    pr = sub.add_parser("probe", help="ask the source which frames arrived")
+    pr.add_argument("--config", required=True, help="the config whose cadence to walk")
+    pr.add_argument("--root", required=True, metavar="DIR",
+                    help="verification root holding verify.sqlite")
+    pr.add_argument("--window-hours", type=float, default=6.0,
+                    help="how far back to ask (default 6)")
+    pr.add_argument("--dataset", help="observation name; default: the ruler's ground_truth")
+    add_access(pr)
+    pr.add_argument("--json", action="store_true")
+    pr.set_defaults(handler=cmd_probe)
 
     # -- query ----------------------------------------------------------
     q = sub.add_parser("query", help="aggregate stored quantities")

@@ -20,6 +20,7 @@
   <nav class="result-tabs" role="tablist" aria-label="Diagnostic result views">
     <button type="button" role="tab" data-view="visualization" aria-controls="view-visualization" aria-selected="true">Visualization</button>
     <button type="button" role="tab" data-view="metrics" aria-controls="view-metrics" aria-selected="false">Metrics</button>
+      <button type="button" role="tab" data-view="coverage" aria-controls="view-coverage" aria-selected="false">Coverage</button>
   </nav>
 </header>
 
@@ -135,6 +136,20 @@
   </div>
 </section>
 </section>
+
+  <section id="view-coverage" class="result-view" data-view="coverage" role="tabpanel" hidden>
+    <div class="integrity-layout">
+      <div class="integrity-left">
+        <table class="integrity-table" id="integrity-table"></table>
+        <p class="muted tiny">Click a percentage to open the daily curve. Click a day on the curve
+        to see what was recorded that day.</p>
+      </div>
+      <div class="integrity-panels">
+        <figure class="integrity-panel" id="panel-daily" hidden></figure>
+        <figure class="integrity-panel" id="panel-day" hidden></figure>
+      </div>
+    </div>
+  </section>
 
 </main>
 
