@@ -377,16 +377,35 @@ func TestMissedScheduleIsRecordedAndNotRun(t *testing.T) {
 		"created_at": created,
 	})
 	server.TriggerTick = 20 * time.Millisecond
-	go server.StartTriggers()
-	t.Cleanup(func() { triggerDo(t, server, "POST", "/v1/control/stop", nil) })
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		server.StartTriggers()
+	}()
+	t.Cleanup(func() {
+		triggerDo(t, server, "POST", "/v1/control/stop", nil)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("trigger scheduler did not stop")
+		}
+	})
 
 	list := triggers(t, server)
-	if len(list) != 1 {
-		t.Fatalf("stored trigger not loaded: %v", list)
-	}
-	missed, _ := list[0]["missed_count"].(float64)
-	if missed < 3 {
-		t.Fatalf("missed count: %v", list[0]["missed_count"])
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if len(list) != 1 {
+			t.Fatalf("stored trigger not loaded: %v", list)
+		}
+		missed, _ := list[0]["missed_count"].(float64)
+		if missed >= 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("missed count: %v", list[0]["missed_count"])
+		}
+		time.Sleep(10 * time.Millisecond)
+		list = triggers(t, server)
 	}
 	if list[0]["last_missed_at"] == nil {
 		t.Fatalf("missed time not recorded: %v", list[0])
