@@ -74,7 +74,8 @@ jobs:
       - name: Cache demo samples
         uses: actions/cache@v4
         with:
-          path: testdata/demo-data
+          # Cache only distributable samples; CMA data must stay local.
+          path: testdata/demo-data/SEVIR
           key: nib-demo-data-${{ hashFiles('scripts/fetch-demo-data.py') }}
 
       - name: Fetch demo samples

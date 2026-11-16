@@ -60,8 +60,8 @@ if [ ! -d testdata/demo-data ]; then
 fi
 
 py_suite "adapters+runtime" tests/adapters tests/runtime
-py_suite "verification" tests/verification
-py_suite "visualization" tests/visualization
+py_suite "verification" -c diagnostics/verification/pyproject.toml tests/verification
+py_suite "visualization" -c diagnostics/visualization/pyproject.toml tests/visualization
 
 echo
 echo "==================== summary ===================="

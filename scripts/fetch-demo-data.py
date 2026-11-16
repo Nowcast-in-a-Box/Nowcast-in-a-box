@@ -28,7 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "Nowcast-in-a-Box/nib-data-samples"
-REV = "b09b57c2587b622d393980de1388c6622a86e440"
+REV = "71f69200763e66fa23ca47b15652ca38b1f2b2c9"
 DEFAULT_DEST = ROOT / "testdata" / "demo-data"
 MANIFEST = f"https://raw.githubusercontent.com/{REPO}/{REV}/manifest.json"
 LFS_BATCH = f"https://github.com/{REPO}.git/info/lfs/objects/batch"
@@ -65,7 +65,9 @@ def sha256(path: Path) -> str:
 
 
 def read_manifest() -> dict:
-    request = urllib.request.Request(manifest_url(), headers={**AGENT, **auth_headers()})
+    request = urllib.request.Request(
+        manifest_url(), headers={**AGENT, **auth_headers()}
+    )
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.load(response)
 
@@ -123,7 +125,9 @@ def verify(dest: Path, manifest: dict) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dest", type=Path, default=DEFAULT_DEST)
-    parser.add_argument("--check", action="store_true", help="verify without downloading")
+    parser.add_argument(
+        "--check", action="store_true", help="verify without downloading"
+    )
     args = parser.parse_args(argv)
     dest: Path = args.dest
 
@@ -133,14 +137,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         broken = verify(dest, manifest)
         if broken:
-            print(f"{len(broken)} of {len(entries)} samples missing or changed in {dest}")
+            print(
+                f"{len(broken)} of {len(entries)} samples missing or changed in {dest}"
+            )
             return 1
         print(f"{len(entries)} samples verified in {dest}")
         return 0
 
     marker = dest / ".rev"
-    if marker.is_file() and marker.read_text().strip() != REV and dest.is_dir():
-        shutil.rmtree(dest)
+    # Local datasets may share this directory; only replace manifest files.
     for entry in entries:
         target = dest / entry["path"]
         if target.is_file() and target.stat().st_size == entry["bytes"]:

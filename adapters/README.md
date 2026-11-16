@@ -81,6 +81,12 @@ and the adapter tests pick it up through `NIB_DATA_ROOT`.
 Tests that need files or ONNX Runtime skip when those are absent, and a source
 without a sample skips by name.
 
+The downloadable set contains one SEVIR sample. CMA radar samples must stay
+local and must not be uploaded to GitHub, including private repositories and
+Actions caches. Keep them under a local data root or the gitignored
+`testdata/demo-data/cma_radar/`. Refreshing downloads preserves files outside
+the manifest; CI caches only `testdata/demo-data/SEVIR/`.
+
 ## External scan
 
 TODO(ci): not implemented here. A later job outside this repo should
