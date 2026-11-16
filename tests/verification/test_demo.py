@@ -28,6 +28,12 @@ from nib_verify.core.planner import plan
 QUIET = ["--progress", "quiet"]
 
 
+@pytest.fixture(autouse=True)
+def small_demo(monkeypatch):
+    # Keep the real pipeline, but use six init times instead of the 72-hour demo.
+    monkeypatch.setattr(demo_module, "INIT_TIMES", 6)
+
+
 @pytest.fixture
 def built(tmp_path):
     return demo_module.build(tmp_path / "nib-demo", say=lambda _line: None,

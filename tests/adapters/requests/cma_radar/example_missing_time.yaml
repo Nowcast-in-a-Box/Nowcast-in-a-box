@@ -1,6 +1,6 @@
 source: cma_radar
 data_dir: "cma_radar"
-initial_time: "2023-07-30T14:06:00Z"
+initial_time: "2026-07-30T21:42:00Z"
 history_steps: 1
 interval_minutes: 6
 

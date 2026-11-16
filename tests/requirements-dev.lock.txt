@@ -1,0 +1,139 @@
+# Pinned test dependencies for the adapters and runtime suites (tests/adapters,
+# tests/runtime). Versions mirror the verified-green local environment.
+# Regenerate: uv pip compile <direct-pins.in> --python-version 3.12 \
+#   --python-platform x86_64-unknown-linux-gnu
+annotated-doc==0.0.5
+    # via fastapi
+annotated-types==0.8.0
+    # via
+    #   -r direct-tests.in
+    #   pydantic
+anyio==4.15.1
+    # via
+    #   -r direct-tests.in
+    #   httpx
+    #   starlette
+certifi==2026.7.22
+    # via
+    #   -r direct-tests.in
+    #   httpcore
+    #   httpx
+    #   pyproj
+contourpy==1.4.0
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+cycler==0.12.1
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+fastapi==0.143.1
+    # via -r direct-tests.in
+fonttools==4.65.0
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+h11==0.16.0
+    # via
+    #   -r direct-tests.in
+    #   httpcore
+h5py==3.16.0
+    # via -r direct-tests.in
+httpcore==1.0.9
+    # via
+    #   -r direct-tests.in
+    #   httpx
+httpx==0.28.1
+    # via -r direct-tests.in
+idna==3.20
+    # via
+    #   -r direct-tests.in
+    #   anyio
+    #   httpx
+iniconfig==2.3.0
+    # via
+    #   -r direct-tests.in
+    #   pytest
+kiwisolver==1.5.1
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+matplotlib==3.11.2
+    # via -r direct-tests.in
+numpy==2.5.3
+    # via
+    #   -r direct-tests.in
+    #   contourpy
+    #   h5py
+    #   matplotlib
+    #   pandas
+    #   xarray
+opentelemetry-api==1.45.2
+    # via fastapi
+packaging==26.3
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+    #   pytest
+    #   xarray
+pandas==3.0.6
+    # via
+    #   -r direct-tests.in
+    #   xarray
+pillow==12.3.0
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+pluggy==1.6.0
+    # via
+    #   -r direct-tests.in
+    #   pytest
+pydantic==2.14.1
+    # via
+    #   -r direct-tests.in
+    #   fastapi
+pydantic-core==2.50.1
+    # via pydantic
+pygments==2.21.0
+    # via
+    #   -r direct-tests.in
+    #   pytest
+pyparsing==3.3.3
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+pyproj==3.8.0
+    # via -r direct-tests.in
+pytest==9.1.1
+    # via -r direct-tests.in
+python-dateutil==2.9.0.post0
+    # via
+    #   -r direct-tests.in
+    #   matplotlib
+    #   pandas
+pyyaml==6.0.3
+    # via -r direct-tests.in
+six==1.17.0
+    # via
+    #   -r direct-tests.in
+    #   python-dateutil
+starlette==1.8.0
+    # via
+    #   -r direct-tests.in
+    #   fastapi
+typing-extensions==4.16.0
+    # via
+    #   -r direct-tests.in
+    #   anyio
+    #   fastapi
+    #   opentelemetry-api
+    #   pydantic
+    #   pydantic-core
+    #   starlette
+    #   typing-inspection
+typing-inspection==0.4.5
+    # via
+    #   fastapi
+    #   pydantic
+xarray==2026.7.0
+    # via -r direct-tests.in

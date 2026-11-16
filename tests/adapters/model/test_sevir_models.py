@@ -17,7 +17,7 @@ from adapters.sevir.exprecast.adapter import ADAPTER as EXPRECAST
 from adapters.sevir.nowcastnet.adapter import ADAPTER as NOWCASTNET
 from adapters.sevir.wadepre.adapter import ADAPTER as WADEPRE
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 MODELS = (NOWCASTNET, EXPRECAST, WADEPRE)
 
 
