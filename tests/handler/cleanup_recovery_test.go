@@ -32,7 +32,7 @@ func (f *cleanupRunner) Run(ctx context.Context, args ...string) (int, []byte, e
 		return 0, nil, nil
 	}
 	joined := strings.Join(args, " ")
-	if strings.Contains(joined, " down ") && ((f.fail == "inference" && strings.Contains(joined, "compose-ingestion.yaml")) || (f.fail == "diagnostics" && strings.Contains(joined, "/compose.yaml"))) {
+	if strings.Contains(joined, " down ") && ((f.fail == "inference" && strings.Contains(joined, "compose-ingestion.yaml")) || (f.fail == "diagnostics" && strings.Contains(joined, "compose.yaml"))) {
 		f.lock.Lock()
 		defer f.lock.Unlock()
 		for i, arg := range args {
