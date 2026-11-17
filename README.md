@@ -37,7 +37,7 @@ Hub exports order configuration. The local Handler webpage lets you edit it, run
 - Several GB of free disk space for images, weights, and runs.
 - Your observation files, in a format listed under [Supported data](#supported-data).
 
-The first run downloads container images from a registry and weights from Hugging Face. It needs a network connection. Later runs use the local copies.
+Missing container images are pulled from the configured registry before execution. External weights must already be local or copied from `paths.weight_source`; the CMA demo carries its weight in the model image. See [weights and images](docs/guides/weights.md). Inference runs offline.
 
 ## Quick start
 
@@ -64,7 +64,7 @@ Start the Handler with the file for your system.
 
 The Handler keeps running after you close Terminal or the Hub page. It doesn't start at login and doesn't restart after a crash.
 
-Each release zip also has an `Open NiB.<os>` file next to the start entry. It opens the offline console page (`http://127.0.0.1:8765/` by default) in your browser, starting the Handler in the background first if needed. On Linux and Windows, a Handler started this way stops again if you close the window that started it; use `Start NiB.<os>` to keep it running. See [the local console](docs/local-console.md).
+Each release zip also has an `Open NiB.<os>` file next to the start entry. It opens the offline console page (`http://127.0.0.1:8765/` by default) in your browser, starting the Handler in the background first if needed. On Linux and Windows, a Handler started this way stops again if you close the window that started it; use `Start NiB.<os>` to keep it running. See [the local console](docs/guides/local-console.md).
 
 ```sh
 # e.g. macOS
@@ -126,7 +126,7 @@ Handler (local program)    preflight, container start, run records
 artifacts/  weights        runs/  one folder per run
 ```
 
-The Handler listens on the loopback interface only. It starts one container per model and one diagnostics container for the result views. Inference runs with `--network none`, because the weights are already on disk. Each weight file has a pinned Hugging Face revision and a SHA256 checksum; if the checksum doesn't match, it downloads the file again.
+The Handler listens on the loopback interface only. It starts one container per model and one diagnostics container for the result views. Inference runs with `--network none`, using local or embedded weights checked against the declared SHA-256. Missing or mismatched external weights require a verified local source.
 
 Diagnostics run after the models finish. A model can be selected without diagnostics, and the job then ends as `succeeded/finished`. A failed diagnostic leaves the forecast files in place and marks the run `partial`, with the container log next to it.
 
@@ -134,7 +134,7 @@ Diagnostics run after the models finish. A model can be selected without diagnos
 
 | Path | Contents |
 | --- | --- |
-| `artifacts/` | Weight files and generated Docker files. You can delete this folder because the next run downloads the files again. |
+| `artifacts/` | External weight files and generated Docker files. Keep a verified source for weights before removing this cache. |
 | `runs/` | One folder per run: forecast files, `job.json`, container logs, and diagnostic output. |
 | `orders/` | Editable YAML definitions (`<order_id>.yaml`); each new run freezes its own `order.yaml` snapshot. |
 | `nib-settings.json` | The data folder that you selected for each data source. Written with mode 0600. |
@@ -155,6 +155,7 @@ These paths are relative to `config.yaml`. Delete `nib-settings.json` to make th
 | `paths.runs` | Root folder for run output. |
 | `paths.orders` | Root folder for saved order packages. Default `orders`. |
 | `paths.resources` | Root that holds the `runtime.yaml` manifests. |
+| `paths.weight_source` | Optional local source folder for external weights, laid out like `artifacts/`. |
 | `runtime.image_registry` | Registry for missing images. Default `ghcr.io/nowcast-in-a-box`. |
 | `runtime.image_mirror` | Optional read-only mirror. Default `ghcr.nju.edu.cn/nowcast-in-a-box`. |
 | `runtime.image_source` | `auto`, `official`, or `mirror`. |
@@ -164,7 +165,7 @@ These paths are relative to `config.yaml`. Delete `nib-settings.json` to make th
 
 The Handler binds to loopback addresses only. If you change an address or a port, restart the Handler with the same `config.yaml`. A plain `start` refuses to keep using old execution settings.
 
-See [Handler lifecycle and connection](docs/handler-lifecycle.md) for the compatibility rules, the trusted origins, and the log location.
+See [Handler lifecycle and connection](docs/guides/handler-lifecycle.md) for the compatibility rules, the trusted origins, and the log location.
 
 ## Build from source
 
@@ -184,14 +185,15 @@ The release packages are built by the release workflow from a `v*` tag on `main`
 
 | Document | Contents |
 | --- | --- |
-| [docs/cma-demo.md](docs/cma-demo.md) | Reference demo with CMA radar and NowcastNet. |
-| [docs/models.md](docs/models.md) | Model list, weights, and checksums. |
-| [docs/weights.md](docs/weights.md) | How weights are pinned and checked. |
-| [docs/handler-lifecycle.md](docs/handler-lifecycle.md) | Start, stop, ports, and platform limits. |
-| [docs/local-console.md](docs/local-console.md) | Offline orders and runs in the browser. |
-| [docs/runtime-resources.md](docs/runtime-resources.md) | `runtime.yaml` schema and the resources tree. |
-| [docs/local-acceptance-runbook.md](docs/local-acceptance-runbook.md) | Steps for a manual acceptance test. |
-| [docs/](docs/) | All architecture notes. |
+| [docs/guides/cma-demo.md](docs/guides/cma-demo.md) | Reference demo with CMA radar and NowcastNet. |
+| [docs/reference/models.md](docs/reference/models.md) | Model list, weights, and checksums. |
+| [docs/guides/weights.md](docs/guides/weights.md) | How weights are pinned and checked. |
+| [docs/guides/handler-lifecycle.md](docs/guides/handler-lifecycle.md) | Start, stop, ports, and platform limits. |
+| [docs/guides/local-console.md](docs/guides/local-console.md) | Offline orders and runs in the browser. |
+| [docs/reference/runtime-resources.md](docs/reference/runtime-resources.md) | `runtime.yaml` schema and the resources tree. |
+| [docs/guides/local-acceptance-runbook.md](docs/guides/local-acceptance-runbook.md) | Steps for a manual acceptance test. |
+| [Documentation index](docs/README.md) | Current guides, reference and historical archive. |
+| [Model contribution guide](docs/guides/model-contribution.md) | Required files, lifecycle and tests. |
 
 ## Contributing
 

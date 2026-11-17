@@ -106,9 +106,10 @@ func TestStatusUsesConfiguredPortAndRejectsDifferentConfiguration(t *testing.T) 
 
 func TestStatusRejectsChangedExecutionSettings(t *testing.T) {
 	for name, change := range map[string]func(*handler.Config){
-		"resources root": func(c *handler.Config) { c.Paths.Resources = t.TempDir() },
-		"Docker context": func(c *handler.Config) { c.Runtime.DockerContext = "other" },
-		"Atlas revision": func(c *handler.Config) { c.Runtime.AtlasRevision = strings.Repeat("b", 40) },
+		"resources root":    func(c *handler.Config) { c.Paths.Resources = t.TempDir() },
+		"Docker context":    func(c *handler.Config) { c.Runtime.DockerContext = "other" },
+		"Atlas revision":    func(c *handler.Config) { c.Runtime.AtlasRevision = strings.Repeat("b", 40) },
+		"concurrency limit": func(c *handler.Config) { c.Runtime.MaxConcurrentJobs = 3 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, cfg, _ := liveHandler(t)
@@ -262,7 +263,7 @@ func TestStopBlocksActiveDiagnosticAttempt(t *testing.T) {
 	}
 }
 
-func TestLiveRunCannotBeReplacedByAnotherIdempotencyKey(t *testing.T) {
+func TestLiveRunAllowsDistinctIdentityAndProtectsIdempotencyKeys(t *testing.T) {
 	server, cfg, _ := liveHandler(t)
 	cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
 	writeSevirData(t, &cfg)
@@ -290,14 +291,28 @@ func TestLiveRunCannotBeReplacedByAnotherIdempotencyKey(t *testing.T) {
 		close(runner.release)
 		t.Fatal(err)
 	}
-	defer func() { close(runner.release); waitJob(t, server, job.ID, "failed") }()
+	var secondJob handler.Job
+	defer func() {
+		close(runner.release)
+		waitJob(t, server, job.ID, "failed")
+		if secondJob.ID != "" {
+			waitJob(t, server, secondJob.ID, "failed")
+		}
+	}()
 	select {
 	case <-runner.entered:
 	case <-time.After(time.Second):
 		t.Fatal("job never started")
 	}
-	if duplicate := submit("second-key"); duplicate.Code != http.StatusConflict {
-		t.Fatal("live job was replaced", duplicate.Code, duplicate.Body.String())
+	second := submit("second-key")
+	if second.Code != http.StatusAccepted {
+		t.Fatal("distinct request identity was blocked", second.Code, second.Body.String())
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondJob); err != nil {
+		t.Fatal(err)
+	}
+	if secondJob.ID == job.ID {
+		t.Fatal("distinct request identity reused the active run")
 	}
 	if retry := submit("first-key"); retry.Code != http.StatusOK {
 		t.Fatal(retry.Code)

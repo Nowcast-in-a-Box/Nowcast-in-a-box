@@ -42,9 +42,9 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		var normalized RuntimeRequest
 		var err error
 		if request.YAML != nil {
-			order, normalized, err = ParseOrder([]byte(*request.YAML), s.Resources, s.Config.Runtime.MaxBatchSamples)
+			order, normalized, err = ParseOrder([]byte(*request.YAML), s.Resources, s.currentConfig().Runtime.MaxBatchSamples)
 		} else {
-			order, normalized, err = normalizeOrder(*request.Order, s.Resources, s.Config.Runtime.MaxBatchSamples)
+			order, normalized, err = normalizeOrder(*request.Order, s.Resources, s.currentConfig().Runtime.MaxBatchSamples)
 		}
 		if err != nil {
 			runtimeError(w, 422, err)
@@ -63,11 +63,21 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 409, err)
 		return
 	}
-	if !s.executionMu.TryLock() {
+	if !s.recoveryMu.TryLock() {
 		runtimeError(w, 409, fmt.Errorf("execution or preparation is active; retry preflight when idle"))
 		return
 	}
-	defer s.executionMu.Unlock()
+	defer s.recoveryMu.Unlock()
+	s.executionMu.Lock()
+	busy := len(s.executions) > 0
+	s.executionMu.Unlock()
+	s.resourcesMu.Lock()
+	busy = busy || s.preparingResources
+	s.resourcesMu.Unlock()
+	if busy {
+		runtimeError(w, 409, fmt.Errorf("execution or preparation is active; retry preflight when idle"))
+		return
+	}
 	s.jobsMu.Lock()
 	stopping := s.stopping
 	s.jobsMu.Unlock()

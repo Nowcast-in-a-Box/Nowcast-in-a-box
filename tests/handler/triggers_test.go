@@ -17,7 +17,7 @@ import (
 )
 
 // triggerRunner answers the Docker calls a fired trigger makes. Compose "up"
-// can block, which is how the busy path is observed deterministically.
+// can block to make scheduling and idempotency paths deterministic.
 type triggerRunner struct {
 	mu      sync.Mutex
 	samples string
@@ -354,7 +354,7 @@ func TestScheduledOrderWindowIsIdempotentPerDuePoint(t *testing.T) {
 	}
 }
 
-func TestFireSkipsWhileItsPreviousRunIsActive(t *testing.T) {
+func TestFireDeduplicatesSameWindowWhileItsRunIsActive(t *testing.T) {
 	cfg, server, runner := triggerServer(t)
 	packageID := saveOrder(t, server)
 	runner.setSamples(sampleList(t, [2]string{"S710141", "2017-06-28T00:35:00Z"}))
@@ -372,11 +372,11 @@ func TestFireSkipsWhileItsPreviousRunIsActive(t *testing.T) {
 		t.Fatalf("first fire: %v", first)
 	}
 	_, second := triggerDo(t, server, "POST", "/v1/triggers/"+id+"/fire", nil)
-	if second["last_outcome"] != "busy" {
-		t.Fatalf("a running trigger must skip, not queue: %v", second)
+	if second["last_outcome"] != "skipped" {
+		t.Fatalf("same window must be skipped: %v", second)
 	}
 	if ids := runIDs(t, cfg); len(ids) != 1 {
-		t.Fatalf("expected one run, got %v", ids)
+		t.Fatalf("same window created a second run: %v", ids)
 	}
 	unblock()
 	runner.mu.Lock()
@@ -469,6 +469,7 @@ func TestScheduledTriggerFiresAtMostOncePerDuePoint(t *testing.T) {
 	if len(ids) != 1 {
 		t.Fatalf("expected exactly one run, got %v", ids)
 	}
+	waitForJobEnd(t, server, ids[0])
 	server.RunDueTriggersForTest(now.Add(18 * time.Minute))
 	if ids := runIDs(t, cfg); len(ids) != 1 {
 		t.Fatalf("the same due point ran twice: %v", ids)

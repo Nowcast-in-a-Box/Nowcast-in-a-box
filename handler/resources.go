@@ -77,11 +77,18 @@ func (s *Server) handlePrepareResources(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	if !s.executionMu.TryLock() {
+	if !s.recoveryMu.TryLock() {
 		runtimeError(w, 409, fmt.Errorf("wait for active tasks"))
 		return
 	}
-	defer s.executionMu.Unlock()
+	defer s.recoveryMu.Unlock()
+	s.executionMu.Lock()
+	busy := len(s.executions) > 0
+	s.executionMu.Unlock()
+	if busy {
+		runtimeError(w, 409, fmt.Errorf("wait for active tasks"))
+		return
+	}
 	s.jobsMu.Lock()
 	defer s.jobsMu.Unlock()
 	if s.stopping {
@@ -114,10 +121,16 @@ func (s *Server) handlePrepareResources(w http.ResponseWriter, r *http.Request) 
 
 // RefreshResources performs an explicit bounded inspection without hashing weights.
 func (s *Server) RefreshResources() {
-	if !s.executionMu.TryLock() {
+	if !s.recoveryMu.TryLock() {
 		return
 	}
-	defer s.executionMu.Unlock()
+	defer s.recoveryMu.Unlock()
+	s.executionMu.Lock()
+	busy := len(s.executions) > 0
+	s.executionMu.Unlock()
+	if busy {
+		return
+	}
 	s.resourcesMu.Lock()
 	if s.preparingResources {
 		s.resourcesMu.Unlock()

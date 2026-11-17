@@ -1,96 +1,44 @@
-"""NowcastNet contract tests. No weight file and no product-code literal."""
+"""NowcastNet preparation rejects incompatible fields without resizing or padding."""
 
-from __future__ import annotations
-
-import os
-import tempfile
-import unittest
-from pathlib import Path
-from unittest.mock import patch
+import numpy as np
+import pytest
 
 from adapters.sevir.nowcastnet.adapter import ADAPTER
-from interfaces.data import (
-    ChannelSpec,
-    DataBundle,
-    DataCapabilities,
-    DataRequest,
-    DeclaredDataAdapter,
-    SpatialSpec,
-    VariableSpec,
-    bundle_from_parts,
-)
-from interfaces.errors import WeightsNotReady
+from interfaces.errors import ConstraintError, WeightsNotReady
+from tests.field_fixtures import observations
 
 
-class _FakeData(DeclaredDataAdapter):
-    CAPABILITIES = DataCapabilities(
-        id="sevir",
-        version="0.0.1",
-        title="Demo",
-        instrument="demo",
-        channels=ChannelSpec(
-            mode="closed",
-            variables=(VariableSpec("demo_var", "demo variable", "units"),),
-        ),
-        spatial=SpatialSpec(crop=False),
-        native_cadence_minutes=6,
-        formats=("memory",),
-    )
-
-    def load(self, request: DataRequest) -> DataBundle:
-        raise AssertionError("load should not run")
+def test_output_specification():
+    spec = ADAPTER.output_specification()
+    assert spec.spatial == (128, 128)
+    assert spec.lead_minutes == tuple(range(5, 101, 5))
+    assert (spec.variable_id, spec.units, spec.dtype) == ("vil", "raw", "float32")
 
 
-def _bundle(data_dir: str) -> DataBundle:
-    request = DataRequest(
-        source="sevir",
-        data_dir=data_dir,
-        data_root=None,
-        initial_time="2024-07-05T00:00:00Z",
-        history_steps=1,
-        interval_minutes=6,
-        channels=("demo_var",),
-        bbox=(0.0, 0.0, 1.0, 1.0),
-    )
-    frame = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-    return bundle_from_parts(
-        "sevir",
-        request,
-        {"2024-07-05T00:00:00Z": {"demo_var": frame}},
-        {"2024-07-05T00:00:00Z": {"demo_var": []}},
-        {},
-    )
+def test_prepare_preserves_observations_and_scales_private_batch():
+    obs = observations()
+    before = obs.values.copy()
+    batch, physical = ADAPTER.prepare(obs)
+    assert physical is obs
+    assert batch.shape == (1, 5, 128, 128)
+    assert batch.dtype == np.float32 and batch.flags.c_contiguous
+    np.testing.assert_array_equal(batch, 0.5)
+    np.testing.assert_array_equal(obs.values, before)
 
 
-class NowcastNetTests(unittest.TestCase):
-    def test_output_spec(self) -> None:
-        spec = ADAPTER.output_spec()
-        self.assertEqual(spec.dims, ("batch", "lead", "y", "x"))
-        sizes = {axis.name: axis.size for axis in spec.axes}
-        self.assertEqual(sizes["lead"], 20)
-        self.assertEqual(sizes["y"], 128)
-        self.assertEqual(sizes["x"], 128)
+@pytest.mark.parametrize("shape", [(4, 128, 128), (6, 128, 128), (5, 64, 128)])
+def test_prepare_does_not_pad_trim_or_resize(shape):
+    with pytest.raises(ConstraintError, match="history length or grid shape"):
+        ADAPTER.prepare(observations(shape=shape))
 
-    def test_prepare_uses_paired_variable_and_pads(self) -> None:
-        prepared = ADAPTER.prepare(_bundle(tempfile.gettempdir()), _FakeData())
-        self.assertEqual(prepared.variable_id, "demo_var")
-        self.assertEqual(prepared.shape, (1, 5, 128, 128))
 
-    def test_six_minute_bundle_is_accepted(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            ADAPTER.validate_input(_bundle(tmp), _FakeData())
+def test_six_minute_observations_are_rejected():
+    with pytest.raises(ConstraintError, match="cadence"):
+        ADAPTER.prepare(observations(cadence=6))
 
-    def test_predict_without_weights(self) -> None:
-        prepared = ADAPTER.prepare(_bundle(tempfile.gettempdir()), _FakeData())
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["NIB_ARTIFACTS"] = tmp
-            try:
-                with patch("utils.weights.urlopen", side_effect=OSError("offline")):
-                    with self.assertRaises(WeightsNotReady) as caught:
-                        ADAPTER.predict(
-                            prepared,
-                            weights_path=str(Path(tmp) / "missing.onnx"),
-                        )
-            finally:
-                os.environ.pop("NIB_ARTIFACTS", None)
-        self.assertIn("download_url", str(caught.exception))
+
+def test_predict_without_weights(tmp_path):
+    with pytest.raises(WeightsNotReady, match="offline weight checksum"):
+        ADAPTER.predict(
+            ADAPTER.prepare(observations()), weights_path=str(tmp_path / "missing.onnx")
+        )

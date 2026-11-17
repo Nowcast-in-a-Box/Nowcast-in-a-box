@@ -1,9 +1,12 @@
 # SEVIR local runtime integration (#14)
 
-The runtime uses stored-run contract `nib.run.v1`, defined in atlas commit
-`e9ecd84f217eef9658d433133bc588a3128d05e0`. Users run a prebuilt Go handler;
-Python stays in Docker. Hub exports order configuration. The local Handler
-console owns detailed selection, resource preparation, execution and history.
+The runtime writes stored-run contract `nib.run.v2` and retains `nib.run.v1`
+read compatibility. New forecasts require a v2 run; legacy runs cannot accept
+forecast appends. Forecasts store their own physical metadata. See the
+[model contract](models.md) for the declaration and validation lifecycle.
+Users run a prebuilt Go handler; Python stays in Docker. Hub exports order
+configuration. The local Handler console owns detailed selection, resource
+preparation, execution and history.
 
 ## Prepare resources
 
@@ -41,7 +44,8 @@ manifest names; Compose still uses `pull_policy: never` so execution never hides
 a download. `GET /v1/resources?data_id=<id>` reports each image as ready or
 missing, and `POST /v1/resources/prepare` copies missing weights and re-checks
 the selected images.
-The initial reader requires six context and twenty target 128x128 frames. It
+The SEVIR reader supplies physical observations; the runtime selects the exact
+recent history required by the model declaration before validation. It
 rejects event/time ambiguity and events with missing pixels that the processed
 file can no longer mask reliably. Sample listings show this limitation.
 
@@ -57,7 +61,7 @@ data/model mounts come from the runtime manifests. Start the platform launcher
 and open the local console. Its token stays in browser memory and is never
 printed or manually copied. Hub supplies portable YAML configuration; local
 resource preparation, execution and detailed settings belong to the Handler.
-See [lifecycle and connection](handler-lifecycle.md) for background startup,
+See [lifecycle and connection](../guides/handler-lifecycle.md) for background startup,
 stop/restart, configuration ownership, trusted deployments and limitations.
 
 A successful CORS preflight is not evidence that permission was granted.
@@ -71,7 +75,7 @@ commands come only from trusted local settings and packaged resources.
 Each run freezes its effective configuration as `order.yaml`. Automatic
 diagnostics execute after inference, independently of the browser. Subsequent
 order edits affect future runs; diagnostics retries create separate attempts
-from saved Forecasts. See [automatic diagnostics](automatic-diagnostics.md) for
+from saved Forecasts. See [automatic diagnostics](../guides/automatic-diagnostics.md) for
 operation/report identity, partial results and recovery. Old ZIP runs remain
 readable, but ZIP import and startup are no longer supported.
 
@@ -80,15 +84,21 @@ read-only root, tmpfs `/tmp`, read-only input/weight mounts, and runs as the hos
 UID on Unix. Algorithms have distinct images. All data and generated outputs
 remain in configured `runs/<unique-id>/`; no outputs live in Hub or atlas.
 
-Execution is serialized in this first integration. Jobs record queued/running/
-succeeded/failed/partial states with a stage, request identity and logs. A repeated
-idempotency key returns the same run, including after restart. A new explicit
-submission allocates a new run ID and directory, even for the same Order,
-samples and models. A queued/running order rejects a second request identity
-until it finishes, including edits to that order; no active or historical run
-is replaced.
-Restarted unfinished jobs are marked interrupted,
-not silently resumed. Successful Forecasts survive diagnostic failure.
+Independent runs execute concurrently. Set `runtime.max_concurrent_jobs` in
+`config.yaml` to a positive integer (default `2`), then restart Handler. Set it
+to `1` on machines that can only fit one model in memory. Jobs beyond the limit
+remain `queued` and start in submission order. A batch occupies one slot;
+its samples and model stages retain their sequential order. Automatic diagnostics
+uses the parent job's slot. A separate diagnostic retry uses its own slot.
+
+Jobs record queued/running/succeeded/failed/partial states with a stage, request
+identity and logs. A repeated idempotency key returns the same run, including
+after restart. A new explicit submission allocates a separate run ID and
+directory, even for the same order, samples and models. Those runs may execute
+concurrently; there is no global execution lock. Only one writer may execute
+against a given run at a time, including diagnostic retries.
+Restarted unfinished jobs are marked interrupted, not silently resumed.
+Successful Forecasts survive diagnostic failure.
 
 ## Results
 

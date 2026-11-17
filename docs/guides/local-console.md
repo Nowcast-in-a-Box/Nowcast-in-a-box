@@ -94,6 +94,13 @@ does not change the saved defaults. It is available only for runs with a frozen
 order, after their active inference finishes. If a response is lost, inspect
 Runs before retrying because the request may already have created a run.
 
+Independent runs of the same order may execute concurrently.
+`runtime.max_concurrent_jobs` in `config.yaml` bounds execution (default `2`);
+extra jobs remain queued and start in FIFO submission order. A repeated
+idempotency key returns the existing run; a new submission identity creates
+a separate run and directory. Execution is not serialized by a global lock.
+Only one writer may work on a given run at a time, including diagnostic retries.
+
 Run detail shows the backend stage, preflight checks and recorded execution
 context (`data_path`, `catalog_path`, and `images`) alongside the frozen order.
 Logs provide actual output; the console does not invent progress percentages.
@@ -189,12 +196,30 @@ checks need Docker and the configured data folder.
 
 The table retains last outcome, errors, next due time, missed runs and
 **Run now**, **Pause / Resume**, and **Delete** controls. Triggers run only while
-the Handler runs. A queued or active job prevents another run for the same
-trigger. Missed scheduled points are reported rather than silently caught up.
+the Handler runs. Distinct scheduled points and new data windows can create
+independent runs for the same trigger. Missed scheduled points are reported
+rather than silently caught up.
 Trigger state stays in `nib-triggers.json` beside `config.yaml` and
 `nib-settings.json`; it is not part of the YAML order.
 The trigger cursor records its data source and resets when an edited order
 switches sources, so earlier dates from the new source are not skipped.
+
+Behaviour worth knowing:
+
+- Distinct due points or new data windows may run concurrently, up to
+  `runtime.max_concurrent_jobs`. Extra runs queue in submission order.
+  `stop` refuses while any job is queued or executing.
+- A delayed scheduler tick fires only the latest due point. For a five-minute
+  interval, a tick at minute 17 handles minute 15; the next point is minute 20.
+  Older elapsed points are not replayed on subsequent ticks.
+- Each fire uses the idempotency key
+  `trigger:<id>:<data-id>:<start window>`, or
+  `trigger:<id>:<data-id>:order:<scheduled point>` for the order's own window.
+  The same key returns its existing run, including after a Handler restart.
+- Scheduled points missed while the Handler was stopped are counted in
+  `missed_count` rather than caught up. **Run now** is the manual catch-up.
+- A failed fire records `last_error` and leaves the trigger enabled; the next
+  point or poll tries again.
 
 ## Handler API
 

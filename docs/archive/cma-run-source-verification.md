@@ -12,8 +12,8 @@ fields contain native axes, auxiliary geographic coordinates, CRS/CF metadata,
 units and exact valid times. No resampling, inference or metric execution occurs.
 The caller supplies an explicit metric configuration and group version.
 
-The [contract](interfaces-we-consume.md) and
-[example](../diagnostics/examples/run_source_example.py) document the handoff.
+The [contract](../reference/interfaces-we-consume.md) and
+[example](../../diagnostics/examples/run_source_example.py) document the handoff.
 SEVIR support for the new provider remains explicitly deferred; existing
 providers were included in regression tests.
 

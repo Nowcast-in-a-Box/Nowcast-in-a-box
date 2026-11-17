@@ -15,7 +15,7 @@ type ExecutionContext struct {
 }
 
 // executionPreflight is shared by explicit checks and every admitted inference.
-// The caller holds executionMu so settings cannot change underneath preparation.
+// The caller holds recoveryMu or an execution reservation so settings stay stable.
 func (s *Server) executionPreflight(ctx context.Context, request RuntimeRequest, progress func(string, []Check)) ([]Check, ExecutionContext, error) {
 	checks := []Check{}
 	execution := ExecutionContext{Images: map[string]string{}, Weights: map[string]string{}}
@@ -37,6 +37,9 @@ func (s *Server) executionPreflight(ctx context.Context, request RuntimeRequest,
 	fail := func(id string, err error) ([]Check, ExecutionContext, error) {
 		_ = add(Check{ID: id, Message: err.Error()})
 		return checks, execution, err
+	}
+	if s.currentConfig().Runtime.MaxConcurrentJobs < 0 {
+		return fail("concurrency", fmt.Errorf("runtime.max_concurrent_jobs must be positive"))
 	}
 	stage("docker")
 	if err := s.requireDocker(); err != nil {

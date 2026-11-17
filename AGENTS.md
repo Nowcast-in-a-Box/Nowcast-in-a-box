@@ -161,5 +161,5 @@ Python: Black. Config is `black.toml`, not a root `pyproject.toml`.
 Run `scripts/format-python.sh` before sending Python changes.
 
 [contrib]: CONTRIBUTING.md
-[gh]: docs/github-setup.md
-[weights]: docs/weights.md
+[gh]: docs/guides/github-setup.md
+[weights]: docs/guides/weights.md

@@ -265,20 +265,26 @@ func (s *Server) saveDataRoot(w http.ResponseWriter, dataID, requested string) {
 	s.saveSettings(w, settingsUpdate{DataID: dataID, DataRoot: requested})
 }
 
-// Lock order is execution, images, jobs, resources, config. Never wait for an
-// active operation while holding a settings lock.
+// Lock order is recovery, registry (briefly), images, jobs, resources, config.
+// Never wait for an active operation while holding a settings lock.
 func (s *Server) lockSettings() (func(), error) {
 	busy := fmt.Errorf("wait for active tasks or resource preparation before changing settings")
-	if !s.executionMu.TryLock() {
+	if !s.recoveryMu.TryLock() {
 		return nil, busy
 	}
-	if !s.imageMu.TryLock() {
-		s.executionMu.Unlock()
+	if !s.executionMu.TryLock() {
+		s.recoveryMu.Unlock()
+		return nil, busy
+	}
+	active := len(s.executions) > 0
+	s.executionMu.Unlock()
+	if active || !s.imageMu.TryLock() {
+		s.recoveryMu.Unlock()
 		return nil, busy
 	}
 	s.jobsMu.Lock()
 	s.resourcesMu.Lock()
-	unlock := func() { s.resourcesMu.Unlock(); s.jobsMu.Unlock(); s.imageMu.Unlock(); s.executionMu.Unlock() }
+	unlock := func() { s.resourcesMu.Unlock(); s.jobsMu.Unlock(); s.imageMu.Unlock(); s.recoveryMu.Unlock() }
 	if s.stopping || s.preparingResources {
 		unlock()
 		return nil, busy
@@ -382,7 +388,11 @@ func (s *Server) saveSettings(w http.ResponseWriter, update settingsUpdate) {
 		runtimeError(w, 500, fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err))
 		return
 	}
-	s.Config = cfg
+	// Keep immutable fields untouched while requests read them without configMu.
+	s.Config.DataRoots = cfg.DataRoots
+	s.Config.Runtime.ImageSource = cfg.Runtime.ImageSource
+	s.Config.Runtime.ImageRegistry = cfg.Runtime.ImageRegistry
+	s.Config.Runtime.ImageMirror = cfg.Runtime.ImageMirror
 	s.resourcesLoaded = false
 	writeJSON(w, 200, map[string]any{"data_roots": cfg.DataRoots, "image_source": cfg.Runtime.ImageSource, "image_registry": cfg.Runtime.ImageRegistry, "image_mirror": cfg.Runtime.ImageMirror, "image_sources": []string{"official", "mirror", "auto"}})
 }

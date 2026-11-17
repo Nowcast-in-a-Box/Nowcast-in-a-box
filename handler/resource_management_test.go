@@ -110,14 +110,14 @@ func TestResourceManagementSettingsAtomicAndBusy(t *testing.T) {
 		s.preparingResources = busy == "preparing"
 		s.stopping = busy == "stopping"
 		if busy == "execution" {
-			s.executionMu.Lock()
+			s.executions = map[string]*execution{"diagnostics": {id: "diagnostics"}}
 		}
 		if busy == "image" {
 			s.imageMu.Lock()
 		}
 		code := patch(`{"image_registry":"registry.example/other"}`)
 		if busy == "execution" {
-			s.executionMu.Unlock()
+			s.executions = nil
 		}
 		if busy == "image" {
 			s.imageMu.Unlock()
@@ -199,5 +199,60 @@ func TestResourceManagementImagePrefixes(t *testing.T) {
 		if _, err := normalizeImagePrefix(value); err == nil {
 			t.Errorf("accepted %q", value)
 		}
+	}
+}
+
+func TestResourceManagementDiagnosticsReservation(t *testing.T) {
+	s, runner := managementServer(t)
+	s.executions = map[string]*execution{"diagnostics": {id: "diagnostics"}}
+	for _, endpoint := range []struct {
+		name string
+		call func(*httptest.ResponseRecorder)
+	}{
+		{"prepare", func(w *httptest.ResponseRecorder) {
+			s.handlePrepareResources(w, httptest.NewRequest("POST", "/v1/resources/prepare", strings.NewReader(`{"data_id":"data","models":["model"]}`)))
+		}},
+		{"preflight", func(w *httptest.ResponseRecorder) {
+			s.handlePreflight(w, httptest.NewRequest("POST", "/v1/preflight", strings.NewReader(`{"data_id":"data","models":["model"]}`)))
+		}},
+	} {
+		w := httptest.NewRecorder()
+		endpoint.call(w)
+		if w.Code != 409 {
+			t.Fatalf("%s admitted during diagnostics: %d %s", endpoint.name, w.Code, w.Body)
+		}
+	}
+	s.RefreshResources()
+	if len(runner.calls) != 0 || s.preparingResources {
+		t.Fatal("busy management request started resource work")
+	}
+}
+
+func TestResourceManagementSettingsReleasesRegistryLock(t *testing.T) {
+	s, _ := managementServer(t)
+	unlock, err := s.lockSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	if !s.executionMu.TryLock() {
+		t.Fatal("settings holds registry lock while holding jobs lock")
+	}
+	s.executionMu.Unlock()
+	if s.recoveryMu.TryLock() {
+		s.recoveryMu.Unlock()
+		t.Fatal("settings does not exclude execution admission")
+	}
+}
+
+func TestResourceManagementPreflightNegativeConcurrency(t *testing.T) {
+	s, runner := managementServer(t)
+	s.Config.Runtime.MaxConcurrentJobs = -1
+	checks, _, err := s.executionPreflight(context.Background(), RuntimeRequest{DataID: "data", Models: []string{"model"}}, nil)
+	if err == nil || len(checks) != 1 || checks[0].ID != "concurrency" || checks[0].OK {
+		t.Fatalf("negative concurrency accepted: %+v %v", checks, err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatal("invalid concurrency reached Docker")
 	}
 }

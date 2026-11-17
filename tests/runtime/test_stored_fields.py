@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from ingestion.sevir import read_grid, read_window
+from tests.field_fixtures import forecast
 from utils.stored_fields import (
     StoredFields,
     FieldUnavailable,
@@ -24,6 +25,10 @@ def fixture_window():
         for i in range(26)
     ]
     return {
+        "data_id": "sevir",
+        "cadence_minutes": 5,
+        "variable": "vil",
+        "unit": "raw",
         "context": np.zeros((6, 4, 4), np.float32),
         "target": np.ones((20, 4, 4), np.float32),
         "context_times": times[:6],
@@ -34,6 +39,22 @@ def fixture_window():
         "event_id": "event",
         "row": 0,
     }
+
+
+def fixture_forecast(values, leads=tuple(range(5, 101, 5))):
+    return forecast(
+        values,
+        grid={
+            "x": np.arange(4) * 3000.0,
+            "y": np.arange(4) * 3000.0,
+            "crs": "EPSG:3857",
+            "axis_units": "m",
+        },
+        init_time=fixture_window()["init_time"],
+        leads=leads,
+        variable="vil",
+        units="raw",
+    )
 
 
 @pytest.fixture
@@ -53,7 +74,7 @@ def run(tmp_path):
 def test_cached_twenty_leads_and_no_overwrite(run):
     values = np.ones((20, 4, 4), np.float32)
     values[0, 0, 0] = np.nan
-    add_forecast(run, "wadepre", "0.1.0", "a" * 64, values, list(range(5, 101, 5)))
+    add_forecast(run, "wadepre", "0.1.0", "a" * 64, fixture_forecast(values))
     access = StoredFields(run)
     init = START + timedelta(minutes=25)
     for lead in access.list_predictions("wadepre", init):
@@ -63,7 +84,7 @@ def test_cached_twenty_leads_and_no_overwrite(run):
     assert access.file_reads == 1
     assert access.get_prediction("wadepre", init, 5)["mask"][0, 0]
     with pytest.raises(FileExistsError):
-        add_forecast(run, "wadepre", "0.1.0", "a" * 64, values, list(range(5, 101, 5)))
+        add_forecast(run, "wadepre", "0.1.0", "a" * 64, fixture_forecast(values))
     with pytest.raises(FieldUnavailable):
         access.get_prediction("wadepre", init, 7)
     with pytest.raises(FieldUnavailable):
@@ -107,7 +128,13 @@ def test_unique_run_and_time_alignment(run):
             run.parent, run.name, fixture_window(), {}, atlas_revision="unpublished"
         )
     with pytest.raises(ValueError, match="increase strictly"):
-        add_forecast(run, "wadepre", "0.1.0", "a" * 64, np.zeros((2, 4, 4)), [5, 0])
+        add_forecast(
+            run,
+            "wadepre",
+            "0.1.0",
+            "a" * 64,
+            fixture_forecast(np.zeros((2, 4, 4), np.float32), [5, 0]),
+        )
 
 
 def test_legacy_reader_rejects_ambiguous_time():

@@ -96,8 +96,7 @@ func TestLifecycleManagementBusyAndAdmission(t *testing.T) {
 				case "queued", "running":
 					s.jobs["test"] = &Job{Status: busy}
 				case "diagnostics":
-					s.executionMu.Lock()
-					defer s.executionMu.Unlock()
+					s.executions = map[string]*execution{"diagnostics": {id: "diagnostics"}}
 				case "resources":
 					s.preparingResources = true
 				case "request":

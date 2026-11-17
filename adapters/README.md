@@ -14,7 +14,7 @@ artifacts/                       downloaded weight files, not committed
 Each data directory also carries the runtime definition the handler reads:
 `runtime.yaml` (container image, mounts, product id) and a `Dockerfile` for that
 reader. Each model directory has the same pair. See
-[runtime resources](../docs/runtime-resources.md); `config.yaml` does not name a
+[runtime resources](../docs/reference/runtime-resources.md); `config.yaml` does not name a
 dataset or image. Build images from the repository root, for example:
 
 ```sh
@@ -31,12 +31,14 @@ Contracts live outside this tree: `contracts/data/<id>.json` and
 
 The reader finds and decodes local files. It does not download. Satellite
 readers record `region.bbox` and do not crop. The CMA radar reader can
-crop. Each model adapter turns a bundle into its own tensor and runs
-inference. There is no shared ONNX base class.
+crop. Model adapters consume physical `Observations`, validate them, prepare
+backend-private inputs, and return physical `Forecast` fields. Backend choice
+stays inside Docker. See the [model contract](../docs/reference/models.md).
 
 SEVIR VIL reads `sevir_vil.h5` from `data_dir`, restores raw VIL
-`[0, 255]`, and returns six context frames. NowcastNet, exPreCast, and
-WADEPre each keep the latest five frames in their own `adapter.py`.
+`[0, 255]`. Runtime selects the exact recent history declared by the selected
+model before validation. Adapters must not silently trim, pad, resize or
+interpolate incompatible input.
 
 Weight pins are Hugging Face resolve URLs. `utils.weights.ensure_weights`
 checks the file under `artifacts/` first. A matching sha256 skips the
@@ -68,7 +70,13 @@ Request YAML is under `tests/adapters/requests/`. Observation files and weight
 files stay outside git. `tests/adapters/data/` holds the reader checks,
 `tests/adapters/model/` the forecast checks.
 
-Fetch the demo samples once, then run the suite:
+Routine CI uses small synthetic function tests without real model inference.
+Real inference belongs to a named release candidate and platform, with missing
+required inputs reported as FAIL and execution offline. There are no accuracy
+gates. The commands below are optional local reader/sample checks, not evidence
+of release acceptance.
+
+Fetch the available demo samples for those local checks, then run the suite:
 
 ```sh
 scripts/fetch-demo-data.py
@@ -87,12 +95,13 @@ Actions caches. Keep them under a local data root or the gitignored
 `testdata/demo-data/cma_radar/`. Refreshing downloads preserves files outside
 the manifest; CI caches only `testdata/demo-data/SEVIR/`.
 
-## External scan
+## Model contributions and registration
 
-TODO(ci): not implemented here. A later job outside this repo should
-scan `contracts/data/*.json` and `contracts/models/<data-id>/*.json`
-and compare them with `adapters/catalog.json`. It must not import
-adapter Python and must not install satpy.
+See [the contribution guide](../docs/guides/model-contribution.md) for required
+files, lifecycle and tests. Model declarations use `nib.model.v1`; their query
+methods describe physical input/output fields, capabilities and weights.
+Atlas registration is manual. A declaration or local catalog update does not
+automatically export or publish a Hub product.
 
 ## Typed request and persistent output
 

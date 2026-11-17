@@ -32,6 +32,11 @@ type Server struct {
 	// TriggerTick is the firing loop interval; tests shorten it.
 	TriggerTick                time.Duration
 	executionMu                sync.Mutex
+	executions                 map[string]*execution
+	executionQueue             []*execution
+	executionSlots             int
+	executionDispatching       bool
+	triggerDecisions           sync.Map
 	recoveryMu                 sync.Mutex
 	resourcesMu                sync.Mutex
 	imageMu                    sync.Mutex
@@ -59,6 +64,9 @@ type Server struct {
 
 // NewServer checks the configured Docker context in its default status probe.
 func NewServer(cfg Config) *Server {
+	if cfg.Runtime.MaxConcurrentJobs == 0 {
+		cfg.Runtime.MaxConcurrentJobs = defaultMaxConcurrentJobs
+	}
 	token := cfg.Runtime.Token
 	if token == "" {
 		token = randomToken()

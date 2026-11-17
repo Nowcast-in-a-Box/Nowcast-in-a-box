@@ -16,20 +16,50 @@
     },
     "artifacts_relpath": "sevir/wadepre/WADEPre.onnx"
   },
-  "onnx": {
-    "input_name": "input_sequence",
-    "output_name": "refined_out",
-    "scale": 255.0
-  },
   "input": {
+    "variable_id": "vil",
+    "units": "raw",
     "context_frames": 5,
-    "spatial": [128, 128],
-    "dtype": "float32"
+    "cadence_minutes": 5,
+    "spatial": [
+      128,
+      128
+    ],
+    "dtype": "float32",
+    "allow_missing": false
   },
   "output": {
-    "dims": ["batch", "lead", "y", "x"],
+    "variable_id": "vil",
+    "units": "raw",
+    "lead_minutes": [
+      5,
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      75,
+      80,
+      85,
+      90,
+      95,
+      100
+    ],
+    "spatial": [
+      128,
+      128
+    ],
     "dtype": "float32",
-    "lead_frames": 20,
-    "spatial": [128, 128]
-  }
+    "allow_missing": false,
+    "grid": "input"
+  },
+  "schema": "nib.model.v1"
 }
