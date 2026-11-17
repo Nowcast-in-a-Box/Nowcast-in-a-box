@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // The offline console is served by the Handler itself: orders saved on this
@@ -43,7 +45,8 @@ func validPackageID(id string) bool {
 	if !packageIDPattern.MatchString(id) || strings.HasSuffix(id, ".") || strings.HasSuffix(id, " ") {
 		return false
 	}
-	return !windowsReservedNames[id]
+	stem, _, _ := strings.Cut(strings.ToLower(id), ".")
+	return !windowsReservedNames[stem]
 }
 
 type orderSummary struct {
@@ -59,6 +62,8 @@ type orderSummary struct {
 	Source        string   `json:"source"`
 	RunID         string   `json:"run_id,omitempty"`
 	Error         string   `json:"error,omitempty"`
+	ReadOnly      bool     `json:"read_only"`
+	Revision      string   `json:"revision,omitempty"`
 }
 
 func requestSummary(request *RuntimeRequest) orderSummary {
@@ -124,60 +129,61 @@ func sha256Of(body []byte) []byte {
 	return digest[:]
 }
 
-// handleOrdersList reports saved order packages plus the packages of past
-// runs, so an order started once from the Hub stays visible offline.
+// Saved YAML orders are editable; historical runs are read-only fallbacks.
 func (s *Server) handleOrdersList(w http.ResponseWriter, r *http.Request) {
 	cfg := s.currentConfig()
 	summaries := []orderSummary{}
 	seen := map[string]bool{}
-	if entries, err := os.ReadDir(cfg.Paths.Orders); err == nil {
-		names := []string{}
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".zip") {
-				names = append(names, entry.Name())
-			}
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			summary := s.summarizeSavedPackage(filepath.Join(cfg.Paths.Orders, name))
-			seen[summary.PackageID] = true
-			summaries = append(summaries, summary)
-		}
+	entries, err := os.ReadDir(cfg.Paths.Orders)
+	if err != nil && !os.IsNotExist(err) {
+		runtimeError(w, 500, err)
+		return
 	}
-	if entries, err := os.ReadDir(cfg.Paths.Runs); err == nil {
-		ids := []string{}
-		for _, entry := range entries {
-			if entry.IsDir() && idPattern.MatchString(entry.Name()) {
-				ids = append(ids, entry.Name())
-			}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
 		}
-		sort.Sort(sort.Reverse(sort.StringSlice(ids)))
-		for _, id := range ids {
-			summary, ok := runPackageSummary(cfg.Paths.Runs, id)
-			if !ok || seen[summary.PackageID] {
-				continue
-			}
-			seen[summary.PackageID] = true
-			summaries = append(summaries, summary)
+		id := strings.TrimSuffix(entry.Name(), ".yaml")
+		summary := orderSummary{PackageID: id, OrderID: id, Source: "saved"}
+		_, request, _, err := s.loadOrder(id)
+		if err != nil {
+			summary.Error = err.Error()
+			summary.ReadOnly = true
+		} else {
+			summary = requestSummary(&request)
+			summary.Source = "saved"
+			summary.Revision = request.OrderRevision
 		}
+		seen[id] = true
+		summaries = append(summaries, summary)
 	}
-	writeJSON(w, 200, map[string]any{"orders": summaries})
-}
-
-func (s *Server) summarizeSavedPackage(path string) orderSummary {
-	stem := strings.TrimSuffix(filepath.Base(path), ".zip")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return orderSummary{PackageID: stem, Source: "orders", Error: err.Error()}
+	entries, err = os.ReadDir(cfg.Paths.Runs)
+	if err != nil && !os.IsNotExist(err) {
+		runtimeError(w, 500, err)
+		return
 	}
-	sum := sha256.Sum256(raw)
-	request, err := ParseRuntimePackage(raw, hex.EncodeToString(sum[:]), s.Resources)
-	if err != nil {
-		return orderSummary{PackageID: stem, Source: "orders", Error: err.Error()}
+	// ReadDir sorts names; newest historical fallback wins.
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+		if !entry.IsDir() || !idPattern.MatchString(entry.Name()) {
+			continue
+		}
+		summary, ok := runPackageSummary(cfg.Paths.Runs, entry.Name())
+		if !ok {
+			continue
+		}
+		identity := summary.OrderID
+		if identity == "" {
+			identity = summary.PackageID
+		}
+		if seen[identity] {
+			continue
+		}
+		seen[identity] = true
+		summaries = append(summaries, summary)
 	}
-	summary := requestSummary(&request)
-	summary.Source = "orders"
-	return summary
+	sort.Slice(summaries, func(i, j int) bool { return summaries[i].OrderID < summaries[j].OrderID })
+	writeJSON(w, 200, map[string]any{"orders": summaries, "total": len(summaries)})
 }
 
 func runPackageSummary(runsDir, id string) (orderSummary, bool) {
@@ -190,21 +196,172 @@ func runPackageSummary(runsDir, id string) (orderSummary, bool) {
 		return orderSummary{}, false
 	}
 	summary := requestSummary(&job.Request)
-	summary.Source = "runs"
-	summary.RunID = id
+	summary.Source, summary.RunID, summary.ReadOnly = "runs", id, true
 	return summary, true
 }
 
-// handleOrderSave stores a Hub-generated package for offline start. It never
-// starts a run and never overwrites a different package under the same id.
 func (s *Server) handleOrderSave(w http.ResponseWriter, r *http.Request) {
-	var upload struct {
-		Package []byte `json:"package"`
-		SHA256  string `json:"sha256"`
+	order, request, revision, err := s.readOrderInput(w, r)
+	if err != nil {
+		runtimeError(w, 422, err)
+		return
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 12<<20))
+	id := order.OrderID
+	if r.Method == "PATCH" && id != r.PathValue("package_id") {
+		runtimeError(w, 422, fmt.Errorf("order_id cannot change during an edit"))
+		return
+	}
+	s.ordersMu.Lock()
+	defer s.ordersMu.Unlock()
+	_, previous, _, readErr := s.loadOrder(id)
+	status := http.StatusCreated
+	if readErr == nil {
+		if r.Method == "PATCH" && revision != previous.OrderRevision {
+			runtimeError(w, 409, fmt.Errorf("order changed; reload it before saving"))
+			return
+		}
+		if r.Method == "POST" && request.OrderRevision != previous.OrderRevision {
+			runtimeError(w, 409, fmt.Errorf("order already exists; open it to edit, or choose another order_id"))
+			return
+		}
+		status = http.StatusOK
+	} else if !os.IsNotExist(readErr) {
+		runtimeError(w, 409, readErr)
+		return
+	} else if r.Method == "PATCH" {
+		runtimeError(w, 404, fmt.Errorf("saved YAML order not found"))
+		return
+	}
+	raw, err := yaml.Marshal(order)
+	if err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
+	directory := s.currentConfig().Paths.Orders
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		runtimeError(w, 500, err)
+		return
+	}
+	temporary, err := os.CreateTemp(directory, ".order-*")
+	if err != nil {
+		runtimeError(w, 500, err)
+		return
+	}
+	defer os.Remove(temporary.Name())
+	if _, err = temporary.Write(raw); err == nil {
+		err = temporary.Sync()
+	}
+	closeErr := temporary.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(temporary.Name(), filepath.Join(directory, id+".yaml"))
+	}
+	if err != nil {
+		runtimeError(w, 500, err)
+		return
+	}
+	writeJSON(w, status, orderDetail(order, request, raw))
+}
+
+func (s *Server) handleOrder(w http.ResponseWriter, r *http.Request) {
+	order, request, raw, err := s.loadOrder(r.PathValue("package_id"))
+	if err != nil {
+		runtimeError(w, 404, err)
+		return
+	}
+	if r.URL.Query().Get("download") == "1" {
+		w.Header().Set("Content-Type", "application/yaml")
+		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(order.OrderID+".yaml"))
+		_, _ = w.Write(raw)
+		return
+	}
+	writeJSON(w, 200, orderDetail(order, request, raw))
+}
+
+func (s *Server) handleOrderValidate(w http.ResponseWriter, r *http.Request) {
+	order, request, _, err := s.readOrderInput(w, r)
+	if err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
+	raw, err := yaml.Marshal(order)
+	if err != nil {
+		runtimeError(w, 422, err)
+		return
+	}
+	writeJSON(w, 200, orderDetail(order, request, raw))
+}
+
+func orderDetail(order Order, request RuntimeRequest, raw []byte) any {
+	summary := requestSummary(&request)
+	summary.Source, summary.Revision = "saved", request.OrderRevision
+	return struct {
+		orderSummary
+		Order Order  `json:"order"`
+		YAML  string `json:"yaml"`
+	}{summary, order, string(raw)}
+}
+
+func (s *Server) readOrderInput(w http.ResponseWriter, r *http.Request) (Order, RuntimeRequest, string, error) {
+	var input struct {
+		YAML     *string `json:"yaml"`
+		Order    *Order  `json:"order"`
+		Revision string  `json:"revision"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2*maxOrderBytes))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&upload); err != nil {
+	if err := decoder.Decode(&input); err != nil {
+		return Order{}, RuntimeRequest{}, "", err
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return Order{}, RuntimeRequest{}, "", fmt.Errorf("one request object required")
+	}
+	if (input.YAML == nil) == (input.Order == nil) {
+		return Order{}, RuntimeRequest{}, "", fmt.Errorf("provide either yaml or order; ZIP packages are no longer accepted")
+	}
+	var order Order
+	var request RuntimeRequest
+	var err error
+	if input.YAML != nil {
+		order, request, err = ParseOrder([]byte(*input.YAML), s.Resources, s.Config.Runtime.MaxBatchSamples)
+	} else {
+		order, request, err = normalizeOrder(*input.Order, s.Resources, s.Config.Runtime.MaxBatchSamples)
+	}
+	return order, request, input.Revision, err
+}
+
+func (s *Server) loadOrder(id string) (Order, RuntimeRequest, []byte, error) {
+	if !validPackageID(id) || id != strings.ToLower(id) {
+		return Order{}, RuntimeRequest{}, nil, fmt.Errorf("invalid order_id")
+	}
+	path := filepath.Join(s.currentConfig().Paths.Orders, id+".yaml")
+	info, err := os.Lstat(path)
+	if err != nil {
+		return Order{}, RuntimeRequest{}, nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxOrderBytes {
+		return Order{}, RuntimeRequest{}, nil, fmt.Errorf("order must be a regular YAML file of at most 1 MiB")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Order{}, RuntimeRequest{}, nil, err
+	}
+	order, request, err := ParseOrder(raw, s.Resources, s.Config.Runtime.MaxBatchSamples)
+	if err == nil && order.OrderID != id {
+		err = fmt.Errorf("order_id does not match its filename")
+	}
+	return order, request, raw, err
+}
+
+func (s *Server) handleOrderRun(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Revision string `json:"revision"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil && err != io.EOF {
 		runtimeError(w, 400, err)
 		return
 	}
@@ -212,108 +369,21 @@ func (s *Server) handleOrderSave(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, fmt.Errorf("one request object required"))
 		return
 	}
-	request, err := ParseRuntimePackage(upload.Package, upload.SHA256, s.Resources)
+	s.ordersMu.Lock()
+	order, request, _, err := s.loadOrder(r.PathValue("package_id"))
+	s.ordersMu.Unlock()
 	if err != nil {
-		runtimeError(w, 422, err)
+		runtimeError(w, 404, fmt.Errorf("saved YAML order unavailable (legacy history is read-only): %w", err))
 		return
 	}
-	if !validPackageID(request.PackageID) {
-		runtimeError(w, 422, fmt.Errorf("package id %q is not a valid order file name", request.PackageID))
+	if input.Revision != "" && input.Revision != request.OrderRevision {
+		runtimeError(w, 409, fmt.Errorf("order changed; reload before starting"))
 		return
 	}
-	ordersDir := s.currentConfig().Paths.Orders
-	target := filepath.Join(ordersDir, request.PackageID+".zip")
-	if rel, relErr := filepath.Rel(ordersDir, target); relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		runtimeError(w, 400, fmt.Errorf("package id escapes the orders directory"))
-		return
-	}
-	if existing, readErr := os.ReadFile(target); readErr == nil {
-		sum := sha256.Sum256(existing)
-		if hex.EncodeToString(sum[:]) == request.PackageSHA256 {
-			summary := requestSummary(&request)
-			summary.Source = "orders"
-			writeJSON(w, 200, summary)
-			return
-		}
-		runtimeError(w, 409, fmt.Errorf("package %s is already saved with different content; delete %s first", request.PackageID, target))
-		return
-	}
-	if err := os.MkdirAll(ordersDir, 0o755); err != nil {
-		runtimeError(w, 500, err)
-		return
-	}
-	temporary := filepath.Join(ordersDir, request.PackageID+".tmp-"+randomToken()[:8])
-	if err := os.WriteFile(temporary, upload.Package, 0o600); err != nil {
-		runtimeError(w, 500, err)
-		return
-	}
-	if err := os.Rename(temporary, target); err != nil {
-		_ = os.Remove(temporary)
-		runtimeError(w, 500, err)
-		return
-	}
-	summary := requestSummary(&request)
-	summary.Source = "orders"
-	writeJSON(w, 201, summary)
-}
-
-// handleOrderRun starts a saved order package through the same admission path
-// as a Hub upload.
-func (s *Server) handleOrderRun(w http.ResponseWriter, r *http.Request) {
-	packageID := r.PathValue("package_id")
-	if !validPackageID(packageID) {
-		runtimeError(w, 400, fmt.Errorf("invalid package id"))
-		return
-	}
-	key := r.Header.Get("Idempotency-Key")
-	if len(key) > 128 {
-		runtimeError(w, 400, fmt.Errorf("idempotency key is too long"))
-		return
-	}
-	pkg, err := s.findOrderPackage(packageID)
-	if err != nil {
-		runtimeError(w, 404, err)
-		return
-	}
-	sum := sha256.Sum256(pkg)
-	job, status, err := s.createJobFromPackage(pkg, hex.EncodeToString(sum[:]), key)
+	job, status, err := s.admitOrder(order, request.OrderRevision, r.Header.Get("Idempotency-Key"), "")
 	if err != nil {
 		runtimeError(w, status, err)
 		return
 	}
 	writeJSON(w, status, *job)
-}
-
-// findOrderPackage returns the package bytes: the saved orders copy first,
-// else the newest run that carried this package.
-func (s *Server) findOrderPackage(packageID string) ([]byte, error) {
-	cfg := s.currentConfig()
-	if raw, err := os.ReadFile(filepath.Join(cfg.Paths.Orders, packageID+".zip")); err == nil {
-		return raw, nil
-	}
-	entries, err := os.ReadDir(cfg.Paths.Runs)
-	if err != nil {
-		return nil, fmt.Errorf("no saved order %q on this machine", packageID)
-	}
-	ids := []string{}
-	for _, entry := range entries {
-		if entry.IsDir() && idPattern.MatchString(entry.Name()) {
-			ids = append(ids, entry.Name())
-		}
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
-	for _, id := range ids {
-		raw, readErr := os.ReadFile(filepath.Join(cfg.Paths.Runs, id, "job.json"))
-		if readErr != nil {
-			continue
-		}
-		var job Job
-		if json.Unmarshal(raw, &job) != nil || job.ID != id || job.Request.PackageID != packageID {
-			continue
-		}
-		if pkg, pkgErr := os.ReadFile(filepath.Join(cfg.Paths.Runs, id, "package.zip")); pkgErr == nil {
-			return pkg, nil
-		}
-	}
-	return nil, fmt.Errorf("no saved order %q on this machine", packageID)
 }

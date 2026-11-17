@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	var request struct {
+		Order        *Order   `json:"order,omitempty"`
+		YAML         *string  `json:"yaml,omitempty"`
 		ProductID    string   `json:"data_product_id,omitempty"`
 		DataID       string   `json:"data_id,omitempty"`
 		EventID      string   `json:"event_id"`
@@ -19,11 +22,36 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		SampleStarts []string `json:"sample_starts"`
 		Models       []string `json:"models"`
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2*maxOrderBytes))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		runtimeError(w, 400, err)
 		return
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		runtimeError(w, 400, fmt.Errorf("expected one preflight document"))
+		return
+	}
+	var region *OrderRegion
+	if request.Order != nil || request.YAML != nil {
+		if request.Order != nil && request.YAML != nil || request.DataID != "" || request.ProductID != "" || request.EventID != "" || request.StartTime != "" || len(request.Models) != 0 || len(request.SampleStarts) != 0 {
+			runtimeError(w, 422, fmt.Errorf("provide one order or YAML without legacy selection fields"))
+			return
+		}
+		var order Order
+		var normalized RuntimeRequest
+		var err error
+		if request.YAML != nil {
+			order, normalized, err = ParseOrder([]byte(*request.YAML), s.Resources, s.Config.Runtime.MaxBatchSamples)
+		} else {
+			order, normalized, err = normalizeOrder(*request.Order, s.Resources, s.Config.Runtime.MaxBatchSamples)
+		}
+		if err != nil {
+			runtimeError(w, 422, err)
+			return
+		}
+		request.DataID, request.EventID, request.StartTime = normalized.DataID, normalized.EventID, normalized.StartTime
+		request.Models, request.SampleStarts, region = normalized.Models, normalized.SampleStarts, order.Region
 	}
 	dataID := request.DataID
 	if dataID == "" && request.ProductID != "" {
@@ -35,57 +63,29 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 409, err)
 		return
 	}
-	checks := []Check{}
-	checkContext, cancelChecks := context.WithTimeout(r.Context(), imagePullTimeout)
-	defer cancelChecks()
-	data, catalog, err := s.dataPaths(dataID)
-	if err != nil {
-		checks = append(checks, Check{ID: "data", OK: false, Message: err.Error()})
-	} else {
-		checks = append(checks, Check{ID: "data", OK: true, Message: "selected data files are present"})
-		if s.Resources != nil && s.Resources.Diagnostics != nil {
-			checks = append(checks, s.imageCheck(checkContext, s.Resources.Diagnostics.Container.Image, "image:diagnostics", "diagnostics"))
-		}
-		if resource, resourceErr := s.dataResource(dataID); resourceErr == nil {
-			checks = append(checks, s.imageCheck(checkContext, resource.Container.Image, "image:data", "data reader"))
-			for _, modelID := range request.Models {
-				if model, modelErr := s.modelResource(dataID, modelID); modelErr == nil {
-					checks = append(checks, s.imageCheck(checkContext, model.Container.Image, "image:model:"+modelID, modelID))
-				}
-			}
-		}
-		if request.EventID != "" || request.StartTime != "" {
-			starts := request.SampleStarts
-			if len(starts) == 0 {
-				starts = []string{request.StartTime}
-			}
-			for index, start := range starts {
-				eventID := request.EventID
-				if dataID == "cma_radar" {
-					eventID = strings.ReplaceAll(start[:min(10, len(start))], "-", "")
-				}
-				id := "window"
-				if len(starts) > 1 {
-					id = fmt.Sprintf("window:%d", index+1)
-				}
-				checks = append(checks, s.windowCheck(r.Context(), dataID, data, catalog, eventID, start, id))
-			}
-		}
+	if !s.executionMu.TryLock() {
+		runtimeError(w, 409, fmt.Errorf("execution or preparation is active; retry preflight when idle"))
+		return
 	}
-	if len(request.Models) == 0 {
-		checks = append(checks, Check{ID: "weights", OK: false, Message: "select a model before checking weights"})
+	defer s.executionMu.Unlock()
+	s.jobsMu.Lock()
+	stopping := s.stopping
+	s.jobsMu.Unlock()
+	if stopping {
+		runtimeError(w, 409, fmt.Errorf("Handler is stopping"))
+		return
 	}
-	for _, model := range request.Models {
-		checks = append(checks, s.weightCheck(dataID, model))
+	selection := RuntimeRequest{DataID: dataID, EventID: request.EventID, StartTime: request.StartTime, SampleStarts: request.SampleStarts, Models: request.Models}
+	if region != nil {
+		selection.CenterLon, selection.CenterLat = *region.CenterLon, *region.CenterLat
 	}
-	ok := true
-	for _, check := range checks {
-		ok = ok && check.OK
-	}
-	writeJSON(w, 200, map[string]any{"ok": ok, "checks": checks})
+	ctx, cancel := context.WithTimeout(r.Context(), imagePullTimeout)
+	defer cancel()
+	checks, execution, err := s.executionPreflight(ctx, selection, nil)
+	writeJSON(w, 200, map[string]any{"ok": err == nil, "checks": checks, "execution_context": execution})
 }
 
-func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, eventID, start, id string) Check {
+func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, eventID, start, id string, region *OrderRegion) Check {
 	if eventID == "" || !strings.HasSuffix(start, "Z") {
 		return Check{ID: id, OK: false, Message: "event id and a UTC window ending in Z are required"}
 	}
@@ -94,6 +94,9 @@ func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, even
 	args, err := s.dataCommandArgs(dataID, data, catalog, "--check-window", "--event", eventID, "--start", start)
 	if err != nil {
 		return Check{ID: id, OK: false, Message: err.Error()}
+	}
+	if region != nil {
+		args = append(args, "--center-lon", strconv.FormatFloat(*region.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(*region.CenterLat, 'f', -1, 64))
 	}
 	args = append([]string{"run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp"}, args...)
 	code, out, err := s.docker(ctx, args...)
@@ -106,27 +109,8 @@ func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, even
 	if json.Unmarshal(containerJSON(out), &value) != nil || !value.Ready {
 		return Check{ID: id, OK: false, Message: "selected window metadata was not ready"}
 	}
+	if dataID == "cma_radar" {
+		return Check{ID: id, OK: true, Message: "time-window metadata passed; regional footprint and pixel availability are not probed until ingestion"}
+	}
 	return Check{ID: id, OK: true, Message: "selected window exists and catalog integrity passed"}
-}
-
-func (s *Server) weightCheck(dataID, modelID string) Check {
-	resource, err := s.modelResource(dataID, modelID)
-	if err != nil {
-		return Check{ID: "weight:" + modelID, OK: false, Message: err.Error()}
-	}
-	if resource.Weights.Embedded {
-		return Check{ID: "weight:" + modelID, OK: true, Message: "weights are embedded in the model image; SHA-256 is verified when inference starts"}
-	}
-	path, err := s.weightPath(dataID, modelID)
-	if err != nil {
-		return Check{ID: "weight:" + modelID, OK: false, Message: err.Error()}
-	}
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return Check{ID: "weight:" + modelID, OK: true, Message: "weight is not present yet; Validate copies it from paths.weight_source"}
-	}
-	if err := verifyWeight(path, resource.Weights.SHA256); err != nil {
-		return Check{ID: "weight:" + modelID, OK: true, Message: "local weight does not match the pinned SHA-256; Validate replaces it from paths.weight_source"}
-	}
-	return Check{ID: "weight:" + modelID, OK: true, Message: "local weight matches the pinned SHA-256"}
 }

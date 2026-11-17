@@ -25,6 +25,7 @@ type RuntimeRequest struct {
 	OrderID             string            `json:"order_id"`
 	PackageID           string            `json:"package_id"`
 	PackageSHA256       string            `json:"package_sha256"`
+	OrderRevision       string            `json:"order_revision,omitempty"`
 	EventID             string            `json:"event_id"`
 	StartTime           string            `json:"context_start_time"`
 	SampleStarts        []string          `json:"sample_starts,omitempty"`

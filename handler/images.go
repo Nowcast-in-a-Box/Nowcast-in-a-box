@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -10,6 +11,29 @@ import (
 // imagePullTimeout is deliberately longer than a normal request: the first
 // diagnostics pull can take several minutes on a cold Docker cache.
 const imagePullTimeout = 15 * time.Minute
+
+var imagePrefixPattern = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$`)
+
+func normalizeImagePrefix(value string) (string, error) {
+	value = strings.TrimSuffix(strings.TrimSpace(value), "/")
+	if value != "" && !imagePrefixPattern.MatchString(value) {
+		return "", fmt.Errorf("image registry/mirror must be a registry[/namespace] prefix without a scheme, credentials, tag, or shell syntax")
+	}
+	return value, nil
+}
+
+func (s *Server) imageDaemonReady(ctx context.Context) error {
+	probe, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := probe.Err(); err != nil {
+		return err
+	}
+	code, out, err := s.docker(probe, "info", "--format", "{{.ServerVersion}}")
+	if err != nil || code != 0 {
+		return fmt.Errorf("Docker is unavailable; start Docker and retry: %v %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
 
 // qualifyImage adds a registry prefix unless the manifest already carries a
 // fully-qualified image reference. A manifest keeps the short local tag so
@@ -85,6 +109,12 @@ func (s *Server) ensureImage(ctx context.Context, image string) (string, error) 
 	s.imageMu.Lock()
 	defer s.imageMu.Unlock()
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if image == "" {
+		return "", fmt.Errorf("image is not configured")
+	}
 	if s.imagePresent(ctx, image) {
 		return "", nil
 	}
@@ -94,6 +124,9 @@ func (s *Server) ensureImage(ctx context.Context, image string) (string, error) 
 	}
 	var failures []string
 	for _, remote := range candidates {
+		if err := s.imageDaemonReady(ctx); err != nil {
+			return "", err
+		}
 		code, out, err := s.docker(ctx, "pull", remote)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v (%s)", remote, err, strings.TrimSpace(string(out))))
@@ -113,29 +146,6 @@ func (s *Server) ensureImage(ctx context.Context, image string) (string, error) 
 		return remote, nil
 	}
 	return "", fmt.Errorf("could not pull %s: %s", image, strings.Join(failures, "; "))
-}
-
-// ensureDiagnosticsImage runs once in the background after the Handler starts.
-// It makes the first diagnostics launch self-contained without blocking the
-// local HTTP connection or the resource panel.
-func (s *Server) ensureDiagnosticsImage() {
-	if s.Resources == nil || s.Resources.Diagnostics == nil {
-		return
-	}
-	image := s.Resources.Diagnostics.Container.Image
-	ctx, cancel := context.WithTimeout(context.Background(), imagePullTimeout)
-	defer cancel()
-	remote, err := s.ensureImage(ctx, image)
-	if err != nil {
-		s.note("diagnostics image bootstrap skipped: " + err.Error())
-		return
-	}
-	if remote == "" {
-		s.note("diagnostics image ready from local cache: " + image)
-	} else {
-		s.note("diagnostics image ready: " + image + " (pulled from " + remote + ")")
-	}
-	s.RefreshResources()
 }
 
 // imageCheck is the Validate-time image gate. A missing image is pulled (and

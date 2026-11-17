@@ -141,7 +141,7 @@ func TestThreeModelPackageBindsEveryDiagnosticModel(t *testing.T) {
 func submitSelection(t *testing.T, server *handler.Server, event string, models []string, diagnostics, key string) handler.Job {
 	t.Helper()
 	raw, hash := selectionPackage(t, event, models, diagnostics)
-	body, _ := json.Marshal(map[string]any{"package": raw, "sha256": hash})
+	body, _ := json.Marshal(map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, hash))})
 	req := httptest.NewRequest("POST", "http://127.0.0.1/v1/jobs", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer token")
 	req.Header.Set("Idempotency-Key", key)
@@ -185,6 +185,7 @@ func TestSameConfigurationCreatesNewRunAndPreservesPreviousForecasts(t *testing.
 	cfg.Runtime.AtlasRevision = strings.Repeat("b", 40)
 	writeSevirData(t, &cfg)
 	server := handler.NewServer(cfg)
+	writeExecutionWeights(t, server)
 	server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
 	first := waitJob(t, server, submitSelection(t, server, "S710140", []string{"wadepre"}, "", "first").ID, "succeeded")
 	other := filepath.Join(cfg.Paths.Runs, first.ID, "forecasts", "nowcastnet", "fields.npz")
@@ -241,6 +242,7 @@ func TestThreeModelsDiagnosticsAndDistinctReruns(t *testing.T) {
 	cfg.Runtime.AtlasRevision = strings.Repeat("b", 40)
 	writeSevirData(t, &cfg)
 	server := handler.NewServer(cfg)
+	writeExecutionWeights(t, server)
 	server.Runner = &runtimeRunner{root: cfg.Paths.Runs}
 	models := []string{"nowcastnet", "exprecast", "wadepre"}
 	first := waitJob(t, server, submitSelection(t, server, "S696651", models, "both", "all-models").ID, "succeeded")
@@ -348,6 +350,9 @@ func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := `{"schema":"nib.run.v1","id":"saved-run","data":{"id":"sevir"},"forecasts":{"wadepre":{"path":"forecasts/wadepre.npz"}},"diagnostics":[]}`
+	if err := os.WriteFile(filepath.Join(run, "order.yaml"), []byte(orderYAML(t, orderFixture())), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(run, "manifest.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}

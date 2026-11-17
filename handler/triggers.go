@@ -7,8 +7,6 @@ package handler
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,6 +54,7 @@ type Trigger struct {
 	LastPollAt   *time.Time `json:"last_poll_at,omitempty"`
 	LastFiredAt  *time.Time `json:"last_fired_at,omitempty"`
 	LastStart    string     `json:"last_start,omitempty"`
+	LastDataID   string     `json:"last_data_id,omitempty"`
 	LastRunID    string     `json:"last_run_id,omitempty"`
 	LastOutcome  string     `json:"last_outcome,omitempty"`
 	LastError    string     `json:"last_error,omitempty"`
@@ -290,6 +289,7 @@ func (s *Server) fireTrigger(id string, now, due time.Time) {
 			stored.LastFiredAt = &stamp
 			stored.LastStart = start
 			stored.LastRunID = runID
+			stored.LastDataID = trigger.LastDataID
 		}
 		if stored.Kind != triggerKindSchedule {
 			return
@@ -313,20 +313,20 @@ func (s *Server) startTriggerRun(trigger *Trigger, due time.Time) (outcome, star
 	if s.triggerBusy(trigger.ID) {
 		return outcomeBusy, "", "", 0, nil
 	}
-	pkg, err := s.findOrderPackage(trigger.PackageID)
+	order, request, _, err := s.loadOrder(trigger.PackageID)
 	if err != nil {
-		return outcomeFailed, "", "", 0, err
-	}
-	sum := sha256.Sum256(pkg)
-	request, err := ParseRuntimePackage(pkg, hex.EncodeToString(sum[:]), s.Resources)
-	if err != nil {
-		return outcomeFailed, "", "", 0, err
+		return outcomeFailed, "", "", 0, fmt.Errorf("saved YAML order unavailable; legacy ZIP triggers cannot run: %w", err)
 	}
 	limit := s.Config.Runtime.MaxBatchSamples
 	if limit <= 0 {
 		limit = defaultMaxBatchSamples
 	}
-	key := "trigger:" + trigger.ID
+	key := "trigger:" + trigger.ID + ":" + request.DataID
+	lastStart := trigger.LastStart
+	if trigger.LastDataID != request.DataID {
+		lastStart = ""
+	}
+	trigger.LastDataID = request.DataID
 	if trigger.StartSource == triggerStartOrder {
 		// Every scheduled point is its own run of the frozen window.
 		key += ":order:" + due.UTC().Format(time.RFC3339)
@@ -335,7 +335,7 @@ func (s *Server) startTriggerRun(trigger *Trigger, due time.Time) (outcome, star
 		if err != nil {
 			return outcomeFailed, "", "", 0, err
 		}
-		chosen, rest := unseenWindows(windows, trigger.LastStart, trigger.WindowMode, limit)
+		chosen, rest := unseenWindows(windows, lastStart, trigger.WindowMode, limit)
 		if len(chosen) == 0 {
 			return outcomeSkipped, "", "", rest, nil
 		}
@@ -350,7 +350,8 @@ func (s *Server) startTriggerRun(trigger *Trigger, due time.Time) (outcome, star
 		key += ":" + request.StartTime
 		skipped = rest
 	}
-	job, status, err := s.admitJob(request, pkg, key, trigger.ID)
+	order.EventID, order.SampleStarts = request.EventID, request.SampleStarts
+	job, status, err := s.admitOrder(order, request.OrderRevision, key, trigger.ID)
 	if err != nil {
 		return outcomeFailed, "", "", skipped, err
 	}
@@ -651,7 +652,7 @@ func (s *Server) handleTriggerCreate(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 422, err)
 		return
 	}
-	if _, err := s.findOrderPackage(trigger.PackageID); err != nil {
+	if _, _, _, err := s.loadOrder(trigger.PackageID); err != nil {
 		runtimeError(w, 422, err)
 		return
 	}

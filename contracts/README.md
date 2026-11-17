@@ -4,27 +4,49 @@ Schemas shared by the handler (preflight) and by code that runs inside
 Docker. This directory is documentation and schema, not a Python package
 and not something end users install.
 
-## Run config (YAML v1)
+## Order configuration (`nib.order.v1` YAML)
 
-The Hub writes this file. The handler validates it before starting a
-container.
+Hub exports a single YAML document. The local Handler console imports, creates,
+edits and exports it. The Handler validates the same definition before saving,
+preflight and execution. See [the example](examples/order.example.yaml) and
+[the local console](../docs/local-console.md).
 
-```yaml
-version: 1
-data:
-  id: sevir-vil
-model:
-  id: wadepre
-run:
-  start_time: "2017-06-13T15:05:00Z"
-  forecast_horizon: 20
-```
+Required fields are `schema_version`, `order_id`, `data_id`, `event_id`,
+`sample_starts` and `models`. The schema version is `nib.order.v1`.
+Order IDs are lowercase portable filenames of 1–128 characters. Models must be
+registered for the selected data source. Sample starts contain 1–32 distinct
+UTC RFC3339 instants, also limited by the Handler's configured batch limit.
+The Handler canonicalizes timestamps to `Z` and derives the context start from
+the first sample. SEVIR samples share one event; CMA batch dates follow each
+sample's start.
 
-`start_time` is UTC ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`, or `sample_id`
-instead. Unknown keys are errors. `forecast_horizon` is a frame count.
+Optional sections:
 
-This is the *run* YAML, different from the repo-root [`config.yaml`][cfg]
-that the handler reads for host, port, and paths.
+- `region`: CMA center longitude and latitude, supplied together. Bounds are
+  76–132°E and 15–51°N; the default is 118°E, 32°N. SEVIR does not accept a region.
+- `verification`: nonempty model subset and methods, with `levels` for categorical
+  or spatial metrics and `half_windows` for FSS. Thresholds use the data source's
+  native units. Each required list has at most 16 distinct values. FSS windows
+  are integer half-widths from 0 to 16 cells. Unused lists are removed.
+- `visualization`: a nonempty model subset, independent of verification models.
+
+Omitting a diagnostic section disables it. Unknown fields, duplicate YAML keys,
+multiple documents and documents larger than 1 MiB are rejected. Frame counts,
+grid, cadence and forecast horizon are fixed runtime capabilities, not editable
+order fields. Machine paths, Docker arguments, images and executable code never
+come from the order. The repository-root [`config.yaml`][cfg] remains the separate
+Handler host configuration.
+
+The file format is YAML; HTTP uses JSON envelopes containing either `yaml` text
+or an `order` object. Canonical content determines the revision. Updates require
+the revision read by the editor and return a conflict if another save won first.
+Each admitted run saves its effective `order.yaml` plus the source revision in
+`job.json`; trigger-selected windows are included in that run's execution hash.
+Later order edits never change those snapshots.
+
+ZIP import and execution endpoints are no longer supported. Historical runs
+remain readable; a history-only order cannot start until a new YAML order is
+created. Existing ZIP files and their results are not deleted.
 
 ## Diagnostics request
 

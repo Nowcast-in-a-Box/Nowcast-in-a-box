@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -22,6 +23,7 @@ type Server struct {
 	Token          string
 	PickFolder     func() (string, error)
 	configMu       sync.RWMutex
+	ordersMu       sync.Mutex
 	jobsMu         sync.Mutex
 	jobs           map[string]*Job
 	triggersMu     sync.Mutex
@@ -47,19 +49,27 @@ type Server struct {
 	stopping                   bool // guarded by jobsMu
 	shutdown                   chan struct{}
 	instanceID                 string
+	startedAt                  time.Time
+	serviceCtx                 context.Context
+	serviceCancel              context.CancelFunc
+	background                 sync.WaitGroup
+	admissionMu                sync.RWMutex
+	restartServer              *Server // guarded by jobsMu
 }
 
-// NewServer returns a server whose preflight list starts with DockerCheck.
+// NewServer checks the configured Docker context in its default status probe.
 func NewServer(cfg Config) *Server {
 	token := cfg.Runtime.Token
 	if token == "" {
 		token = randomToken()
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	server := &Server{
 		Config: cfg, Runner: execRunner{}, Token: token, jobs: make(map[string]*Job),
-		Preflight: []func() Check{DockerCheck},
-		shutdown:  make(chan struct{}), instanceID: randomToken()[:32],
+		shutdown: make(chan struct{}), instanceID: randomToken()[:32],
+		startedAt: time.Now().UTC(), serviceCtx: ctx, serviceCancel: cancel,
 	}
+	server.Preflight = []func() Check{server.dockerCheck}
 	server.Resources, server.ResourceError = LoadResources(cfg.Paths.Resources)
 	return server
 }
@@ -96,8 +106,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/identity", s.handleIdentity)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
 	mux.HandleFunc("POST /v1/control/stop", s.authorize(s.handleStop))
+	mux.HandleFunc("POST /v1/control/restart", s.authorize(s.handleRestart))
 	s.runtimeRoutes(mux)
-	return s.loopbackOnly(s.originControl(mux))
+	return s.loopbackOnly(s.originControl(s.admitRequests(mux)))
 }
 
 // ReviewRoutes serves the same diagnostics result viewer on the review listener.
@@ -110,7 +121,7 @@ func (s *Server) ReviewRoutes() http.Handler {
 	mux.HandleFunc("GET /visualization/{path...}", s.handleDiagnosticsPage)
 	mux.HandleFunc("GET /map-viewer/{path...}", s.handleDiagnosticsPage)
 	mux.HandleFunc("GET /map-basemap/{path...}", s.handleDiagnosticsPage)
-	return s.loopbackOnly(mux)
+	return s.loopbackOnly(s.admitRequests(mux))
 }
 
 func (s *Server) loopbackOnly(next http.Handler) http.Handler {
@@ -130,12 +141,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleIdentity(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	cfg := s.currentConfig()
-	s.jobsMu.Lock()
-	state := "running"
-	if s.stopping {
-		state = "stopping"
-	}
-	s.jobsMu.Unlock()
+	state, _ := s.lifecycleStatus()
 	writeJSON(w, http.StatusOK, identityResponse{
 		Service: "nib-handler", Version: Version, Protocol: identityProtocol,
 		ConfigID: configID(cfg), InstanceID: s.instanceID, State: state,
@@ -144,22 +150,34 @@ func (s *Server) handleIdentity(w http.ResponseWriter, r *http.Request) {
 }
 
 type statusResponse struct {
-	Service        string  `json:"service"`
-	Version        string  `json:"version"`
-	Host           string  `json:"host"`
-	Port           string  `json:"port"`
-	ConfigFile     string  `json:"config_file"`
-	Review         Addr    `json:"review"`
-	Paths          Paths   `json:"paths"`
-	Docker         Check   `json:"docker"`
-	Preflight      []Check `json:"preflight"`
-	ResourcesError string  `json:"resources_error,omitempty"`
+	InstanceID     string    `json:"instance_id"`
+	StartedAt      time.Time `json:"started_at"`
+	HandlerState   string    `json:"handler_state"`
+	ActiveJobs     int       `json:"active_jobs"`
+	Service        string    `json:"service"`
+	Version        string    `json:"version"`
+	Host           string    `json:"host"`
+	Port           string    `json:"port"`
+	ConfigFile     string    `json:"config_file"`
+	Review         Addr      `json:"review"`
+	Paths          Paths     `json:"paths"`
+	Docker         Check     `json:"docker"`
+	Preflight      []Check   `json:"preflight"`
+	ResourcesError string    `json:"resources_error,omitempty"`
 }
 
 func (s *Server) currentConfig() Config {
 	s.configMu.RLock()
 	defer s.configMu.RUnlock()
-	return s.Config
+	cfg := s.Config
+	cfg.Runtime.AllowedOrigins = append([]string(nil), s.Config.Runtime.AllowedOrigins...)
+	if s.Config.DataRoots != nil {
+		cfg.DataRoots = make(map[string]string, len(s.Config.DataRoots))
+		for key, value := range s.Config.DataRoots {
+			cfg.DataRoots[key] = value
+		}
+	}
+	return cfg
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +200,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	w.Header().Set("Cache-Control", "no-store")
+	state, active := s.lifecycleStatus()
 	writeJSON(w, http.StatusOK, statusResponse{
+		InstanceID: s.instanceID, StartedAt: s.startedAt, HandlerState: state, ActiveJobs: active,
 		Service:    "nib-handler",
 		Version:    Version,
 		Host:       cfg.Handler.Host,

@@ -1,9 +1,9 @@
 # SEVIR local runtime integration (#14)
 
 The runtime uses stored-run contract `nib.run.v1`, defined in atlas commit
-`e9ecd84f217eef9658d433133bc588a3128d05e0`. Users run a prebuilt Go handler; Python stays in Docker. The Hub is a
-remote provisioning site, and its browser talks directly to the user's loopback
-handler. The Hub server never proxies the user's localhost.
+`e9ecd84f217eef9658d433133bc588a3128d05e0`. Users run a prebuilt Go handler;
+Python stays in Docker. Hub exports order configuration. The local Handler
+console owns detailed selection, resource preparation, execution and history.
 
 ## Prepare resources
 
@@ -53,24 +53,27 @@ download basemaps or weights. Scientific VIL units are `raw`, not dBZ or rain ra
 
 `config.yaml` controls loopback addresses, paths (including the runtime resources
 root), optional Docker context, and explicitly allowed Hub origins. Images and
-data/model mounts come from the runtime manifests. Register/start the platform launcher once,
-then use Hub's connection button and confirm its browser `nib://` application
-prompt if needed. The token is transferred over trusted loopback HTTP, remains
-in browser memory, and is never printed or manually copied. Browsers may also
-require local-network permission when a remote site accesses loopback.
+data/model mounts come from the runtime manifests. Start the platform launcher
+and open the local console. Its token stays in browser memory and is never
+printed or manually copied. Hub supplies portable YAML configuration; local
+resource preparation, execution and detailed settings belong to the Handler.
 See [lifecycle and connection](handler-lifecycle.md) for background startup,
 stop/restart, configuration ownership, trusted deployments and limitations.
 
 A successful CORS preflight is not evidence that permission was granted.
 
-Choose a data product and an explicit event/window, then models and optional
-evaluation or visualization in the existing Hub catalog/Checkout. Run locally from Checkout (or an existing frozen order): the browser uploads the
-actual ZIP and package checksum once, then observes the job in Runs. Handler
-executes the selected diagnostics automatically after inference, independently
-of the browser. See [automatic diagnostics](automatic-diagnostics.md) for exact
-operation/report identity, partial results and crash recovery. The handler
-checks bounded ZIP entries, paths, checksums, supported product versions and
-frozen data/model/diagnostic bindings. Template bytes are never executed.
+Hub exports a `nib.order.v1` YAML order. Open the local Handler console to import
+it, select data windows and models, edit diagnostics defaults and start runs.
+The Handler validates data/model pairings, UTC sample windows, supported region
+coordinates and metric parameters before admission. Host paths and container
+commands come only from trusted local settings and packaged resources.
+
+Each run freezes its effective configuration as `order.yaml`. Automatic
+diagnostics execute after inference, independently of the browser. Subsequent
+order edits affect future runs; diagnostics retries create separate attempts
+from saved Forecasts. See [automatic diagnostics](automatic-diagnostics.md) for
+operation/report identity, partial results and recovery. Old ZIP runs remain
+readable, but ZIP import and startup are no longer supported.
 
 The handler writes controlled Compose definitions. Each stage is offline, has a
 read-only root, tmpfs `/tmp`, read-only input/weight mounts, and runs as the host
@@ -81,8 +84,9 @@ Execution is serialized in this first integration. Jobs record queued/running/
 succeeded/failed/partial states with a stage, request identity and logs. A repeated
 idempotency key returns the same run, including after restart. A new explicit
 submission allocates a new run ID and directory, even for the same Order,
-package, samples and models. A queued/running package rejects a second request
-identity until it finishes; no active or historical run is replaced.
+samples and models. A queued/running order rejects a second request identity
+until it finishes, including edits to that order; no active or historical run
+is replaced.
 Restarted unfinished jobs are marked interrupted,
 not silently resumed. Successful Forecasts survive diagnostic failure.
 

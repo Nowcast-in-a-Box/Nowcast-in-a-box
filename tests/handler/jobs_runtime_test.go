@@ -29,6 +29,9 @@ func (f *runtimeRunner) Run(ctx context.Context, args ...string) (int, []byte, e
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, append([]string{}, args...))
+	if strings.Contains(" "+strings.Join(args, " ")+" ", " --check-window ") {
+		return 0, []byte(`{"ready":true}`), nil
+	}
 	var id string
 	for i, arg := range args {
 		if arg == "-f" && i+1 < len(args) && args[len(args)-1] == "task" {
@@ -108,10 +111,11 @@ func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
 	cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
 	writeSevirData(t, &cfg)
 	server := handler.NewServer(cfg)
+	writeExecutionWeights(t, server)
 	runner := &runtimeRunner{root: cfg.Paths.Runs}
 	server.Runner = runner
 	raw, hash := packageFixture(t, "wadepre-sevir", nil)
-	body, _ := json.Marshal(map[string]any{"package": raw, "sha256": hash})
+	body, _ := json.Marshal(map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, hash))})
 	submit := func(key string) handler.Job {
 		req := httptest.NewRequest("POST", "http://127.0.0.1/v1/jobs", strings.NewReader(string(body)))
 		req.Header.Set("Authorization", "Bearer token")
@@ -155,11 +159,11 @@ func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
 	}
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	// The Docker availability probe is not an execution; count only run stages.
+	// Preflight probes are separate from the four Compose run/cleanup stages.
 	executions := make([][]string, 0, len(runner.calls))
 	joined := ""
 	for _, call := range runner.calls {
-		if len(call) > 0 && call[0] == "info" {
+		if len(call) == 0 || call[0] != "compose" {
 			continue
 		}
 		executions = append(executions, call)

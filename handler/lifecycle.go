@@ -365,42 +365,154 @@ func stopUnidentified(cfg Config, reason error, force bool) error {
 	return fmt.Errorf("Handler at %s ignored stop; kill PID %d manually", address, pid)
 }
 
-func (s *Server) requestShutdown() error {
-	// The execution lock covers diagnostics; jobsMu makes draining atomic with
-	// queued-job admission. Historical records are not live process state.
+func (s *Server) serviceContext() context.Context {
+	if s.serviceCtx == nil {
+		return context.Background()
+	}
+	return s.serviceCtx
+}
+
+func (s *Server) lifecycleStatus() (string, int) {
+	s.jobsMu.Lock()
+	defer s.jobsMu.Unlock()
+	state, active := "running", 0
+	if s.stopping {
+		state = "stopping"
+		if s.restartServer != nil {
+			state = "restarting"
+		}
+	}
+	for _, job := range s.jobs {
+		if job.Status == "queued" || job.Status == "running" {
+			active++
+		}
+	}
+	return state, active
+}
+
+// Hold admission through the request so asynchronous resource work is registered
+// before control can inspect it. Jobs and diagnostics also guard direct admission.
+func (s *Server) admitRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/control/stop", "/v1/control/restart", "/v1/status", "/v1/identity", "/health":
+			next.ServeHTTP(w, r)
+			return
+		}
+		s.admissionMu.RLock()
+		defer s.admissionMu.RUnlock()
+		state, _ := s.lifecycleStatus()
+		if state != "running" {
+			runtimeError(w, http.StatusServiceUnavailable, fmt.Errorf("Handler is %s", state))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requestShutdown() error { return s.requestLifecycle(false) }
+
+func (s *Server) requestLifecycle(restart bool) error {
+	if !s.admissionMu.TryLock() {
+		return fmt.Errorf("wait for active requests before stopping Handler")
+	}
+	defer s.admissionMu.Unlock()
 	if !s.executionMu.TryLock() {
 		return fmt.Errorf("wait for active inference or diagnostics before stopping Handler")
 	}
 	defer s.executionMu.Unlock()
-	// Reconcile after holding the lock: an execution that just failed cleanup has
-	// released it and must no longer be exempt from the container check. An
-	// unreachable daemon is not a reason to stay up: it cannot hold containers.
 	if err := s.reconcileExecutions(); err != nil && !errors.Is(err, errDockerUnreachable) {
 		return err
 	}
 	s.jobsMu.Lock()
 	defer s.jobsMu.Unlock()
+	s.resourcesMu.Lock()
+	defer s.resourcesMu.Unlock()
+	if s.preparingResources {
+		return fmt.Errorf("wait for resource preparation before stopping Handler")
+	}
 	if s.stopping {
-		return nil
+		return fmt.Errorf("Handler lifecycle transition is already in progress")
 	}
 	for _, job := range s.jobs {
 		if job.Status == "queued" || job.Status == "running" {
 			return fmt.Errorf("wait for queued or running jobs before stopping Handler")
 		}
 	}
+	if restart {
+		next, err := s.reconstruct()
+		if err != nil {
+			return fmt.Errorf("cannot restart Handler: %w", err)
+		}
+		s.restartServer = next
+	}
 	s.stopping = true
+	s.serviceCancel()
 	close(s.shutdown)
 	return nil
 }
 
+func (s *Server) reconstruct() (*Server, error) {
+	old := s.currentConfig()
+	cfg, err := Load(old.Source)
+	if err != nil {
+		return nil, err
+	}
+	// Keep the listener addresses selected at process startup, including flags.
+	cfg.Handler, cfg.Review, cfg.Diagnostics = old.Handler, old.Review, old.Diagnostics
+	next := NewServer(cfg)
+	if next.ResourceError != nil {
+		next.serviceCancel()
+		return nil, next.ResourceError
+	}
+	if cfg.Runtime.Token == old.Runtime.Token || cfg.Runtime.Token == "" {
+		next.Token = s.Token
+	}
+	return next, nil
+}
+
+// Stop the viewer after requests have drained, so none can recreate it.
+func (s *Server) closeLifecycleViewer() error {
+	s.diagnosticsViewerMu.Lock()
+	defer s.diagnosticsViewerMu.Unlock()
+	name := s.diagnosticsViewerContainer
+	if name == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	code, out, err := s.docker(ctx, "rm", "-f", name)
+	if err != nil || code != 0 {
+		probe, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if code, _, daemonErr := s.docker(probe, "info"); daemonErr == nil && code == 0 {
+			return fmt.Errorf("cannot close diagnostics viewer %s: %v %s", name, err, out)
+		}
+		// An unavailable daemon must not prevent local Handler shutdown.
+		s.note("diagnostics viewer cleanup deferred: Docker unavailable")
+	}
+	s.diagnosticsViewerContainer, s.diagnosticsViewerRun, s.diagnosticsViewerReport = "", "", ""
+	return nil
+}
+
 func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Origin") != "" {
-		runtimeError(w, http.StatusForbidden, fmt.Errorf("stop Handler using its local CLI, not a website"))
+	s.handleLifecycle(w, r, false)
+}
+
+func (s *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
+	s.handleLifecycle(w, r, true)
+}
+
+func (s *Server) handleLifecycle(w http.ResponseWriter, r *http.Request, restart bool) {
+	origin := r.Header.Get("Origin")
+	if (origin != "" && origin != "http://"+r.Host) || (restart && origin == "") {
+		runtimeError(w, http.StatusForbidden, fmt.Errorf("Handler control requires the local console origin"))
 		return
 	}
-	if err := s.requestShutdown(); err != nil {
+	if err := s.requestLifecycle(restart); err != nil {
 		runtimeError(w, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "stopping"})
+	state, _ := s.lifecycleStatus()
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": state, "instance_id": s.instanceID})
 }

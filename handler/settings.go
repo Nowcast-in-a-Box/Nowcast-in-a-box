@@ -17,9 +17,11 @@ import (
 type localSettings struct {
 	// DataRoot is the pre-multi-dataset shape. It becomes a fallback for any
 	// data source without an explicit entry; the next save writes DataRoots.
-	DataRoot    string            `json:"data_root,omitempty"`
-	DataRoots   map[string]string `json:"data_roots,omitempty"`
-	ImageSource string            `json:"image_source,omitempty"`
+	DataRoot      string            `json:"data_root,omitempty"`
+	DataRoots     map[string]string `json:"data_roots,omitempty"`
+	ImageSource   string            `json:"image_source,omitempty"`
+	ImageRegistry *string           `json:"image_registry,omitempty"`
+	ImageMirror   *string           `json:"image_mirror,omitempty"`
 }
 
 // localStateDir is where this install keeps the small files next to config.yaml.
@@ -134,6 +136,22 @@ func (c *Config) applySettings() error {
 		}
 	}
 	c.Runtime.ImageSource = source
+	for _, setting := range []struct {
+		saved  *string
+		target *string
+	}{
+		{settings.ImageRegistry, &c.Runtime.ImageRegistry},
+		{settings.ImageMirror, &c.Runtime.ImageMirror},
+	} {
+		if setting.saved != nil {
+			*setting.target = *setting.saved
+		}
+		value, err := normalizeImagePrefix(*setting.target)
+		if err != nil {
+			return err
+		}
+		*setting.target = value
+	}
 	return nil
 }
 
@@ -169,18 +187,15 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		config := s.currentConfig()
 		writeJSON(w, 200, map[string]any{
-			"data_roots":    s.effectiveDataRoots(),
-			"image_source":  config.Runtime.ImageSource,
-			"image_mirror":  config.Runtime.ImageMirror,
-			"image_sources": []string{"official", "mirror", "auto"},
+			"data_roots":     s.effectiveDataRoots(),
+			"image_source":   config.Runtime.ImageSource,
+			"image_registry": config.Runtime.ImageRegistry,
+			"image_mirror":   config.Runtime.ImageMirror,
+			"image_sources":  []string{"official", "mirror", "auto"},
 		})
 		return
 	}
-	var update struct {
-		DataID      string `json:"data_id"`
-		DataRoot    string `json:"data_root"`
-		ImageSource string `json:"image_source"`
-	}
+	var update settingsUpdate
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&update); err != nil {
@@ -191,15 +206,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 400, fmt.Errorf("one request object required"))
 		return
 	}
-	if update.ImageSource != "" {
-		s.saveImageSource(w, update.ImageSource)
-		return
-	}
-	if update.DataID == "" || update.DataRoot == "" {
-		runtimeError(w, 400, fmt.Errorf("data_id and data_root, or image_source, are required"))
-		return
-	}
-	s.saveDataRoot(w, update.DataID, update.DataRoot)
+	s.saveSettings(w, update)
 }
 
 func (s *Server) handlePickDataRoot(w http.ResponseWriter, r *http.Request) {
@@ -242,12 +249,105 @@ func (s *Server) handlePickDataRoot(w http.ResponseWriter, r *http.Request) {
 	s.saveDataRoot(w, update.DataID, chosen)
 }
 
+type settingsUpdate struct {
+	DataID        string  `json:"data_id"`
+	DataRoot      string  `json:"data_root"`
+	ImageSource   *string `json:"image_source"`
+	ImageRegistry *string `json:"image_registry"`
+	ImageMirror   *string `json:"image_mirror"`
+}
+
 func (s *Server) saveImageSource(w http.ResponseWriter, requested string) {
-	source, err := normalizeImageSource(requested)
-	if err != nil {
-		runtimeError(w, 422, err)
+	s.saveSettings(w, settingsUpdate{ImageSource: &requested})
+}
+
+func (s *Server) saveDataRoot(w http.ResponseWriter, dataID, requested string) {
+	s.saveSettings(w, settingsUpdate{DataID: dataID, DataRoot: requested})
+}
+
+// Lock order is execution, images, jobs, resources, config. Never wait for an
+// active operation while holding a settings lock.
+func (s *Server) lockSettings() (func(), error) {
+	busy := fmt.Errorf("wait for active tasks or resource preparation before changing settings")
+	if !s.executionMu.TryLock() {
+		return nil, busy
+	}
+	if !s.imageMu.TryLock() {
+		s.executionMu.Unlock()
+		return nil, busy
+	}
+	s.jobsMu.Lock()
+	s.resourcesMu.Lock()
+	unlock := func() { s.resourcesMu.Unlock(); s.jobsMu.Unlock(); s.imageMu.Unlock(); s.executionMu.Unlock() }
+	if s.stopping || s.preparingResources {
+		unlock()
+		return nil, busy
+	}
+	for _, job := range s.jobs {
+		if job.Status == "running" || job.Status == "queued" {
+			unlock()
+			return nil, busy
+		}
+	}
+	return unlock, nil
+}
+
+func (s *Server) saveSettings(w http.ResponseWriter, update settingsUpdate) {
+	hasRoot := update.DataID != "" || update.DataRoot != ""
+	if !hasRoot && update.ImageSource == nil && update.ImageRegistry == nil && update.ImageMirror == nil {
+		runtimeError(w, 400, fmt.Errorf("data_id and data_root, or image settings, are required"))
 		return
 	}
+	if update.ImageSource != nil {
+		value, err := normalizeImageSource(*update.ImageSource)
+		if err != nil {
+			runtimeError(w, 422, err)
+			return
+		}
+		update.ImageSource = &value
+	}
+	for _, target := range []**string{&update.ImageRegistry, &update.ImageMirror} {
+		if *target == nil {
+			continue
+		}
+		value, err := normalizeImagePrefix(**target)
+		if err != nil {
+			runtimeError(w, 422, err)
+			return
+		}
+		*target = &value
+	}
+	if hasRoot {
+		if update.DataID == "" || update.DataRoot == "" {
+			runtimeError(w, 400, fmt.Errorf("data_id and data_root are required"))
+			return
+		}
+		if os.Getenv("NIB_DATA_ROOT") != "" {
+			runtimeError(w, 409, fmt.Errorf("NIB_DATA_ROOT overrides this setting; unset it before changing config"))
+			return
+		}
+		if _, err := s.dataResource(update.DataID); err != nil {
+			runtimeError(w, 422, err)
+			return
+		}
+		root, err := filepath.Abs(update.DataRoot)
+		if err != nil {
+			runtimeError(w, 422, err)
+			return
+		}
+		info, err := os.Stat(root)
+		if err != nil || !info.IsDir() {
+			runtimeError(w, 422, fmt.Errorf("data root must be an existing local directory"))
+			return
+		}
+		update.DataRoot = root
+	}
+	unlock, err := s.lockSettings()
+	if err != nil {
+		runtimeError(w, 409, err)
+		return
+	}
+	defer unlock()
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
 	settings, err := readSettings(s.Config)
@@ -255,77 +355,34 @@ func (s *Server) saveImageSource(w http.ResponseWriter, requested string) {
 		runtimeError(w, 500, err)
 		return
 	}
-	settings.ImageSource = source
-	if err := writeSettings(s.Config, settings); err != nil {
+	cfg := s.Config
+	cfg.DataRoots = make(map[string]string, len(s.Config.DataRoots)+1)
+	for id, root := range s.Config.DataRoots {
+		cfg.DataRoots[id] = root
+	}
+	cfg.Runtime.AllowedOrigins = append([]string(nil), cfg.Runtime.AllowedOrigins...)
+	if hasRoot {
+		cfg.DataRoots[update.DataID] = update.DataRoot
+		settings.DataRoots = cfg.DataRoots
+		settings.DataRoot = ""
+	}
+	if update.ImageSource != nil {
+		settings.ImageSource = *update.ImageSource
+		cfg.Runtime.ImageSource = *update.ImageSource
+	}
+	if update.ImageRegistry != nil {
+		settings.ImageRegistry = update.ImageRegistry
+		cfg.Runtime.ImageRegistry = *update.ImageRegistry
+	}
+	if update.ImageMirror != nil {
+		settings.ImageMirror = update.ImageMirror
+		cfg.Runtime.ImageMirror = *update.ImageMirror
+	}
+	if err := writeSettings(cfg, settings); err != nil {
 		runtimeError(w, 500, fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err))
 		return
 	}
-	s.Config.Runtime.ImageSource = source
-	writeJSON(w, 200, map[string]any{
-		"image_source":  source,
-		"image_sources": []string{"official", "mirror", "auto"},
-	})
-}
-
-func (s *Server) saveDataRoot(w http.ResponseWriter, dataID, requested string) {
-	if os.Getenv("NIB_DATA_ROOT") != "" {
-		runtimeError(w, 409, fmt.Errorf("NIB_DATA_ROOT overrides this setting; unset it before changing config"))
-		return
-	}
-	resources := s.resources()
-	if resources == nil {
-		runtimeError(w, 503, s.resourceFailure())
-		return
-	}
-	if _, ok := resources.DataByID(dataID); !ok {
-		runtimeError(w, 422, fmt.Errorf("data source %q is not packaged by this Handler; update its resources", dataID))
-		return
-	}
-	root, err := filepath.Abs(requested)
-	if err != nil {
-		runtimeError(w, 400, err)
-		return
-	}
-	info, err := os.Stat(root)
-	if err != nil || !info.IsDir() {
-		runtimeError(w, 422, fmt.Errorf("data root must be an existing local directory"))
-		return
-	}
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-	for _, job := range s.jobs {
-		if job.Status == "running" || job.Status == "queued" {
-			runtimeError(w, 409, fmt.Errorf("wait for active jobs before changing a data root"))
-			return
-		}
-	}
-	var saveErr error
-	func() {
-		s.configMu.Lock()
-		defer s.configMu.Unlock()
-		settings, err := readSettings(s.Config)
-		if err != nil {
-			saveErr = err
-			return
-		}
-		if settings.DataRoots == nil {
-			settings.DataRoots = map[string]string{}
-		}
-		settings.DataRoots[dataID] = root
-		// The legacy single-root field is superseded by the map.
-		settings.DataRoot = ""
-		if err := writeSettings(s.Config, settings); err != nil {
-			saveErr = fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err)
-			return
-		}
-		if s.Config.DataRoots == nil {
-			s.Config.DataRoots = map[string]string{}
-		}
-		s.Config.DataRoots[dataID] = root
-	}()
-	if saveErr != nil {
-		runtimeError(w, 500, saveErr)
-		return
-	}
-	writeJSON(w, 200, map[string]any{"data_roots": s.effectiveDataRoots()})
+	s.Config = cfg
+	s.resourcesLoaded = false
+	writeJSON(w, 200, map[string]any{"data_roots": cfg.DataRoots, "image_source": cfg.Runtime.ImageSource, "image_registry": cfg.Runtime.ImageRegistry, "image_mirror": cfg.Runtime.ImageMirror, "image_sources": []string{"official", "mirror", "auto"}})
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,12 +23,17 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		runtimeError(w, 404, err)
 		return
 	}
+	if manifest["order"] == nil {
+		runtimeError(w, 409, fmt.Errorf("legacy run is read-only; a frozen YAML order is required"))
+		return
+	}
 	var selection struct {
-		Models        []string  `json:"models"`
-		Methods       []string  `json:"methods"`
-		Levels        []float64 `json:"levels"`
-		Windows       []int     `json:"half_windows"`
-		Visualization bool      `json:"visualization"`
+		Verification  *OrderVerification `json:"verification"`
+		Visualization json.RawMessage    `json:"visualization"`
+		Models        []string           `json:"models"`
+		Methods       []string           `json:"methods"`
+		Levels        []float64          `json:"levels"`
+		Windows       []int              `json:"half_windows"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384))
 	decoder.DisallowUnknownFields()
@@ -35,18 +41,73 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		runtimeError(w, 400, err)
 		return
 	}
-	if decoder.Decode(&struct{}{}) != io.EOF || len(selection.Models) == 0 || len(selection.Models) > 3 {
-		runtimeError(w, 400, fmt.Errorf("select saved models and diagnostics"))
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		runtimeError(w, 400, fmt.Errorf("one request object required"))
+		return
+	}
+	// Existing diagnostics clients may still send the flat selection shape.
+	verification := selection.Verification
+	if verification != nil && (len(selection.Models) > 0 || len(selection.Methods) > 0 || len(selection.Levels) > 0 || len(selection.Windows) > 0) {
+		runtimeError(w, 422, fmt.Errorf("do not mix flat and structured diagnostics selections"))
+		return
+	}
+	if verification == nil && len(selection.Methods) > 0 {
+		verification = &OrderVerification{Models: selection.Models, Methods: selection.Methods, Levels: selection.Levels, HalfWindows: selection.Windows}
+	}
+	var visualization *OrderVisualization
+	if len(selection.Visualization) > 0 && string(selection.Visualization) != "null" && string(selection.Visualization) != "false" {
+		if string(selection.Visualization) == "true" {
+			visualization = &OrderVisualization{Models: selection.Models}
+		} else {
+			visualization = &OrderVisualization{}
+			d := json.NewDecoder(bytes.NewReader(selection.Visualization))
+			d.DisallowUnknownFields()
+			if err := d.Decode(visualization); err != nil {
+				runtimeError(w, 422, err)
+				return
+			}
+		}
+	}
+	if verification == nil && visualization == nil {
+		runtimeError(w, 422, fmt.Errorf("select at least one diagnostic"))
 		return
 	}
 	forecasts, _ := manifest["forecasts"].(map[string]any)
-	seen := map[string]bool{}
-	for _, model := range selection.Models {
-		if forecasts[model] == nil || seen[model] {
-			runtimeError(w, 422, fmt.Errorf("model has no registered Forecast or is repeated"))
+	available := map[string]bool{}
+	for model := range forecasts {
+		available[model] = true
+	}
+	// A batch can only diagnose models saved for every successful child.
+	if samples, ok := manifest["samples"].([]any); ok {
+		root, err := filepath.EvalSymlinks(filepath.Join(s.currentConfig().Paths.Runs, id))
+		if err != nil {
+			runtimeError(w, 422, err)
 			return
 		}
-		seen[model] = true
+		for _, item := range samples {
+			sample, _ := item.(map[string]any)
+			path, _ := sample["path"].(string)
+			path = filepath.FromSlash(path)
+			child, err := filepath.EvalSymlinks(filepath.Join(root, path))
+			rel, relErr := filepath.Rel(root, child)
+			if !filepath.IsLocal(path) || err != nil || relErr != nil || rel != path {
+				runtimeError(w, 422, fmt.Errorf("invalid batch sample path"))
+				return
+			}
+			raw, err := os.ReadFile(filepath.Join(child, "manifest.json"))
+			var stored struct {
+				Forecasts map[string]json.RawMessage `json:"forecasts"`
+			}
+			if err != nil || json.Unmarshal(raw, &stored) != nil {
+				runtimeError(w, 422, fmt.Errorf("cannot read batch sample forecasts"))
+				return
+			}
+			for model := range available {
+				if len(stored.Forecasts[model]) == 0 || string(stored.Forecasts[model]) == "null" {
+					delete(available, model)
+				}
+			}
+		}
 	}
 	data, _ := manifest["data"].(map[string]any)
 	dataID, _ := data["id"].(string)
@@ -56,25 +117,28 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	config := map[string]any{"version": 2, "run": "/run"}
-	if len(selection.Methods) > 0 {
+	if verification != nil {
+		if err := validateSubset(verification.Models, available); err != nil {
+			runtimeError(w, 422, err)
+			return
+		}
 		mapping := map[string]json.RawMessage{}
-		mapping["methods"], _ = json.Marshal(selection.Methods)
-		mapping["levels"], _ = json.Marshal(selection.Levels)
-		mapping["half_windows"], _ = json.Marshal(selection.Windows)
+		mapping["methods"], _ = json.Marshal(verification.Methods)
+		mapping["levels"], _ = json.Marshal(verification.Levels)
+		mapping["half_windows"], _ = json.Marshal(verification.HalfWindows)
 		groups, err := metricGroups(mapping, dataResource)
 		if err != nil {
 			runtimeError(w, 422, err)
 			return
 		}
-		config["metrics"] = groups
-		config["verification_models"] = selection.Models
+		config["metrics"], config["verification_models"] = groups, verification.Models
 	}
-	if selection.Visualization {
-		config["visualization"] = map[string]any{"models": selection.Models}
-	}
-	if len(selection.Methods) == 0 && !selection.Visualization {
-		runtimeError(w, 422, fmt.Errorf("select at least one diagnostic"))
-		return
+	if visualization != nil {
+		if err := validateSubset(visualization.Models, available); err != nil {
+			runtimeError(w, 422, err)
+			return
+		}
+		config["visualization"] = map[string]any{"models": visualization.Models}
 	}
 	if !s.executionMu.TryLock() {
 		runtimeError(w, 409, fmt.Errorf("wait for the current execution"))
@@ -147,7 +211,7 @@ func (s *Server) prepareDiagnostics(id string, config map[string]any) (Diagnosti
 		return DiagnosticOperation{}, err
 	}
 	state := DiagnosticOperation{ID: attempt, RunID: id, Status: "running", InstanceID: s.instanceID, CreatedAt: time.Now().UTC()}
-	directory := filepath.Join(s.Config.Paths.Runs, id)
+	directory := filepath.Join(s.currentConfig().Paths.Runs, id)
 	operation := filepath.Join(directory, "logs", "diagnostics-"+attempt)
 	if err := os.MkdirAll(operation, 0o755); err != nil {
 		return state, err
@@ -192,12 +256,24 @@ func (s *Server) prepareDiagnostics(id string, config map[string]any) (Diagnosti
 }
 
 func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) DiagnosticOperation {
-	operation := filepath.Join(s.Config.Paths.Runs, id, "logs", "diagnostics-"+state.ID)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	operation := filepath.Join(s.currentConfig().Paths.Runs, id, "logs", "diagnostics-"+state.ID)
+	ctx, cancel := context.WithTimeout(s.serviceContext(), 30*time.Minute)
 	defer cancel()
 	name := "nib-diag-" + strings.ToLower(state.ID)
 	composePath := filepath.Join(operation, "compose.yaml")
-	code, out, err := s.docker(ctx, "compose", "-f", composePath, "-p", name, "up", "--abort-on-container-exit", "--exit-code-from", "task")
+	code := -1
+	var out []byte
+	var err error
+	if s.Resources == nil || s.Resources.Diagnostics == nil {
+		err = fmt.Errorf("diagnostics resources are not loaded")
+	} else {
+		_, err = s.ensureImage(ctx, s.Resources.Diagnostics.Container.Image)
+	}
+	if err == nil {
+		code, out, err = s.docker(ctx, "compose", "-f", composePath, "-p", name, "up", "--abort-on-container-exit", "--exit-code-from", "task")
+	} else {
+		out = []byte(err.Error())
+	}
 	logErr := os.WriteFile(filepath.Join(operation, "container.log"), out, 0o600)
 	cleanup, c := context.WithTimeout(context.Background(), 15*time.Second)
 	cleanupCode, _, cleanupErr := s.docker(cleanup, "compose", "-f", composePath, "-p", name, "down", "--remove-orphans")
@@ -216,7 +292,7 @@ func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) Diagno
 	}
 	state.Status = "failed"
 	// A saved report must name this operation. A historical success is never adopted.
-	raw, readErr := os.ReadFile(filepath.Join(s.Config.Paths.Runs, id, "manifest.json"))
+	raw, readErr := os.ReadFile(filepath.Join(s.currentConfig().Paths.Runs, id, "manifest.json"))
 	var manifest struct {
 		Diagnostics []struct {
 			Kind, Status, Entry, Path, Error string

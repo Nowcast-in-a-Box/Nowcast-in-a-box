@@ -51,6 +51,10 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 		}
 		manifest["job"] = job
 		manifest["status"] = job.Status
+		if job.Request.OrderRevision != "" {
+			manifest["revision"] = job.Request.OrderRevision
+			manifest["execution_hash"] = job.Request.PackageSHA256
+		}
 	} else if manifest["schema"] == nil {
 		return nil, fmt.Errorf("run not found")
 	}
@@ -78,6 +82,44 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 					operation.Status, operation.Error = "interrupted", "Handler restarted before diagnostics completed; verify stopped containers before retrying from saved Forecasts"
 				}
 				manifest["operation"] = operation
+			}
+		}
+	}
+	if raw, err := os.ReadFile(filepath.Join(directory, "order.yaml")); err == nil {
+		if order, err := decodeOrder(raw); err == nil {
+			manifest["order"] = order
+		}
+	}
+	operations := []DiagnosticOperation{}
+	files, _ := filepath.Glob(filepath.Join(directory, "logs", "diagnostics-*", "status.json"))
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		var operation DiagnosticOperation
+		if err != nil || json.Unmarshal(raw, &operation) != nil || operation.RunID != id || !idPattern.MatchString(operation.ID) {
+			continue
+		}
+		if operation.Status == "running" && operation.InstanceID != s.instanceID {
+			operation.Status = "interrupted"
+		}
+		operations = append(operations, operation)
+	}
+	sort.Slice(operations, func(i, j int) bool { return operations[i].CreatedAt.Before(operations[j].CreatedAt) })
+	manifest["operations"] = operations
+	manifest["diagnostics_status"] = "not_requested"
+	if operation, ok := manifest["operation"].(DiagnosticOperation); ok {
+		manifest["diagnostics_status"] = operation.Status
+	}
+	manifest["inference_status"] = manifest["status"]
+	if job, ok := manifest["job"].(Job); ok {
+		forecasts, _ := manifest["forecasts"].(map[string]any)
+		complete := len(job.Request.Models) > 0
+		for _, model := range job.Request.Models {
+			complete = complete && forecasts[model] != nil
+		}
+		if complete && (job.Stage == "diagnostics" || job.Stage == "finished") {
+			manifest["inference_status"] = "succeeded"
+			if failures, ok := manifest["failed_samples"].([]any); ok && len(failures) > 0 {
+				manifest["inference_status"] = "partial"
 			}
 		}
 	}

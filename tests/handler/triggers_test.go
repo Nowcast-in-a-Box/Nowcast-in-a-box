@@ -32,6 +32,8 @@ func (runner *triggerRunner) Run(_ context.Context, args ...string) (int, []byte
 	runner.mu.Unlock()
 	joined := " " + strings.Join(args, " ") + " "
 	switch {
+	case strings.Contains(joined, " --check-window "):
+		return 0, []byte(`{"ready":true}`), nil
 	case strings.Contains(joined, " --list-samples "):
 		return 0, []byte(samples), nil
 	case strings.Contains(joined, " compose ") && strings.Contains(joined, " up "):
@@ -77,6 +79,7 @@ func triggerServer(t *testing.T) (handler.Config, *handler.Server, *triggerRunne
 	cfg.Source = filepath.Join(t.TempDir(), "config.yaml")
 	writeSevirData(t, &cfg)
 	server := handler.NewServer(cfg)
+	writeExecutionWeights(t, server)
 	runner := &triggerRunner{}
 	server.Runner = runner
 	return cfg, server, runner
@@ -107,7 +110,7 @@ func triggerDo(t *testing.T, server *handler.Server, method, path string, body a
 func saveOrder(t *testing.T, server *handler.Server) string {
 	t.Helper()
 	raw, hash := selectionPackage(t, "S710140", []string{"wadepre"}, "")
-	response, summary := triggerDo(t, server, "POST", "/v1/orders", map[string]any{"package": raw, "sha256": hash})
+	response, summary := triggerDo(t, server, "POST", "/v1/orders", map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, hash))})
 	if response.Code != 201 {
 		t.Fatalf("save order: %d %s", response.Code, response.Body.String())
 	}
@@ -261,6 +264,32 @@ func TestFireUsesTheNewestWindowOnceOnly(t *testing.T) {
 		t.Fatalf("expected two runs, got %v", ids)
 	}
 	waitForJobEnd(t, server, third["last_run_id"].(string))
+	_, firstJob := triggerDo(t, server, "GET", "/v1/jobs/"+first["last_run_id"].(string), nil)
+	_, thirdJob := triggerDo(t, server, "GET", "/v1/jobs/"+third["last_run_id"].(string), nil)
+	firstRequest := firstJob["request"].(map[string]any)
+	thirdRequest := thirdJob["request"].(map[string]any)
+	if firstRequest["package_sha256"] == thirdRequest["package_sha256"] {
+		t.Fatal("distinct trigger windows reused the same execution hash")
+	}
+	if firstRequest["order_revision"] != thirdRequest["order_revision"] {
+		t.Fatal("trigger windows changed the source order revision")
+	}
+	for _, job := range []map[string]any{firstJob, thirdJob} {
+		request := job["request"].(map[string]any)
+		raw, err := os.ReadFile(filepath.Join(cfg.Paths.Runs, job["id"].(string), "order.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		frozen, normalized, err := handler.ParseOrder(raw, server.Resources, 32)
+		if err != nil || normalized.OrderRevision == "" || normalized.OrderRevision != request["package_sha256"] || normalized.PackageSHA256 != request["package_sha256"] || frozen.EventID != request["event_id"] {
+			t.Fatalf("trigger snapshot does not describe its effective request: %+v %#v %v", frozen, request, err)
+		}
+	}
+	_, saved := triggerDo(t, server, "GET", "/v1/orders/"+packageID, nil)
+	order := saved["order"].(map[string]any)
+	if order["event_id"] != "S710140" {
+		t.Fatalf("trigger changed saved order: %#v", saved)
+	}
 }
 
 func TestWindowModeSelectsOneOrAllNewWindows(t *testing.T) {
@@ -456,7 +485,7 @@ func TestScheduledTriggerFiresAtMostOncePerDuePoint(t *testing.T) {
 	if job["trigger_id"] != id {
 		t.Fatalf("run not attributed to the trigger: %v", job["trigger_id"])
 	}
-	if key, _ := job["idempotency_key"].(string); !strings.HasPrefix(key, "trigger:"+id+":order:") {
+	if key, _ := job["idempotency_key"].(string); !strings.HasPrefix(key, "trigger:"+id+":sevir:order:") {
 		t.Fatalf("scheduled key shape: %q", key)
 	}
 }

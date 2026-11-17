@@ -18,17 +18,19 @@ import (
 )
 
 type Job struct {
-	ID                    string         `json:"id"`
-	Status                string         `json:"status"`
-	Stage                 string         `json:"stage"`
-	Error                 string         `json:"error,omitempty"`
-	DiagnosticOperationID string         `json:"diagnostic_operation_id,omitempty"`
-	ReportEntry           string         `json:"report_entry,omitempty"`
-	Request               RuntimeRequest `json:"request"`
-	CreatedAt             time.Time      `json:"created_at"`
-	IdempotencyKey        string         `json:"idempotency_key,omitempty"`
-	TriggerID             string         `json:"trigger_id,omitempty"`
-	UpdatedAt             time.Time      `json:"updated_at"`
+	ID                    string            `json:"id"`
+	Status                string            `json:"status"`
+	Stage                 string            `json:"stage"`
+	Error                 string            `json:"error,omitempty"`
+	DiagnosticOperationID string            `json:"diagnostic_operation_id,omitempty"`
+	ReportEntry           string            `json:"report_entry,omitempty"`
+	Request               RuntimeRequest    `json:"request"`
+	CreatedAt             time.Time         `json:"created_at"`
+	IdempotencyKey        string            `json:"idempotency_key,omitempty"`
+	TriggerID             string            `json:"trigger_id,omitempty"`
+	UpdatedAt             time.Time         `json:"updated_at"`
+	Preflight             []Check           `json:"preflight,omitempty"`
+	ExecutionContext      *ExecutionContext `json:"execution_context,omitempty"`
 }
 
 func (s *Server) runtimeRoutes(mux *http.ServeMux) {
@@ -38,6 +40,7 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /v1/settings", s.authorize(s.handleSettings))
 	mux.HandleFunc("POST /v1/settings/pick", s.authorize(s.handlePickDataRoot))
 	mux.HandleFunc("POST /v1/runs/{id}/diagnostics", s.authorize(s.handleRetryDiagnostics))
+	mux.HandleFunc("POST /v1/runs/{id}/rerun", s.authorize(s.handleRunAgain))
 	mux.HandleFunc("GET /v1/capabilities", s.authorize(s.handleCapabilities))
 	mux.HandleFunc("POST /v1/preflight", s.authorize(s.handlePreflight))
 	mux.HandleFunc("GET /v1/resources", s.authorize(s.handleResources))
@@ -46,6 +49,10 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	s.triggerRoutes(mux)
 	mux.HandleFunc("GET /v1/orders", s.authorize(s.handleOrdersList))
 	mux.HandleFunc("POST /v1/orders", s.authorize(s.handleOrderSave))
+	mux.HandleFunc("GET /v1/order-options", s.authorize(s.handleOrderOptions))
+	mux.HandleFunc("POST /v1/orders/validate", s.authorize(s.handleOrderValidate))
+	mux.HandleFunc("GET /v1/orders/{package_id}", s.authorize(s.handleOrder))
+	mux.HandleFunc("PATCH /v1/orders/{package_id}", s.authorize(s.handleOrderSave))
 	mux.HandleFunc("POST /v1/orders/{package_id}/runs", s.authorize(s.handleOrderRun))
 	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))
 	mux.HandleFunc("GET /v1/jobs/{id}", s.authorize(s.handleJob))
@@ -62,8 +69,8 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) docker(ctx context.Context, args ...string) (int, []byte, error) {
-	if s.Config.Runtime.DockerContext != "" {
-		args = append([]string{"--context", s.Config.Runtime.DockerContext}, args...)
+	if dockerContext := s.currentConfig().Runtime.DockerContext; dockerContext != "" {
+		args = append([]string{"--context", dockerContext}, args...)
 	}
 	return s.Runner.Run(ctx, args...)
 }
@@ -220,26 +227,12 @@ func pagination(r *http.Request) (int, int, error) {
 }
 
 func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
-	var upload struct {
-		Package []byte `json:"package"`
-		SHA256  string `json:"sha256"`
-	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 12<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&upload); err != nil {
-		runtimeError(w, 400, err)
+	order, request, _, err := s.readOrderInput(w, r)
+	if err != nil {
+		runtimeError(w, 422, err)
 		return
 	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
-		runtimeError(w, 400, fmt.Errorf("one request object required"))
-		return
-	}
-	key := r.Header.Get("Idempotency-Key")
-	if len(key) > 128 {
-		runtimeError(w, 400, fmt.Errorf("idempotency key is too long"))
-		return
-	}
-	job, status, err := s.createJobFromPackage(upload.Package, upload.SHA256, key)
+	job, status, err := s.admitOrder(order, request.OrderRevision, r.Header.Get("Idempotency-Key"), "")
 	if err != nil {
 		runtimeError(w, status, err)
 		return
@@ -247,20 +240,27 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, *job)
 }
 
-// createJobFromPackage admits a verified package ZIP as a new run, or returns
-// the existing job when the idempotency key repeats. It is shared by the Hub
-// upload path and the local console's saved-order start.
-func (s *Server) createJobFromPackage(pkg []byte, expected, key string) (*Job, int, error) {
-	request, err := ParseRuntimePackage(pkg, expected, s.Resources)
+func (s *Server) admitOrder(order Order, revision, key, triggerID string) (*Job, int, error) {
+	if len(key) > 128 {
+		return nil, 400, fmt.Errorf("idempotency key is too long")
+	}
+	order, request, err := normalizeOrder(order, s.Resources, s.Config.Runtime.MaxBatchSamples)
 	if err != nil {
 		return nil, 422, err
 	}
-	return s.admitJob(request, pkg, key, "")
+	// Keep the source revision while the effective digest includes trigger windows.
+	if revision != "" {
+		request.OrderRevision = revision
+	}
+	snapshot, err := yaml.Marshal(order)
+	if err != nil {
+		return nil, 422, err
+	}
+	return s.admitJob(request, snapshot, key, triggerID)
 }
 
-// admitJob validates one request and starts it. A trigger calls it after
-// replacing the start window in a parsed package; triggerID is empty for the
-// Hub upload and saved-order paths.
+// admitJob starts a validated request and persists its effective YAML snapshot.
+// triggerID attributes scheduled submissions; manual submissions leave it empty.
 func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID string) (*Job, int, error) {
 	if err := s.requireDataSupported(request.DataID); err != nil {
 		return nil, 422, err
@@ -334,7 +334,7 @@ func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID str
 		}
 	}
 	for _, job := range s.jobs {
-		if job.Request.PackageSHA256 == request.PackageSHA256 && (job.Status == "queued" || job.Status == "running") {
+		if job.Request.OrderID == request.OrderID && (job.Status == "queued" || job.Status == "running") {
 			return nil, http.StatusConflict, fmt.Errorf("this package is already queued or running; observe it in Runs and wait before rerunning")
 		}
 	}
@@ -356,7 +356,7 @@ func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID str
 	if err := writeJob(directory, job); err != nil {
 		return nil, 500, err
 	}
-	if err := os.WriteFile(filepath.Join(directory, "package.zip"), pkg, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "order.yaml"), pkg, 0o600); err != nil {
 		return nil, 500, err
 	}
 	s.jobs[id] = job
@@ -425,13 +425,33 @@ func (s *Server) executeJob(id string) {
 	s.jobsMu.Lock()
 	request := s.jobs[id].Request
 	s.jobsMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
 	directory := filepath.Join(s.Config.Paths.Runs, id)
+	checks, executionContext, preflightErr := s.executionPreflight(ctx, request, func(stage string, checks []Check) {
+		s.jobsMu.Lock()
+		job := s.jobs[id]
+		job.Status = "running"
+		job.Stage = "preflight:" + stage
+		job.Preflight = append([]Check(nil), checks...)
+		job.UpdatedAt = time.Now().UTC()
+		_ = writeJob(directory, job)
+		s.jobsMu.Unlock()
+	})
+	s.jobsMu.Lock()
+	s.jobs[id].Preflight = checks
+	if executionContext.DataPath != "" {
+		s.jobs[id].ExecutionContext = &executionContext
+	}
+	s.jobsMu.Unlock()
+	if preflightErr != nil {
+		s.updateJob(id, "failed", "preflight", preflightErr)
+		return
+	}
 	if len(request.SampleStarts) > 1 {
 		s.executeBatchJob(id, request, directory)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
 	run := func(stage string, args ...string) error {
 		s.updateJob(id, "running", stage, nil)
 		name := "nib-" + strings.ToLower(id) + "-" + stage
@@ -885,6 +905,40 @@ func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
 		text = "[earlier output truncated]\n" + text[start:]
 	}
 	writeJSON(w, 200, map[string]string{"path": filepath.Join(filepath.Dir(s.Config.Source), "logs", "handler.log"), "tail": text})
+}
+
+func (s *Server) handleRunAgain(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idPattern.MatchString(id) {
+		runtimeError(w, 400, fmt.Errorf("invalid run ID"))
+		return
+	}
+	if _, err := s.runManifest(id); err != nil {
+		runtimeError(w, 404, err)
+		return
+	}
+	path := filepath.Join(s.Config.Paths.Runs, id, "order.yaml")
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxOrderBytes {
+		runtimeError(w, 409, fmt.Errorf("run has no regular frozen YAML order and cannot be repeated"))
+		return
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		runtimeError(w, 409, err)
+		return
+	}
+	order, _, err := ParseOrder(raw, s.Resources, s.Config.Runtime.MaxBatchSamples)
+	if err != nil {
+		runtimeError(w, 409, fmt.Errorf("frozen run order is invalid: %w", err))
+		return
+	}
+	job, status, err := s.admitOrder(order, "", r.Header.Get("Idempotency-Key"), "")
+	if err != nil {
+		runtimeError(w, status, err)
+		return
+	}
+	writeJSON(w, status, job)
 }
 
 func runtimeError(w http.ResponseWriter, status int, err error) {
