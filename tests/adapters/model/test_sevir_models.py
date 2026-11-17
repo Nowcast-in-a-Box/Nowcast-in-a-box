@@ -1,11 +1,12 @@
-"""SEVIR reader and the three ONNX forecasts.
-
-The HDF5 path comes from NIB_DATA_ROOT. This file does not name a machine path.
-"""
+"""Discovered SEVIR declarations and mocked backends; no real inference or weights."""
 
 from __future__ import annotations
 
-import os
+import importlib
+import json
+
+import numpy as np
+import pytest
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,12 +14,12 @@ from unittest.mock import patch
 
 from interfaces.model import WeightSpec
 from utils.weights import ensure_weights, file_sha256
-from adapters.sevir.exprecast.adapter import ADAPTER as EXPRECAST
-from adapters.sevir.nowcastnet.adapter import ADAPTER as NOWCASTNET
-from adapters.sevir.wadepre.adapter import ADAPTER as WADEPRE
+from interfaces.errors import ConstraintError
+from interfaces.fields import Forecast
+from tests.field_fixtures import mock_onnx, observations
 
 ROOT = Path(__file__).resolve().parents[3]
-MODELS = (NOWCASTNET, EXPRECAST, WADEPRE)
+DECLARATIONS = sorted((ROOT / "contracts/models/sevir").glob("*.json"))
 
 
 class WeightSkipTests(unittest.TestCase):
@@ -49,58 +50,33 @@ class WeightSkipTests(unittest.TestCase):
             self.assertEqual(ready, dest)
 
 
-class SevirCaseTests(unittest.TestCase):
-    def test_forecasts_against_one_sample(self) -> None:
-        data_root = os.environ.get("NIB_DATA_ROOT", "").strip()
-        h5 = (
-            Path(data_root) / "SEVIR" / "processed" / "sevir_vil.h5"
-            if data_root
-            else None
-        )
-        if h5 is None or not h5.is_file():
-            self.skipTest(
-                "set NIB_DATA_ROOT to a catalog that contains SEVIR/processed/sevir_vil.h5"
-            )
-        try:
-            import onnxruntime  # noqa: F401
-        except ImportError:
-            self.skipTest("onnxruntime is not installed")
+@pytest.mark.parametrize("declaration", DECLARATIONS, ids=lambda path: path.stem)
+def test_declared_backend_returns_physical_forecast(declaration, tmp_path, monkeypatch):
+    declared = json.loads(declaration.read_text())
+    model = importlib.import_module(f"adapters.sevir.{declared['id']}.adapter").ADAPTER
+    assert model.capabilities().id == declared["id"]
+    assert model.input_requirements().context_frames == 5
+    assert model.input_requirements().spatial == (128, 128)
+    obs = observations()
+    prepared = model.prepare(obs)
+    np.testing.assert_array_equal(prepared[0], 0.5)
+    assert prepared[1] is obs
+    spec = model.output_specification()
+    output = np.full((1, len(spec.lead_minutes), *spec.spatial), 0.25, np.float32)
+    weights, factory, session = mock_onnx(monkeypatch, tmp_path, model, output)
+    result = model.predict(prepared, weights_path=str(weights))
+    factory.assert_called_once_with(str(weights), providers=["CPUExecutionProvider"])
+    names, inputs = session.run.call_args.args
+    assert names == (["refined_out"] if declared["id"] == "wadepre" else ["forecast"])
+    assert inputs["input_sequence"] is prepared[0]
+    assert isinstance(result, Forecast)
+    assert result.values.shape == (len(spec.lead_minutes), *spec.spatial)
+    assert result.values.dtype == np.float32
+    np.testing.assert_array_equal(result.values, 63.75)
+    assert result.grid is obs.grid and not result.mask.any()
+    assert result.init_time == obs.times[-1]
+    assert result.lead_minutes == spec.lead_minutes
 
-        from interfaces.data import request_from_mapping
-        from adapters.sevir.source import ADAPTER
-        import yaml
-
-        config_path = (
-            ROOT / "tests" / "adapters" / "requests" / "sevir" / "example_success.yaml"
-        )
-        with config_path.open(encoding="utf-8") as handle:
-            config = yaml.safe_load(handle)
-        request = request_from_mapping(config, data_root)
-        bundle = ADAPTER.load(request)
-        self.assertEqual(bundle["metadata"]["n_times"], 6)
-        target = bundle["metadata"]["target"]
-
-        import numpy as np
-
-        for model in MODELS:
-            spec = model.weights()
-            local = ROOT / "artifacts" / spec.artifacts_relpath
-            if not local.is_file():
-                self.skipTest(f"local weight is not present: {spec.artifacts_relpath}")
-            with patch("utils.weights.urlopen", _fail_download):
-                forecast = model.predict(
-                    model.prepare(bundle, ADAPTER),
-                    weights_path=str(local),
-                )
-            self.assertEqual(forecast.shape, (1, 20, 128, 128))
-            values = np.asarray(forecast.values[0], dtype=np.float32)
-            self.assertTrue(np.isfinite(values).all(), model.capabilities().id)
-            mae = float(np.mean(np.abs(values - target)))
-            print(f"{model.capabilities().id} mae={mae:.3f}")
-            self.assertLess(mae, 255.0, model.capabilities().id)
-
-
-def _fail_download(*args, **kwargs):
-    raise AssertionError(
-        "Hugging Face download should be skipped after the sha256 check"
-    )
+    session.run.return_value = [output[:, :-1]]
+    with pytest.raises(ConstraintError, match="backend output shape"):
+        model.predict(prepared, weights_path=str(weights))

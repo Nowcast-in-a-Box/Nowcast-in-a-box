@@ -4,8 +4,11 @@ import numpy as np
 import pytest
 
 from utils.stored_fields import add_forecast
+from test_stored_fields import fixture_forecast
 from test_stored_fields import fixture_window, START
-from test_stored_fields import run as run  # noqa: F811 — pytest fixture shared by these tests
+from test_stored_fields import (
+    run as run,
+)  # noqa: F811 — pytest fixture shared by these tests
 
 
 def test_prediction_gap_does_not_mark_observation_gap(run):
@@ -40,8 +43,7 @@ def test_three_models_are_all_scored_in_one_verification(run):
             model,
             "0.1.0",
             "a" * 64,
-            np.full((20, 4, 4), index + 2, np.float32),
-            list(range(5, 101, 5)),
+            fixture_forecast(np.full((20, 4, 4), index + 2, np.float32)),
         )
     result = verification(
         run,
@@ -66,8 +68,7 @@ def test_verification_attempts_preserve_previous_reports(run):
         "wadepre",
         "0.1.0",
         "a" * 64,
-        np.ones((20, 4, 4), np.float32),
-        list(range(5, 101, 5)),
+        fixture_forecast(np.ones((20, 4, 4), np.float32)),
     )
     first = verification(run, [{"family": "continuous", "items": ["mae", "rmse"]}])
     assert first["status"] == "succeeded"
@@ -94,8 +95,7 @@ def test_added_threshold_is_computed_from_saved_fields(run):
         "wadepre",
         "0.1.0",
         "a" * 64,
-        np.ones((20, 4, 4), np.float32),
-        list(range(5, 101, 5)),
+        fixture_forecast(np.ones((20, 4, 4), np.float32)),
     )
     access = RunAccess(run)
     init = START + timedelta(minutes=25)
@@ -125,7 +125,7 @@ def test_stored_provider_and_visualization_share_scientific_identity(run):
     from diagnostics.fields import visualization_field
 
     values = np.ones((20, 4, 4), np.float32) * 2
-    add_forecast(run, "wadepre", "0.1.0", "a" * 64, values, list(range(5, 101, 5)))
+    add_forecast(run, "wadepre", "0.1.0", "a" * 64, fixture_forecast(values))
     source = RunAccess(run)
     init = START + timedelta(minutes=25)
     truth = source.get_observation("sevir", init + timedelta(minutes=5))

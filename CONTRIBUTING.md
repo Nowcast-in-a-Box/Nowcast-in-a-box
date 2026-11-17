@@ -75,7 +75,9 @@ Please keep each branch limited to related work*.*
 
 Most code should be tested before committing to Git.
 
-Tests live under `tests/`. Run `scripts/run-tests.sh` for every suite at once (Go handler plus the Python suites; the header lists the lock installs for the Python interpreter). CI runs the same suites on every pull request. `go test ./...` covers the handler alone.
+Tests live under `tests/`. Routine CI uses lightweight synthetic function tests; real model inference is reserved for a named release candidate and platform. Missing required release-test inputs are FAIL, not skip. There are no accuracy gates.
+
+`scripts/run-tests.sh` is the repository test entry; its header lists the contributor environment setup. `go test ./...` covers the handler alone. Record the checks you actually ran. See [model contribution tests](docs/guides/model-contribution.md#routine-checks).
 
 ### Commit
 
@@ -140,8 +142,14 @@ On GitHub, open a pull request from that branch into main:
 3. The title should match the commit format (feat:(#12) add nib:// handler uri scheme), because GitHub writes that title onto `main`.
 4. Create the pull request and wait for review.
 
+## Model contributions
+
+Follow the [model contribution guide](docs/guides/model-contribution.md) for required files, declaration fields, lifecycle and release-candidate acceptance. Declarations use `nib.model.v1` under `contracts/models/<data>/<model>.json`. The runtime validates physical observations, calls model-private preparation and prediction inside Docker, validates the physical forecast, then saves it. Atlas registration is manual.
+
+Use the [documentation index](docs/README.md) to find current guides and reference; historical checks and plans are in the archive.
+
 ## Runtime boundaries and formatting
 
 The host handler is Go. Model inference, metrics, and visualization run in Docker. Python formatting uses `black.toml` and `scripts/format-python.sh`.
 
-Do not commit weights, checkpoints, ONNX, HDF5, run images, PDFs, Word or Visio files, secrets, runtime outputs under `runs/`, or downloaded `artifacts/`. Do not add a root Python project or `uv.lock`. See [weights](docs/weights.md).
+Do not commit weights, checkpoints, ONNX, HDF5, run images, PDFs, Word or Visio files, secrets, runtime outputs under `runs/`, or downloaded `artifacts/`. Do not add a root Python project or `uv.lock`. See [weights](docs/guides/weights.md).

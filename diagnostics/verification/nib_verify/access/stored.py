@@ -1,5 +1,7 @@
 """Run-bound real fields for verification; arrays are loaded once per cube."""
 
+import numpy as np
+
 from .base import (
     Capabilities,
     Field,
@@ -22,10 +24,40 @@ class RunAccess:
             observation_names=tuple(caps["observation_names"]),
             model_ids=tuple(caps["model_ids"]),
             units={
-                name: caps["unit"]
-                for name in caps["observation_names"] + caps["model_ids"]
+                **{name: caps["unit"] for name in caps["observation_names"]},
+                **{
+                    name: spec["unit"]
+                    for name, spec in self.fields.manifest["forecasts"].items()
+                },
             },
         )
+
+    def validate_pairing(self, model_ids, *, reference=None):
+        """Stored runs require native-grid equality before verification can score."""
+        manifest = self.fields.manifest
+        reference = self.fields if reference is None else reference
+        target = reference.manifest["observations"]["target"]
+        target_cube = reference.cube(target)
+        descriptors = [manifest["observations"]["target"]]
+        for model_id in model_ids:
+            if model_id not in manifest["forecasts"]:
+                raise ValueError("verification requires selected saved Forecasts")
+            descriptors.append(manifest["forecasts"][model_id])
+        for descriptor in descriptors:
+            cube = self.fields.cube(descriptor)
+            if any(descriptor[key] != target[key] for key in ("variable", "unit")):
+                raise ValueError(
+                    "stored verification requires matching variable and unit"
+                )
+            if (
+                any(
+                    descriptor["grid"][key] != target["grid"][key]
+                    for key in ("crs", "axis_units")
+                )
+                or not np.array_equal(cube["x"], target_cube["x"])
+                or not np.array_equal(cube["y"], target_cube["y"])
+            ):
+                raise ValueError("stored verification requires identical native grids")
 
     def _get(self, operation, name, *args):
         try:
@@ -65,4 +97,6 @@ class RunAccess:
         return self._get("list_predictions", model_id, init_time)
 
     def get_prediction(self, model_id, init_time, lead_minutes):
-        return self._get("get_prediction", model_id, init_time, lead_minutes)
+        field = self._get("get_prediction", model_id, init_time, lead_minutes)
+        self.validate_pairing([model_id])
+        return field

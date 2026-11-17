@@ -26,9 +26,12 @@ def verification(directory, metrics, *, attempt_id=None, models=None):
     model_ids = list(manifest["forecasts"]) if models is None else models
     if not model_ids or any(model not in manifest["forecasts"] for model in model_ids):
         raise ValueError("verification requires selected saved Forecasts")
+    access.validate_pairing(model_ids)
     data_id = manifest["data"]["id"]
     field_spec = manifest["observations"]["target"]
-    reference = access.get_observation(data_id, initial)
+    reference = access.get_observation(
+        data_id, datetime.fromisoformat(field_spec["times"][0].replace("Z", "+00:00"))
+    )
     dx, dy = np.diff(reference.coords.x), np.diff(reference.coords.y)
     if not np.allclose(dx, dx[0]) or not np.allclose(dy, dx[0]):
         raise ValueError("verification currently requires square regular cells")
@@ -46,8 +49,8 @@ def verification(directory, metrics, *, attempt_id=None, models=None):
         members=tuple(
             Member(
                 m,
-                field_spec["variable"],
-                field_spec["unit"],
+                manifest["forecasts"][m]["variable"],
+                manifest["forecasts"][m]["unit"],
                 tuple(access.list_predictions(m, initial)),
             )
             for m in model_ids
@@ -145,9 +148,13 @@ def verification_batch(directory, samples, metrics, *, attempt_id=None, models=N
     model_ids = list(manifest["forecasts"]) if models is None else models
     if not model_ids or any(model not in manifest["forecasts"] for model in model_ids):
         raise ValueError("verification requires selected saved Forecasts")
+    for child in children:
+        RunAccess(child).validate_pairing(model_ids, reference=first.fields)
     data_id = manifest["data"]["id"]
     field_spec = manifest["observations"]["target"]
-    reference = first.get_observation(data_id, initial)
+    reference = first.get_observation(
+        data_id, datetime.fromisoformat(field_spec["times"][0].replace("Z", "+00:00"))
+    )
     dx, dy = np.diff(reference.coords.x), np.diff(reference.coords.y)
     if not np.allclose(dx, dx[0]) or not np.allclose(dy, dx[0]):
         raise ValueError("verification currently requires square regular cells")
@@ -167,8 +174,8 @@ def verification_batch(directory, samples, metrics, *, attempt_id=None, models=N
         members=tuple(
             Member(
                 m,
-                field_spec["variable"],
-                field_spec["unit"],
+                manifest["forecasts"][m]["variable"],
+                manifest["forecasts"][m]["unit"],
                 tuple(first.list_predictions(m, initial)),
             )
             for m in model_ids
@@ -204,7 +211,14 @@ def verification_batch(directory, samples, metrics, *, attempt_id=None, models=N
         "library_version": "0.1.0",
     }
     (out / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
-    totals = {"total": 0, "ran": 0, "skipped": 0, "unavailable": 0, "failed": 0, "obs_missing": 0}
+    totals = {
+        "total": 0,
+        "ran": 0,
+        "skipped": 0,
+        "unavailable": 0,
+        "failed": 0,
+        "obs_missing": 0,
+    }
     with Store(out / "verify.sqlite") as store:
         for child in children:
             access = RunAccess(child)

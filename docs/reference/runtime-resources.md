@@ -135,7 +135,7 @@ directory. The diagnostics image contains the global terrain COG, WMO tiles and
 source notices under `/basemap/`; computation and the result viewer use that
 same read-only image content. No host basemap mount or data-source flag is used.
 Maintainers prepare the display assets using explicit, checksum-verified inputs;
-see [global map preparation](../diagnostics/visualization/docs/map_viewer.md).
+see [global map preparation](../../diagnostics/visualization/docs/map_viewer.md).
 
 ## Allowed mounts
 

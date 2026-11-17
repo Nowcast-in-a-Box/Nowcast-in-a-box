@@ -10,6 +10,7 @@ import xarray as xr
 from pyproj import CRS, Transformer
 
 from diagnostics.run_source import RunSource, RunSourceError
+from tests.field_fixtures import forecast
 from utils.stored_fields import StoredFields, add_forecast, create_run, save_manifest
 
 INIT = datetime(2026, 7, 2, 1, tzinfo=UTC)
@@ -58,7 +59,20 @@ def make_run(root, *, run_id="different-run", geographic=False):
     }
     directory = create_run(root, run_id, window, grid, atlas_revision="test")
     for model in ("algorithm-one", "algorithm-two"):
-        add_forecast(directory, model, "test", "a" * 64, values + 2, [6, 12, 18, 24])
+        add_forecast(
+            directory,
+            model,
+            "test",
+            "a" * 64,
+            forecast(
+                values + 2,
+                grid=grid,
+                init_time=window["init_time"],
+                leads=(6, 12, 18, 24),
+                variable="CREF",
+                units="dBZ",
+            ),
+        )
     return directory
 
 

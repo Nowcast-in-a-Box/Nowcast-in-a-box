@@ -752,7 +752,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 		return
 	}
 	batchManifest := map[string]any{
-		"schema": "nib.run.v1", "id": id, "batch": true,
+		"schema": "nib.run.v2", "id": id, "batch": true,
 		"status": "ingested", "sample_count": len(samples), "samples": samples,
 		"sample": firstManifest["sample"], "data": firstManifest["data"],
 		"observations": firstManifest["observations"], "forecasts": firstManifest["forecasts"],

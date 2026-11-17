@@ -64,6 +64,10 @@ def read_window(path, start_time, event_id=None):
     if not np.isfinite(context).all() or not np.isfinite(target).all():
         raise ValueError("SEVIR input has undeclared non-finite values")
     return {
+        "data_id": "sevir",
+        "cadence_minutes": 5,
+        "variable": "vil",
+        "unit": "raw",
         "context": context,
         "target": target,
         "context_times": [stamp(v) for v in valid_times[:6]],

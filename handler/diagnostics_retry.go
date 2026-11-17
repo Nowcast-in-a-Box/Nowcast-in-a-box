@@ -224,7 +224,7 @@ func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) Diagno
 		}
 	}
 	var identity struct{ Schema, ID string }
-	if readErr == nil && json.Unmarshal(raw, &manifest) == nil && json.Unmarshal(raw, &identity) == nil && identity.Schema == "nib.run.v1" && identity.ID == id {
+	if readErr == nil && json.Unmarshal(raw, &manifest) == nil && json.Unmarshal(raw, &identity) == nil && (identity.Schema == "nib.run.v1" || identity.Schema == "nib.run.v2") && identity.ID == id {
 		for _, item := range manifest.Diagnostics {
 			if item.Kind == "report" && item.OperationID == state.ID && (item.Status == "succeeded" || item.Status == "partial") && item.Entry != "" && item.Path != "" {
 				state.Status, state.ReportEntry = item.Status, item.Entry

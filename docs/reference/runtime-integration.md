@@ -1,7 +1,10 @@
 # SEVIR local runtime integration (#14)
 
-The runtime uses stored-run contract `nib.run.v1`, defined in atlas commit
-`e9ecd84f217eef9658d433133bc588a3128d05e0`. Users run a prebuilt Go handler; Python stays in Docker. The Hub is a
+The runtime writes stored-run contract `nib.run.v2` and retains `nib.run.v1`
+read compatibility. New forecasts require a v2 run; legacy runs cannot accept
+forecast appends. Forecasts store their own physical metadata. See the
+[model contract](models.md) for the declaration and validation lifecycle.
+Users run a prebuilt Go handler; Python stays in Docker. The Hub is a
 remote provisioning site, and its browser talks directly to the user's loopback
 handler. The Hub server never proxies the user's localhost.
 
@@ -41,7 +44,8 @@ manifest names; Compose still uses `pull_policy: never` so execution never hides
 a download. `GET /v1/resources?data_id=<id>` reports each image as ready or
 missing, and `POST /v1/resources/prepare` copies missing weights and re-checks
 the selected images.
-The initial reader requires six context and twenty target 128x128 frames. It
+The SEVIR reader supplies physical observations; the runtime selects the exact
+recent history required by the model declaration before validation. It
 rejects event/time ambiguity and events with missing pixels that the processed
 file can no longer mask reliably. Sample listings show this limitation.
 
@@ -58,7 +62,7 @@ then use Hub's connection button and confirm its browser `nib://` application
 prompt if needed. The token is transferred over trusted loopback HTTP, remains
 in browser memory, and is never printed or manually copied. Browsers may also
 require local-network permission when a remote site accesses loopback.
-See [lifecycle and connection](handler-lifecycle.md) for background startup,
+See [lifecycle and connection](../guides/handler-lifecycle.md) for background startup,
 stop/restart, configuration ownership, trusted deployments and limitations.
 
 A successful CORS preflight is not evidence that permission was granted.
@@ -67,7 +71,7 @@ Choose a data product and an explicit event/window, then models and optional
 evaluation or visualization in the existing Hub catalog/Checkout. Run locally from Checkout (or an existing frozen order): the browser uploads the
 actual ZIP and package checksum once, then observes the job in Runs. Handler
 executes the selected diagnostics automatically after inference, independently
-of the browser. See [automatic diagnostics](automatic-diagnostics.md) for exact
+of the browser. See [automatic diagnostics](../guides/automatic-diagnostics.md) for exact
 operation/report identity, partial results and crash recovery. The handler
 checks bounded ZIP entries, paths, checksums, supported product versions and
 frozen data/model/diagnostic bindings. Template bytes are never executed.

@@ -176,7 +176,7 @@ modules:
     role: platform
     name: Hugging Face artifacts
     purpose: Pin and fetch weights into artifacts/. Git never stores blobs.
-    paths: [artifacts/, docs/weights.md]
+    paths: [artifacts/, docs/guides/weights.md]
     do:
       - Manifest pointer (repo, revision, path, sha256).
       - Fetch the pinned file into artifacts/.

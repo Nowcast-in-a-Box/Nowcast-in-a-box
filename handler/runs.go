@@ -29,7 +29,7 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 	raw, err := os.ReadFile(filepath.Join(directory, "manifest.json"))
 	var manifest map[string]any
 	if err == nil {
-		if json.Unmarshal(raw, &manifest) != nil || manifest["schema"] != "nib.run.v1" || manifest["id"] != id {
+		if json.Unmarshal(raw, &manifest) != nil || (manifest["schema"] != "nib.run.v1" && manifest["schema"] != "nib.run.v2") || manifest["id"] != id {
 			return nil, fmt.Errorf("invalid run manifest")
 		}
 	} else if os.IsNotExist(err) {

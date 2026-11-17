@@ -13,7 +13,7 @@ that module and the real field-provider contract it still needs from the platfor
 The integrated `python -m diagnostics --config request.json` entrypoint consumes
 version 2 stored-run requests and installs both diagnostic modules in the image.
 Its reader validates NPZ+manifest fields, and calls verification or visualization
-only when selected. See [runtime integration](../docs/runtime-integration.md) for
+only when selected. See [runtime integration](../docs/reference/runtime-integration.md) for
 resource preparation, scientific semantics and completed validation limits.
 
 Build from the repository root with
@@ -32,7 +32,21 @@ and Metrics tabs. Visualization embeds the global COG map; Metrics automatically
 draws the first selected available method as a line chart. Loading or switching
 views reads stored results and never starts computation. Failed diagnostic
 attempts remain inspectable alongside successful content. See
-[execution and recovery](../docs/automatic-diagnostics.md).
+[execution and recovery](../docs/guides/automatic-diagnostics.md).
+
+## Physical model fields
+
+The [model contract](../docs/reference/models.md) separates physical fields from
+backend tensors. Runtime writes `nib.run.v2` and retains v1 reads. Each forecast
+stores its own variable, units, UTC timestamps, initialization time, lead minutes,
+CRS, x/y, axis units and mask. Verification consumes physical `float32` fields
+in `(time, y, x)` order, never model-private prepared tensors. Incompatible truth
+and forecast grids or units fail without implicit resizing or interpolation.
+
+Routine CI uses lightweight synthetic function checks. Real inference belongs
+to a named release candidate/platform with required inputs present, offline
+execution and missing inputs reported as FAIL. There are no accuracy gates.
+See [contribution checks](../docs/guides/model-contribution.md#routine-checks).
 
 ## CMA xarray data handoff
 
@@ -41,7 +55,7 @@ It opens one saved CMA Radar run and an explicit, versioned metric configuration
 returns eager xarray fields with native axes, true units, valid times, CRS and
 auxiliary geographic coordinates; and never resamples or starts inference.
 SEVIR support for this new interface is deferred; existing providers stay intact.
-See the [interface contract](../docs/interfaces-we-consume.md) for exact metadata,
+See the [interface contract](../docs/reference/interfaces-we-consume.md) for exact metadata,
 version responsibilities, errors and consumer/storage boundaries.
 
 From the diagnostics environment (both delivered modules installed), run:
