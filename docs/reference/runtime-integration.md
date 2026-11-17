@@ -81,14 +81,20 @@ read-only root, tmpfs `/tmp`, read-only input/weight mounts, and runs as the hos
 UID on Unix. Algorithms have distinct images. All data and generated outputs
 remain in configured `runs/<unique-id>/`; no outputs live in Hub or atlas.
 
-Execution is serialized in this first integration. Jobs record queued/running/
-succeeded/failed/partial states with a stage, request identity and logs. A repeated
-idempotency key returns the same run, including after restart. A new explicit
-submission allocates a new run ID and directory, even for the same Order,
-package, samples and models. A queued/running package rejects a second request
-identity until it finishes; no active or historical run is replaced.
-Restarted unfinished jobs are marked interrupted,
-not silently resumed. Successful Forecasts survive diagnostic failure.
+Independent runs execute concurrently. Set `runtime.max_concurrent_jobs` in
+`config.yaml` to a positive integer (default `2`), then restart Handler. Set it
+to `1` on machines that can only fit one model in memory. Jobs beyond the limit
+remain `queued` and start in submission order. A batch occupies one slot;
+its samples and model stages retain their sequential order. Automatic diagnostics
+uses the parent job's slot. A separate diagnostic retry uses its own slot.
+
+Jobs record queued/running/succeeded/failed/partial states with a stage, request
+identity and logs. A repeated idempotency key returns the same run, including
+after restart. A new explicit submission allocates a separate run ID and
+directory, even for the same Order, package, samples and models. Only one writer
+may execute against a given run at a time, including diagnostic retries.
+Restarted unfinished jobs are marked interrupted, not silently resumed.
+Successful Forecasts survive diagnostic failure.
 
 ## Results
 

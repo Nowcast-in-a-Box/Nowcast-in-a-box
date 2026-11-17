@@ -72,7 +72,7 @@ message as its submit error.
   source). A package that fails validation shows the reason and cannot start.
 - Start / Run again: `POST /v1/orders/{package_id}/runs` reads the saved ZIP
   and goes through the exact admission of `POST /v1/jobs` (checksums, frozen
-  bindings, idempotency key, single active run per package). The first start
+  bindings, idempotency key, separate run directories). The first start
   uses idempotency key `package:<package_id>` — the same key the Hub uses —
   so an order already started from the Hub returns its existing run instead of
   silently starting a second one. `Run again` uses a fresh `rerun:` key and
@@ -113,12 +113,16 @@ because it changes while the Handler runs.
 
 Behaviour worth knowing:
 
-- A trigger that already has a queued or running job skips its turn instead of
-  queueing another run; the next tick tries again. `stop` therefore never waits
-  on a trigger-built queue.
+- Distinct due points or new data windows may run concurrently, up to
+  `runtime.max_concurrent_jobs` in `config.yaml` (default `2`). Extra runs queue
+  in submission order. `stop` refuses while any job is queued or executing.
+- A delayed scheduler tick fires only the latest due point. For a five-minute
+  interval, a tick at minute 17 handles minute 15; the next point is minute 20.
+  Older elapsed points are not replayed on subsequent ticks.
 - Each fire uses the idempotency key `trigger:<id>:<start window>` (or
-  `trigger:<id>:order:<scheduled point>` for the order's own window), so the
-  same window never runs twice, not even across a Handler restart.
+  `trigger:<id>:order:<scheduled point>` for the order’s own window). The same
+  data-window key or scheduled-point key returns its existing run, including
+  after a Handler restart.
 - A scheduled point that passed while the Handler was not running is **not**
   caught up. It is counted in the trigger's `missed_count` and shown in the
   console ("missed 2 scheduled runs while the Handler was stopped"). `Run now`

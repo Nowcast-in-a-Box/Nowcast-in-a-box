@@ -36,6 +36,9 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	checks := []Check{}
+	if s.Config.Runtime.MaxConcurrentJobs < 0 {
+		checks = append(checks, Check{ID: "concurrency", OK: false, Message: "runtime.max_concurrent_jobs must be positive"})
+	}
 	checkContext, cancelChecks := context.WithTimeout(r.Context(), imagePullTimeout)
 	defer cancelChecks()
 	data, catalog, err := s.dataPaths(dataID)

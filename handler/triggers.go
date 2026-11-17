@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -140,7 +141,9 @@ func (s *Server) saveTriggersLocked() error {
 }
 
 func (s *Server) triggersSnapshot() []*Trigger {
-	triggers, err := s.ensureTriggers()
+	s.triggersMu.Lock()
+	defer s.triggersMu.Unlock()
+	triggers, err := s.loadTriggersLocked()
 	if err != nil {
 		s.note("triggers: " + err.Error())
 		return nil
@@ -208,25 +211,34 @@ func (s *Server) StartTriggers() {
 // Handler was not running. It does not run them.
 func (s *Server) accountMissedTriggers(now time.Time) {
 	for _, trigger := range s.triggersSnapshot() {
-		if !trigger.Enabled || trigger.Kind != triggerKindSchedule {
-			continue
-		}
-		count, last := missedPoints(trigger, now)
-		if count == 0 {
-			continue
-		}
-		stamp := now.UTC()
-		if err := s.updateTrigger(trigger.ID, func(stored *Trigger) {
-			stored.MissedCount += count
-			stored.LastMissedAt = &last
-			stored.LastDueAt = &stamp
-			stored.UpdatedAt = stamp
-		}); err != nil {
-			s.note("triggers: " + err.Error())
-			continue
-		}
-		s.note(fmt.Sprintf("trigger %s missed %d scheduled run(s) while the Handler was stopped; last was %s", trigger.ID, count, last.Format(time.RFC3339)))
+		s.accountMissedTrigger(trigger.ID, now)
 	}
+}
+
+func (s *Server) accountMissedTrigger(id string, now time.Time) {
+	value, _ := s.triggerDecisions.LoadOrStore(id, &sync.Mutex{})
+	decision := value.(*sync.Mutex)
+	decision.Lock()
+	defer decision.Unlock()
+	trigger := s.triggerByID(id)
+	if trigger == nil || !trigger.Enabled || trigger.Kind != triggerKindSchedule {
+		return
+	}
+	count, last := missedPoints(trigger, now)
+	if count == 0 {
+		return
+	}
+	stamp := now.UTC()
+	if err := s.updateTrigger(id, func(stored *Trigger) {
+		stored.MissedCount += count
+		stored.LastMissedAt = &last
+		stored.LastDueAt = &stamp
+		stored.UpdatedAt = stamp
+	}); err != nil {
+		s.note("triggers: " + err.Error())
+		return
+	}
+	s.note(fmt.Sprintf("trigger %s missed %d scheduled run(s) while the Handler was stopped; last was %s", id, count, last.Format(time.RFC3339)))
 }
 
 func (s *Server) runDueTriggers(now time.Time) {
@@ -243,7 +255,7 @@ func (s *Server) runDueTriggers(now time.Time) {
 			if trigger.LastPollAt != nil && now.Sub(*trigger.LastPollAt) < time.Duration(minutes)*time.Minute {
 				continue
 			}
-			s.fireTrigger(trigger.ID, now, time.Time{})
+			s.fireTrigger(trigger.ID, now, now)
 		case triggerKindSchedule:
 			point, ok := nextDue(trigger, scheduleBase(trigger))
 			if !ok || point.After(now) {
@@ -262,18 +274,40 @@ func (s *Server) RunDueTriggersForTest(now time.Time) {
 
 const (
 	outcomeStarted = "started"
-	outcomeBusy    = "busy"
 	outcomeSkipped = "skipped"
 	outcomeFailed  = "failed"
 )
 
-// fireTrigger resolves one trigger into a run and records the outcome. A busy
-// trigger skips this round instead of queueing: a queue would block `stop` and
-// grow while one long run holds the execution lock.
+// fireTrigger serializes one trigger's admission and cursor update.
 func (s *Server) fireTrigger(id string, now, due time.Time) {
+	value, _ := s.triggerDecisions.LoadOrStore(id, &sync.Mutex{})
+	decision := value.(*sync.Mutex)
+	decision.Lock()
+	defer decision.Unlock()
 	trigger := s.triggerByID(id)
 	if trigger == nil {
 		return
+	}
+	if !due.IsZero() {
+		if !trigger.Enabled {
+			return
+		}
+		if trigger.Kind == triggerKindNewData {
+			minutes := trigger.PollMinutes
+			if minutes <= 0 {
+				minutes = defaultTriggerPollMinutes
+			}
+			if trigger.LastPollAt != nil && now.Sub(*trigger.LastPollAt) < time.Duration(minutes)*time.Minute {
+				return
+			}
+		}
+	}
+	if trigger.Kind == triggerKindSchedule && !due.IsZero() {
+		latest, ok := latestDue(trigger, now)
+		if !trigger.Enabled || !ok {
+			return
+		}
+		due = latest
 	}
 	outcome, start, runID, skipped, err := s.startTriggerRun(trigger, due)
 	stamp := now.UTC()
@@ -291,14 +325,15 @@ func (s *Server) fireTrigger(id string, now, due time.Time) {
 			stored.LastStart = start
 			stored.LastRunID = runID
 		}
-		if stored.Kind != triggerKindSchedule {
-			return
+		if stored.Kind == triggerKindSchedule {
+			cursor := due.UTC()
+			if cursor.IsZero() {
+				cursor = stamp
+			}
+			if stored.LastDueAt == nil || cursor.After(*stored.LastDueAt) {
+				stored.LastDueAt = &cursor
+			}
 		}
-		cursor := stamp
-		if !due.IsZero() {
-			cursor = due.UTC()
-		}
-		stored.LastDueAt = &cursor
 	})
 	if updateErr != nil {
 		s.note("triggers: " + updateErr.Error())
@@ -310,9 +345,6 @@ func (s *Server) fireTrigger(id string, now, due time.Time) {
 
 // startTriggerRun picks the windows for one fire and admits the run.
 func (s *Server) startTriggerRun(trigger *Trigger, due time.Time) (outcome, start, runID string, skipped int, err error) {
-	if s.triggerBusy(trigger.ID) {
-		return outcomeBusy, "", "", 0, nil
-	}
 	pkg, err := s.findOrderPackage(trigger.PackageID)
 	if err != nil {
 		return outcomeFailed, "", "", 0, err
@@ -359,17 +391,6 @@ func (s *Server) startTriggerRun(trigger *Trigger, due time.Time) (outcome, star
 		return outcomeSkipped, request.StartTime, job.ID, skipped, nil
 	}
 	return outcomeStarted, request.StartTime, job.ID, skipped, nil
-}
-
-func (s *Server) triggerBusy(id string) bool {
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-	for _, job := range s.jobs {
-		if job.TriggerID == id && (job.Status == "queued" || job.Status == "running") {
-			return true
-		}
-	}
-	return false
 }
 
 // sampleWindow is one runnable window as the data reader declares it.
@@ -459,8 +480,8 @@ func scheduleBase(trigger *Trigger) time.Time {
 	return trigger.CreatedAt
 }
 
-// nextDue returns the first scheduled point strictly after base. A daily time is
-// this machine's local time.
+// nextDue returns the first scheduled point strictly after base. Daily schedules
+// are reconstructed from each local calendar date, so DST does not shift the time.
 func nextDue(trigger *Trigger, base time.Time) (time.Time, bool) {
 	switch {
 	case trigger.IntervalMinutes > 0:
@@ -471,13 +492,41 @@ func nextDue(trigger *Trigger, base time.Time) (time.Time, bool) {
 			return time.Time{}, false
 		}
 		local := base.In(time.Local)
-		point := time.Date(local.Year(), local.Month(), local.Day(), hour, minute, 0, 0, time.Local)
-		for !point.After(base) {
-			point = point.AddDate(0, 0, 1)
+		for day := 0; day < 3; day++ {
+			date := time.Date(local.Year(), local.Month(), local.Day()+day, 0, 0, 0, 0, time.Local)
+			point := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, time.Local)
+			if point.After(base) {
+				return point, true
+			}
 		}
-		return point, true
 	}
 	return time.Time{}, false
+}
+
+func latestDue(trigger *Trigger, now time.Time) (time.Time, bool) {
+	base := scheduleBase(trigger)
+	if trigger.IntervalMinutes > 0 {
+		period := time.Duration(trigger.IntervalMinutes) * time.Minute
+		steps := now.Sub(base) / period
+		if steps < 1 {
+			return time.Time{}, false
+		}
+		return base.Add(steps * period), true
+	}
+	// Only the latest local calendar dates can contain the latest daily point.
+	search := now.In(time.Local).AddDate(0, 0, -2)
+	var latest time.Time
+	for {
+		point, ok := nextDue(trigger, search)
+		if !ok || point.After(now) {
+			break
+		}
+		if point.After(base) {
+			latest = point
+		}
+		search = point
+	}
+	return latest, !latest.IsZero()
 }
 
 // missedPoints counts the scheduled points that passed before now, capped so a

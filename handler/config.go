@@ -12,19 +12,20 @@ import (
 )
 
 const (
-	defaultHandlerHost     = "127.0.0.1"
-	defaultHandlerPort     = 8765
-	defaultReviewHost      = "127.0.0.1"
-	defaultReviewPort      = 8766
-	defaultDiagnosticsHost = "127.0.0.1"
-	defaultDiagnosticsPort = 8767
-	defaultMaxBatchSamples = 32
-	defaultArtifacts       = "artifacts"
-	defaultRuns            = "runs"
-	defaultOrders          = "orders"
-	defaultResources       = "."
-	configFileName         = "config.yaml"
-	settingsFileName       = "nib-settings.json"
+	defaultHandlerHost       = "127.0.0.1"
+	defaultHandlerPort       = 8765
+	defaultReviewHost        = "127.0.0.1"
+	defaultReviewPort        = 8766
+	defaultDiagnosticsHost   = "127.0.0.1"
+	defaultDiagnosticsPort   = 8767
+	defaultMaxBatchSamples   = 32
+	defaultMaxConcurrentJobs = 2
+	defaultArtifacts         = "artifacts"
+	defaultRuns              = "runs"
+	defaultOrders            = "orders"
+	defaultResources         = "."
+	configFileName           = "config.yaml"
+	settingsFileName         = "nib-settings.json"
 )
 
 // Addr is a loopback bind address from config.yaml.
@@ -45,14 +46,15 @@ type Paths struct {
 
 // Runtime configures host-side container control; browser requests cannot set these values.
 type Runtime struct {
-	DockerContext   string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
-	ImageRegistry   string   `yaml:"image_registry,omitempty" json:"image_registry,omitempty"`
-	ImageMirror     string   `yaml:"image_mirror,omitempty" json:"image_mirror,omitempty"`
-	ImageSource     string   `yaml:"image_source,omitempty" json:"image_source,omitempty"`
-	AllowedOrigins  []string `yaml:"allowed_origins" json:"allowed_origins"`
-	Token           string   `yaml:"token,omitempty" json:"-"`
-	AtlasRevision   string   `yaml:"atlas_revision" json:"atlas_revision"`
-	MaxBatchSamples int      `yaml:"max_batch_samples,omitempty" json:"max_batch_samples,omitempty"`
+	DockerContext     string   `yaml:"docker_context,omitempty" json:"docker_context,omitempty"`
+	ImageRegistry     string   `yaml:"image_registry,omitempty" json:"image_registry,omitempty"`
+	ImageMirror       string   `yaml:"image_mirror,omitempty" json:"image_mirror,omitempty"`
+	ImageSource       string   `yaml:"image_source,omitempty" json:"image_source,omitempty"`
+	AllowedOrigins    []string `yaml:"allowed_origins" json:"allowed_origins"`
+	Token             string   `yaml:"token,omitempty" json:"-"`
+	AtlasRevision     string   `yaml:"atlas_revision" json:"atlas_revision"`
+	MaxBatchSamples   int      `yaml:"max_batch_samples,omitempty" json:"max_batch_samples,omitempty"`
+	MaxConcurrentJobs int      `yaml:"max_concurrent_jobs,omitempty" json:"max_concurrent_jobs,omitempty"`
 }
 
 // Config is the host runtime settings loaded from config.yaml.
@@ -76,7 +78,7 @@ func DefaultConfig() Config {
 		Review:      Addr{Host: defaultReviewHost, Port: defaultReviewPort},
 		Diagnostics: Addr{Host: defaultDiagnosticsHost, Port: defaultDiagnosticsPort},
 		Paths:       Paths{Artifacts: defaultArtifacts, Runs: defaultRuns, Orders: defaultOrders, Resources: defaultResources},
-		Runtime:     Runtime{ImageSource: "auto"},
+		Runtime:     Runtime{ImageSource: "auto", MaxConcurrentJobs: defaultMaxConcurrentJobs},
 	}
 }
 
@@ -111,8 +113,28 @@ func Load(explicit string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)
 	}
-	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+	var document yaml.Node
+	if err := yaml.Unmarshal(raw, &document); err != nil {
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	var limits struct {
+		Runtime struct {
+			MaxConcurrentJobs any `yaml:"max_concurrent_jobs"`
+		} `yaml:"runtime"`
+	}
+	if err := document.Decode(&limits); err != nil {
+		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	if value := limits.Runtime.MaxConcurrentJobs; value != nil {
+		if _, ok := value.(int); !ok {
+			return Config{}, fmt.Errorf("runtime.max_concurrent_jobs must be a positive integer")
+		}
+	}
+	if err := document.Decode(&cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	if cfg.Runtime.MaxConcurrentJobs <= 0 {
+		return Config{}, fmt.Errorf("runtime.max_concurrent_jobs must be positive")
 	}
 	cfg.applyDefaults()
 	cfg.Source = path

@@ -74,7 +74,7 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 		if err == nil && json.Unmarshal(raw, &operation) == nil && operation.RunID == id {
 			job, _ := manifest["job"].(Job)
 			if job.DiagnosticOperationID != "" || job.CreatedAt.IsZero() || !job.CreatedAt.After(operation.CreatedAt) {
-				if operation.Status == "running" && operation.InstanceID != s.instanceID {
+				if (operation.Status == "running" || operation.Status == "queued") && operation.InstanceID != s.instanceID {
 					operation.Status, operation.Error = "interrupted", "Handler restarted before diagnostics completed; verify stopped containers before retrying from saved Forecasts"
 				}
 				manifest["operation"] = operation

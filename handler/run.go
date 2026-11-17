@@ -203,6 +203,10 @@ func Main(args []string) int {
 }
 
 func serve(cfg Config, release func()) int {
+	if cfg.Runtime.MaxConcurrentJobs < 0 {
+		fmt.Fprintln(os.Stderr, "error: runtime.max_concurrent_jobs must be positive")
+		return 1
+	}
 	needsStart, err := prepareStart(cfg)
 	if err == nil && !needsStart {
 		fmt.Fprintf(os.Stdout, "Using running Handler at %s (config %s)\n", addressURL(cfg.Handler), sourceName(cfg))
