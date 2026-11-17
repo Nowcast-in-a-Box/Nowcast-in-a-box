@@ -1,9 +1,11 @@
 # Automatic diagnostics and local result views (#28)
 
 After every selected model finishes, Handler executes the diagnostics recorded
-in the frozen package. This occurs in the background, under the same serialized
-execution resource as inference. No diagnostics are selected implicitly; an
-inference-only job finishes with `succeeded / finished`.
+in the frozen package. This occurs in the background, within the parent job’s
+execution slot. Independent retries share `runtime.max_concurrent_jobs` with
+inference and queue when all slots are occupied. Different runs may execute
+concurrently; a run permits only one writer. No diagnostics are selected
+implicitly; an inference-only job finishes with `succeeded / finished`.
 
 An initial automatic diagnostic and an explicit retry use the same Compose
 preparation/execution path. Each operation has its own ID, request, status,

@@ -262,6 +262,9 @@ func (s *Server) createJobFromPackage(pkg []byte, expected, key string) (*Job, i
 // replacing the start window in a parsed package; triggerID is empty for the
 // Hub upload and saved-order paths.
 func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID string) (*Job, int, error) {
+	if s.Config.Runtime.MaxConcurrentJobs < 0 {
+		return nil, 422, fmt.Errorf("runtime.max_concurrent_jobs must be positive")
+	}
 	if err := s.requireDataSupported(request.DataID); err != nil {
 		return nil, 422, err
 	}
@@ -286,7 +289,9 @@ func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID str
 	if len(s.Config.Runtime.AtlasRevision) != 40 {
 		return nil, 409, fmt.Errorf("configure the pinned atlas revision first")
 	}
-	if err := s.reconcileExecutions(); err != nil {
+	s.recoveryMu.Lock()
+	defer s.recoveryMu.Unlock()
+	if err := s.reconcileExecutionsLocked(); err != nil {
 		return nil, http.StatusConflict, err
 	}
 	s.jobsMu.Lock()
@@ -333,11 +338,6 @@ func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID str
 			return &recorded, 200, nil
 		}
 	}
-	for _, job := range s.jobs {
-		if job.Request.PackageSHA256 == request.PackageSHA256 && (job.Status == "queued" || job.Status == "running") {
-			return nil, http.StatusConflict, fmt.Errorf("this package is already queued or running; observe it in Runs and wait before rerunning")
-		}
-	}
 	if err := s.requireDocker(); err != nil {
 		return nil, http.StatusServiceUnavailable, err
 	}
@@ -361,7 +361,18 @@ func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID str
 	}
 	s.jobs[id] = job
 	copy := *job
-	go s.executeJob(id)
+	execution, err := s.reserveExecution(id)
+	if err != nil {
+		delete(s.jobs, id)
+		return nil, http.StatusConflict, err
+	}
+	s.enqueueExecution(execution, func(err error) {
+		if err != nil {
+			s.updateJob(id, "failed", "preflight", err)
+			return
+		}
+		s.executeJob(id)
+	})
 	return &copy, http.StatusAccepted, nil
 }
 
@@ -408,20 +419,15 @@ func (s *Server) updateJob(id, status, stage string, err error) {
 }
 
 func (s *Server) ExecutionAvailableForTest() bool {
-	ok := s.executionMu.TryLock()
-	if ok {
-		s.executionMu.Unlock()
+	if !s.executionMu.TryLock() {
+		return false
 	}
-	return ok
+	defer s.executionMu.Unlock()
+	return len(s.executions) == 0 && !s.executionDispatching
 }
 
 func (s *Server) executeJob(id string) {
-	s.executionMu.Lock()
-	defer s.executionMu.Unlock()
-	if err := s.reconcileExecutions(); err != nil {
-		s.updateJob(id, "failed", "preflight", err)
-		return
-	}
+	s.updateJob(id, "running", "preflight", nil)
 	s.jobsMu.Lock()
 	request := s.jobs[id].Request
 	s.jobsMu.Unlock()
@@ -752,7 +758,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 		return
 	}
 	batchManifest := map[string]any{
-		"schema": "nib.run.v1", "id": id, "batch": true,
+		"schema": "nib.run.v2", "id": id, "batch": true,
 		"status": "ingested", "sample_count": len(samples), "samples": samples,
 		"sample": firstManifest["sample"], "data": firstManifest["data"],
 		"observations": firstManifest["observations"], "forecasts": firstManifest["forecasts"],

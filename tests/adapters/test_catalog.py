@@ -12,9 +12,14 @@ ADAPTERS = ROOT / "adapters"
 CONTRACTS = ROOT / "contracts"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 IDS = ("cma_radar", "gk2a", "himawari9", "fy4b", "mtg", "sevir") + tuple(
-    f"mlcast_{item}" for item in (
-        "radklim_hourly", "radklim_5_minutes", "dmi_10_minutes",
-        "it_dpc_sri_5min", "uk_metoffice_5min", "be_rmi_radclim_mfb_5min",
+    f"mlcast_{item}"
+    for item in (
+        "radklim_hourly",
+        "radklim_5_minutes",
+        "dmi_10_minutes",
+        "it_dpc_sri_5min",
+        "uk_metoffice_5min",
+        "be_rmi_radclim_mfb_5min",
         "fr_mf_prate_5min",
     )
 )
@@ -63,7 +68,7 @@ class CatalogTests(unittest.TestCase):
                 model = item["models"][0]
                 paired = _load(CONTRACTS / "models" / "cma_radar" / "nowcastnet.json")
                 self.assertEqual(model["weights"], paired["weights"])
-                self.assertEqual(paired["demo"]["resolution_m"], 3000)
+                self.assertEqual(paired["input"]["variable_id"], "CREF")
             elif item["id"] == "sevir":
                 self.assertIn("h5py==", requirements)
                 self.assertNotIn("satpy", requirements)

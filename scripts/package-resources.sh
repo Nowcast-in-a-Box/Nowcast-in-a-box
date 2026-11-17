@@ -13,6 +13,7 @@ cp -R diagnostics resources/diagnostics
 cp -R containers resources/containers
 cp -R ingestion resources/ingestion
 cp -R interfaces resources/interfaces
+cp -R contracts resources/contracts
 cp -R utils resources/utils
 # Visualization caches are local build data, not a runtime resource.
 rm -rf resources/diagnostics/visualization/data

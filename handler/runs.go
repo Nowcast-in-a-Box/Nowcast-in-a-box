@@ -29,7 +29,7 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 	raw, err := os.ReadFile(filepath.Join(directory, "manifest.json"))
 	var manifest map[string]any
 	if err == nil {
-		if json.Unmarshal(raw, &manifest) != nil || manifest["schema"] != "nib.run.v1" || manifest["id"] != id {
+		if json.Unmarshal(raw, &manifest) != nil || (manifest["schema"] != "nib.run.v1" && manifest["schema"] != "nib.run.v2") || manifest["id"] != id {
 			return nil, fmt.Errorf("invalid run manifest")
 		}
 	} else if os.IsNotExist(err) {
@@ -74,7 +74,7 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 		if err == nil && json.Unmarshal(raw, &operation) == nil && operation.RunID == id {
 			job, _ := manifest["job"].(Job)
 			if job.DiagnosticOperationID != "" || job.CreatedAt.IsZero() || !job.CreatedAt.After(operation.CreatedAt) {
-				if operation.Status == "running" && operation.InstanceID != s.instanceID {
+				if (operation.Status == "running" || operation.Status == "queued") && operation.InstanceID != s.instanceID {
 					operation.Status, operation.Error = "interrupted", "Handler restarted before diagnostics completed; verify stopped containers before retrying from saved Forecasts"
 				}
 				manifest["operation"] = operation

@@ -4,7 +4,9 @@ This is the manual pass that follows the automated local acceptance suite.
 It walks a first-time user from the Hub through a local CMA inference and the
 Docker-produced diagnostics page. Automated coverage lives in the Hub
 repository (`npm run test:e2e:local`); this runbook is for the real-machine
-check with Docker.
+check with Docker. Record a named release candidate and target OS/architecture
+before starting. Missing required inputs, weights or images are FAIL, not skip.
+Run inference with network none; this check has no accuracy gate.
 
 ## 1. Prerequisites
 
@@ -158,8 +160,9 @@ purge. Start again with `Start NiB.<os>` and confirm a fresh app/launchd job and
 
 ## 7. Known limits
 
-- No public container registry or GitHub Release is part of this pass. Images
-  are expected to exist locally; the Handler only checks and reports them.
+- This pass does not establish registry or GitHub Release availability. Handler
+  can pull missing images during preparation; record whether this candidate
+  used local images or exercised a registry pull.
 - The weight "download" is a local folder copy, not a network download.
 - macOS folder picking, launchd registration, and the browser `nib://`
   confirmation remain manual behaviors.

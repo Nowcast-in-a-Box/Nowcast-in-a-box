@@ -103,6 +103,9 @@ func configID(cfg Config) string {
 	if cfg.Runtime.MaxBatchSamples == 0 {
 		cfg.Runtime.MaxBatchSamples = defaultMaxBatchSamples
 	}
+	if cfg.Runtime.MaxConcurrentJobs == 0 {
+		cfg.Runtime.MaxConcurrentJobs = defaultMaxConcurrentJobs
+	}
 	body, _ := json.Marshal(struct {
 		Source, Handler, Review string
 		Config                  Config
@@ -366,27 +369,25 @@ func stopUnidentified(cfg Config, reason error, force bool) error {
 }
 
 func (s *Server) requestShutdown() error {
-	// The execution lock covers diagnostics; jobsMu makes draining atomic with
-	// queued-job admission. Historical records are not live process state.
+	if !s.recoveryMu.TryLock() {
+		return fmt.Errorf("wait for execution admission or recovery before stopping Handler")
+	}
+	defer s.recoveryMu.Unlock()
 	if !s.executionMu.TryLock() {
 		return fmt.Errorf("wait for active inference or diagnostics before stopping Handler")
 	}
-	defer s.executionMu.Unlock()
-	// Reconcile after holding the lock: an execution that just failed cleanup has
-	// released it and must no longer be exempt from the container check. An
-	// unreachable daemon is not a reason to stay up: it cannot hold containers.
-	if err := s.reconcileExecutions(); err != nil && !errors.Is(err, errDockerUnreachable) {
+	busy := len(s.executions) > 0
+	s.executionMu.Unlock()
+	if busy {
+		return fmt.Errorf("wait for queued or active jobs and diagnostics before stopping Handler")
+	}
+	if err := s.reconcileExecutionsLocked(); err != nil && !errors.Is(err, errDockerUnreachable) {
 		return err
 	}
 	s.jobsMu.Lock()
 	defer s.jobsMu.Unlock()
 	if s.stopping {
 		return nil
-	}
-	for _, job := range s.jobs {
-		if job.Status == "queued" || job.Status == "running" {
-			return fmt.Errorf("wait for queued or running jobs before stopping Handler")
-		}
 	}
 	s.stopping = true
 	close(s.shutdown)

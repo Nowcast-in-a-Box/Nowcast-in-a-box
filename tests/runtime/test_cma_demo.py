@@ -8,9 +8,9 @@ import pytest
 import xarray as xr
 
 from adapters.cma_radar.nowcastnet.adapter import ADAPTER
-from adapters.sevir.nowcastnet.adapter import NowcastNetAdapter as SEVIR
 from ingestion import cma_radar as cma
-from interfaces.model import Forecast, PreparedInput
+from interfaces.errors import ConstraintError
+from tests.field_fixtures import forecast as physical_forecast, observations, mock_onnx
 from utils.stored_fields import StoredFields, create_run, sha256
 
 
@@ -88,38 +88,39 @@ def test_no_echo_and_no_coverage_are_distinct(monkeypatch):
     assert out[1, 1] == 0
 
 
-def test_mapping_roundtrip_and_real_cadence(monkeypatch):
-    def predict(self, prepared, *, weights_path):
-        assert np.allclose(prepared.values, 127.5)
-        values = np.full((1, 20, 128, 128), 127.5, dtype=np.float32)
-        return Forecast(self.output_spec(), values.shape, values, {})
-
-    monkeypatch.setattr(SEVIR, "predict", predict)
-    values = np.full((1, 5, 128, 128), 37.5, dtype=np.float32)
-    result = ADAPTER.predict(
-        PreparedInput("CREF", "dBZ", "float32", values.shape, values, {}),
-        weights_path="unused",
+def test_mapping_roundtrip_and_real_cadence(monkeypatch, tmp_path):
+    obs = observations(
+        source="cma_radar", variable="CREF", units="dBZ", cadence=6, value=37.5
     )
-    assert np.allclose(result.values, 37.5)
-    assert result.coords["lead_minutes"] == list(range(6, 121, 6))
-    assert result.spec.units == "dBZ"
+    obs.values[0, 0, 0] = 100
+    batch, physical = ADAPTER.prepare(obs)
+    assert batch.shape == (1, 5, 128, 128)
+    assert batch.dtype == np.float32
+    assert batch[0, 0, 0, 0] == 1
+    assert batch[0, 0, 0, 1] == 0.5
+    assert obs.values[0, 0, 0] == 100
+    output = np.full((1, 20, 128, 128), 0.5, np.float32)
+    output[0, 0, 0, :2] = [-1, 2]
+    weights, _, session = mock_onnx(monkeypatch, tmp_path, ADAPTER, output)
+    result = ADAPTER.predict((batch, physical), weights_path=str(weights))
+    assert session.run.call_args.args[1]["input_sequence"] is batch
+    assert result.values.shape == (20, 128, 128)
+    assert result.values.dtype == np.float32
+    np.testing.assert_array_equal(result.values[0, 0, :3], [0, 75, 37.5])
+    assert result.lead_minutes == tuple(range(6, 121, 6))
+    assert result.init_time == obs.times[-1]
+    assert result.times[0] == "2026-07-01T00:30:00Z"
+    assert result.units == "dBZ" and result.variable_id == "CREF"
 
 
-def test_nonfinite_model_output_is_not_hidden_by_clipping(monkeypatch):
-    from interfaces.errors import ConstraintError
-
-    values = np.zeros((1, 5, 128, 128), dtype=np.float32)
-
-    def predict(self, prepared, *, weights_path):
-        output = np.full((1, 20, 128, 128), np.inf, dtype=np.float32)
-        return Forecast(self.output_spec(), output.shape, output, {})
-
-    monkeypatch.setattr(SEVIR, "predict", predict)
-    with pytest.raises(ConstraintError, match="non-finite"):
-        ADAPTER.predict(
-            PreparedInput("CREF", "dBZ", "float32", values.shape, values, {}),
-            weights_path="unused",
-        )
+def test_nonfinite_model_output_is_not_hidden_by_clipping(monkeypatch, tmp_path):
+    obs = observations(
+        source="cma_radar", variable="CREF", units="dBZ", cadence=6, value=0
+    )
+    output = np.full((1, 20, 128, 128), np.inf, np.float32)
+    weights, _, _ = mock_onnx(monkeypatch, tmp_path, ADAPTER, output)
+    with pytest.raises(ConstraintError, match="missing forecast"):
+        ADAPTER.predict(ADAPTER.prepare(obs), weights_path=str(weights))
 
 
 def test_stored_cma_roundtrip(tmp_path):
@@ -160,8 +161,14 @@ def test_stored_cma_roundtrip(tmp_path):
         "nowcastnet",
         "test",
         "a" * 64,
-        forecast,
-        list(range(6, 121, 6)),
+        physical_forecast(
+            forecast,
+            grid=cma.grid_for(),
+            init_time=window["init_time"],
+            leads=tuple(range(6, 121, 6)),
+            variable="CREF",
+            units="dBZ",
+        ),
     )
     pytest.importorskip("rasterio")
     from diagnostics.map_visualization import visualization

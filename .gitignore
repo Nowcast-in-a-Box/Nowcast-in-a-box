@@ -8,6 +8,9 @@
 .pi/
 .vscode/
 .agents/
+.grok/
+.reasonix/
+/skills-lock.json
 
 __pycache__/
 *.py[cod]

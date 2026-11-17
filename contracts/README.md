@@ -26,6 +26,24 @@ instead. Unknown keys are errors. `forecast_horizon` is a frame count.
 This is the *run* YAML, different from the repo-root [`config.yaml`][cfg]
 that the handler reads for host, port, and paths.
 
+## Model declarations and stored fields
+
+`models/<data>/<model>.json` uses `nib.model.v1`. The declaration supplies
+`input_requirements()`, `output_specification()`, `capabilities()` and `weights()`.
+The runtime reads observations, selects exact recent history, validates input,
+calls `prepare(observations)` and `predict(prepared, *, weights_path)`, validates
+the physical forecast, then saves it. Backend preparation stays private inside
+Docker. Incompatible inputs fail without implicit padding, resizing or interpolation.
+
+Observations and forecasts are physical `float32 (time, y, x)` fields with UTC
+timestamps, CRS, x/y, axis units and mask. Forecasts also carry initialization
+time and lead minutes, and retain their own metadata. Stored runs write
+`nib.run.v2` and retain v1 reads. Verification reads physical fields.
+
+See the [model contract](../docs/reference/models.md) and
+[contribution guide](../docs/guides/model-contribution.md) for required files
+and synthetic versus release-candidate checks. Atlas registration is manual.
+
 ## Diagnostics request
 
 `nib-handler diagnostics` reads a different file. It is not the run YAML
@@ -49,7 +67,7 @@ Model images also point at a weight artifact (see [weights.md][weights]).
 JSON Schema files belong here when that work is claimed. Do not add a
 host-side `uv` project to hold them.
 
-[weights]: ../docs/weights.md
+[weights]: ../docs/guides/weights.md
 [cfg]: ../config.yaml
 [diag]: examples/diagnostics-request.example.yaml
 [dimg]: ../diagnostics/README.md

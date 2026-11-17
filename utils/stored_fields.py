@@ -50,37 +50,29 @@ def write_cube(
     times,
     grid,
     *,
+    variable,
+    unit,
     init_time=None,
     leads=None,
-    variable="vil",
-    unit="raw",
+    mask=None,
 ):
+    from interfaces.fields import Observations
+    from utils.model_contract import utc, validate_field
+
     path = relative_path(Path(root), name)
     values = np.asarray(values, dtype=np.float32)
-    if values.ndim != 3 or values.shape[0] != len(times):
-        raise ValueError("cube must have shape (time, y, x) matching times")
-    if values.shape[1:] != (len(grid["y"]), len(grid["x"])):
-        raise ValueError("cube and grid shape disagree")
-    parsed = [datetime.fromisoformat(t.replace("Z", "+00:00")) for t in times]
-    if any(t.tzinfo is None or t.utcoffset().total_seconds() != 0 for t in parsed):
-        raise ValueError("field times must be explicit UTC")
-    if any(b <= a for a, b in zip(parsed, parsed[1:])):
-        raise ValueError("field times must increase strictly")
-    mask = ~np.isfinite(values)
-    for axis in (grid["x"], grid["y"]):
-        if (
-            len(axis) < 2
-            or not np.isfinite(axis).all()
-            or not np.all(np.diff(axis) > 0)
-        ):
-            raise ValueError("grid axes must be finite and strictly increasing")
+    mask = ~np.isfinite(values) if mask is None else np.asarray(mask)
+    field = Observations("", variable, unit, values, tuple(times), grid, mask)
+    parsed = validate_field(field)
     if init_time is not None:
-        initial = datetime.fromisoformat(init_time.replace("Z", "+00:00"))
+        initial = utc(init_time)
         if (
             leads is None
             or len(leads) != len(times)
             or any(
-                lead <= 0 or (valid - initial).total_seconds() != lead * 60
+                type(lead) is not int
+                or lead <= 0
+                or (valid - initial).total_seconds() != lead * 60
                 for valid, lead in zip(parsed, leads)
             )
         ):
@@ -95,11 +87,11 @@ def write_cube(
         "dtype": "float32",
         "variable": variable,
         "unit": unit,
-        "times": times,
+        "times": list(times),
         "grid": {k: v for k, v in grid.items() if k not in ("x", "y")},
     }
     if init_time is not None:
-        descriptor.update(init_time=init_time, lead_minutes=leads)
+        descriptor.update(init_time=init_time, lead_minutes=list(leads))
     return descriptor
 
 
@@ -109,14 +101,24 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
     directory = Path(root) / run_id
     directory.mkdir(parents=False, exist_ok=False)
     manifest = {
-        "schema": "nib.run.v1",
+        "schema": "nib.run.v2",
         "id": run_id,
         "atlas_revision": atlas_revision,
         "status": "ingested",
-        "data": {"id": window.get("data_id", "sevir"), "version": "1.0.0"},
+        "data": {"id": window["data_id"], "version": "1.0.0"},
         "sample": {
-            k: window[k]
-            for k in ("sample_id", "event_id", "row", "context_start_time", "init_time")
+            "data_id": window["data_id"],
+            "cadence_minutes": window["cadence_minutes"],
+            **{
+                k: window[k]
+                for k in (
+                    "sample_id",
+                    "event_id",
+                    "row",
+                    "context_start_time",
+                    "init_time",
+                )
+            },
         },
         "observations": {},
         "forecasts": {},
@@ -124,10 +126,10 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
     }
     if "provenance" in window:
         manifest["sample"]["provenance"] = window["provenance"]
-    manifest["data"]["cadence_minutes"] = window.get("cadence_minutes", 5)
+    manifest["data"]["cadence_minutes"] = window["cadence_minutes"]
     field_options = {
-        "variable": window.get("variable", "vil"),
-        "unit": window.get("unit", "raw"),
+        "variable": window["variable"],
+        "unit": window["unit"],
     }
     try:
         manifest["observations"]["context"] = write_cube(
@@ -154,37 +156,33 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
     return directory
 
 
-def add_forecast(directory, model_id, version, weight_sha256, values, leads):
+def add_forecast(directory, model_id, version, weight_sha256, forecast):
+    from interfaces.fields import Forecast
+    from utils.model_contract import utc, validate_field
+
     if not ID.fullmatch(model_id) or not re.fullmatch(r"[0-9a-f]{64}", weight_sha256):
         raise ValueError("invalid model identity or weight digest")
+    if not isinstance(forecast, Forecast):
+        raise TypeError("add_forecast requires a physical Forecast")
+    validate_field(forecast)
     access = StoredFields(directory)
+    if access.legacy:
+        raise ValueError("legacy runs are read-only; prepare a new nib.run.v2 run")
     if model_id in access.manifest["forecasts"]:
         raise FileExistsError("model forecast already registered")
-    target = access.cube(access.manifest["observations"]["target"])
-    grid = {
-        **access.manifest["observations"]["target"]["grid"],
-        "x": target["x"],
-        "y": target["y"],
-    }
-    initial = datetime.fromisoformat(
-        access.manifest["sample"]["init_time"].replace("Z", "+00:00")
-    )
-    from datetime import timedelta
-
-    times = [
-        (initial + timedelta(minutes=int(v))).isoformat().replace("+00:00", "Z")
-        for v in leads
-    ]
+    if utc(forecast.init_time) != utc(access.manifest["sample"]["init_time"]):
+        raise ValueError("forecast and sample init_time disagree")
     descriptor = write_cube(
         access.root,
         f"forecasts/{model_id}/fields.npz",
-        values,
-        times,
-        grid,
-        init_time=access.manifest["sample"]["init_time"],
-        leads=leads,
-        variable=access.manifest["observations"]["target"]["variable"],
-        unit=access.manifest["observations"]["target"]["unit"],
+        forecast.values,
+        forecast.times,
+        forecast.grid,
+        mask=forecast.mask,
+        init_time=forecast.init_time,
+        leads=forecast.lead_minutes,
+        variable=forecast.variable_id,
+        unit=forecast.units,
     )
     descriptor.update(
         model_id=model_id, model_version=version, weight_sha256=weight_sha256
@@ -197,16 +195,47 @@ class StoredFields:
     def __init__(self, directory):
         self.root = Path(directory).resolve()
         self.manifest = json.loads((self.root / "manifest.json").read_text())
-        if self.manifest.get("schema") != "nib.run.v1":
+        self.legacy = self.manifest.get("schema") == "nib.run.v1"
+        if not self.legacy and self.manifest.get("schema") != "nib.run.v2":
             raise ValueError("unsupported run schema")
-        if self.manifest["data"]["id"] not in ("sevir", "cma_radar"):
-            raise ValueError("unsupported stored dataset")
-        self.cadence = 6 if self.manifest["data"]["id"] == "cma_radar" else 5
-        if self.manifest["data"].get("cadence_minutes", self.cadence) != self.cadence:
-            raise ValueError("stored cadence disagrees with dataset")
+        if self.legacy:
+            if self.manifest["data"]["id"] not in ("sevir", "cma_radar"):
+                raise ValueError("unsupported stored dataset")
+            self.cadence = 6 if self.manifest["data"]["id"] == "cma_radar" else 5
+            if (
+                self.manifest["data"].get("cadence_minutes", self.cadence)
+                != self.cadence
+            ):
+                raise ValueError("stored cadence disagrees with dataset")
+        else:
+            self.cadence = self.manifest["data"]["cadence_minutes"]
+            if type(self.cadence) is not int or self.cadence <= 0:
+                raise ValueError("stored cadence must be positive integer minutes")
         self.cache = {}
         self._descriptors = {}
         self.file_reads = 0
+
+    def observations(self, requirements):
+        """Select a declared recent history without changing cadence, pixels or units."""
+        from interfaces.fields import Observations
+        from utils.model_contract import utc
+
+        descriptor = self.manifest["observations"]["context"]
+        cube = self.cube(descriptor)
+        count = requirements.context_frames
+        if cube["values"].shape[0] < count:
+            raise ValueError("insufficient observation history for model declaration")
+        if utc(descriptor["times"][-1]) != utc(self.manifest["sample"]["init_time"]):
+            raise ValueError("context must end at sample initialization")
+        return Observations(
+            self.manifest["data"]["id"],
+            descriptor["variable"],
+            descriptor["unit"],
+            cube["values"][-count:],
+            tuple(descriptor["times"][-count:]),
+            {**descriptor["grid"], "x": cube["x"], "y": cube["y"]},
+            cube["mask"][-count:],
+        )
 
     def cube(self, descriptor):
         path = relative_path(self.root, descriptor["path"])
@@ -217,60 +246,48 @@ class StoredFields:
                 raise ValueError("artifact checksum mismatch")
             with np.load(path, allow_pickle=False) as archive:
                 cube = {key: archive[key] for key in ("values", "mask", "x", "y")}
+            from interfaces.fields import Observations
+            from utils.model_contract import utc, validate_field
+
             if (
                 list(cube["values"].shape) != descriptor["shape"]
-                or cube["mask"].shape != cube["values"].shape
-                or cube["values"].shape[0] != len(descriptor["times"])
+                or descriptor["dtype"] != "float32"
             ):
-                raise ValueError("stored cube shape/time mismatch")
-            for axis in (cube["x"], cube["y"]):
-                if (
-                    axis.ndim != 1
-                    or axis.size < 2
-                    or not np.isfinite(axis).all()
-                    or not np.all(np.diff(axis) > 0)
-                ):
-                    raise ValueError("stored grid axes must increase strictly")
-            expected_pair = (
-                ("CREF", "dBZ")
-                if self.manifest["data"]["id"] == "cma_radar"
-                else ("vil", "raw")
-            )
-            if (
+                raise ValueError("stored cube shape/dtype mismatch")
+            field = Observations(
+                self.manifest["data"]["id"],
                 descriptor["variable"],
                 descriptor["unit"],
-            ) != expected_pair or not descriptor["grid"].get("crs"):
-                raise ValueError("unsupported stored variable/unit/grid")
-            times = [
-                datetime.fromisoformat(t.replace("Z", "+00:00"))
-                for t in descriptor["times"]
-            ]
-            if any(
-                t.tzinfo is None or t.utcoffset().total_seconds() != 0 for t in times
-            ) or any(
-                (b - a).total_seconds() <= 0
-                or (b - a).total_seconds() % (60 * self.cadence) != 0
-                for a, b in zip(times, times[1:])
-            ):
-                raise ValueError("stored fields require their declared UTC cadence")
-            if "init_time" in descriptor:
-                initial = datetime.fromisoformat(
-                    descriptor["init_time"].replace("Z", "+00:00")
+                cube["values"],
+                tuple(descriptor["times"]),
+                {**descriptor["grid"], "x": cube["x"], "y": cube["y"]},
+                cube["mask"],
+            )
+            times = validate_field(field)
+            if self.legacy:
+                expected = (
+                    ("CREF", "dBZ") if field.source == "cma_radar" else ("vil", "raw")
                 )
+                if (field.variable_id, field.units) != expected:
+                    raise ValueError("unsupported stored variable/unit/grid")
+            if self.legacy or "init_time" not in descriptor:
+                if any(
+                    (b - a).total_seconds() % (60 * self.cadence) != 0
+                    for a, b in zip(times, times[1:])
+                ):
+                    raise ValueError("stored fields require their declared UTC cadence")
+            if "init_time" in descriptor:
+                initial = utc(descriptor["init_time"])
                 leads = descriptor["lead_minutes"]
                 if len(leads) != len(times) or any(
-                    lead <= 0 or (valid - initial).total_seconds() != lead * 60
+                    type(lead) is not int
+                    or lead <= 0
+                    or (valid - initial).total_seconds() != lead * 60
                     for valid, lead in zip(times, leads)
                 ):
                     raise ValueError("stored forecast init/lead alignment mismatch")
-                if descriptor["init_time"] != self.manifest["sample"]["init_time"]:
+                if initial != utc(self.manifest["sample"]["init_time"]):
                     raise ValueError("forecast and sample init_time disagree")
-            if cube["values"].dtype != np.float32 or cube["mask"].dtype != bool:
-                raise ValueError("stored cube dtype mismatch")
-            if cube["values"].shape[1:] != (len(cube["y"]), len(cube["x"])):
-                raise ValueError("stored grid shape mismatch")
-            if np.any(~np.isfinite(cube["values"]) & ~cube["mask"]):
-                raise ValueError("undeclared non-finite samples")
             for array in cube.values():
                 array.setflags(write=False)
             self.cache[path] = cube

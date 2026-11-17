@@ -9,6 +9,7 @@ import rasterio
 from pyproj import CRS
 
 from diagnostics.map_visualization import visualization
+from tests.field_fixtures import forecast as physical_forecast
 from utils.stored_fields import StoredFields, add_forecast, create_run, sha256
 
 pytest.importorskip("rasterio")
@@ -162,6 +163,7 @@ def _run(tmp_path, *, projected, unit="dBZ", variable="CREF"):
             "y": np.array([30.0, 31.0, 32.0]),
         }
         shape = (3, 4)
+    grid["axis_units"] = "m" if projected else "degrees"
     times = [
         "2026-07-01T00:00:00Z",
         f"2026-07-01T00:{cadence:02d}:00Z",
@@ -191,7 +193,18 @@ def _run(tmp_path, *, projected, unit="dBZ", variable="CREF"):
     manifest["model_names"] = {"nowcastnet": "NowcastNet"}
     (directory / "manifest.json").write_text(json.dumps(manifest))
     add_forecast(
-        directory, "nowcastnet", "test", "a" * 64, values, [cadence, 2 * cadence]
+        directory,
+        "nowcastnet",
+        "test",
+        "a" * 64,
+        physical_forecast(
+            values,
+            grid=grid,
+            init_time=times[0],
+            leads=(cadence, 2 * cadence),
+            variable=variable,
+            units=unit,
+        ),
     )
     return directory, directory / "forecasts" / "nowcastnet" / "fields.npz"
 

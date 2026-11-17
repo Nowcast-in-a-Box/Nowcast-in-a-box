@@ -14,7 +14,8 @@ files and supports cross-day windows. This demo deliberately indexes July only;
 August files can remain on disk without appearing in sample listings.
 
 The reference window begins **2026-07-01 00:00 UTC**. Six context frames end at
-**00:30 UTC**. The model consumes the latest five and produces twenty forecasts
+**00:30 UTC**. Runtime selects the latest five declared history frames before
+model validation; the model produces twenty forecasts
 at +6, +12, …, +120 minutes. Twenty subsequent observations provide the reference.
 Missing time steps are rejected, never filled with repeated frames.
 
@@ -70,7 +71,7 @@ Use the matching Handler/resource package: it understands `weights.embedded`
 and does not download, copy or mount host weights for this model. Other models
 retain external weights. The ONNX checksum remains mandatory at runtime.
 
-Before publishing, run inference against an isolated copy of genuine CMA inputs
+For a named release candidate and target platform, run inference against an isolated copy of genuine CMA inputs
 with `--network none`, a read-only root, and no host weight mount. Check the
 registered forecast SHA256 and all 20 finite 128×128 CREF frames. A wrong weight
 must fail both the image-build checksum and runtime checksum checks. Building
@@ -89,7 +90,7 @@ A Handler release tag alone does not run this manual image workflow. Publish
 the matching diagnostics, ingestion and embedded model images before testing a
 fresh installation; local cached images are not evidence of registry availability.
 
-Use [the example configuration](../tests/runtime/cma-demo.config.yaml). The
+Use [the example configuration](../../tests/runtime/cma-demo.config.yaml). The
 runtime tree comes from `paths.resources` (`runtime.yaml` in each data/model
 directory); the configured `cma_radar` manifest mounts the whole data folder.
 Choose the existing `cma-radar` directory for the CMA data source in Checkout,
@@ -139,5 +140,5 @@ The environment path is local development support, not a Python installation
 requirement for end users. Hub runs its complete backend and frontend suites,
 typecheck, lint and production build. Atlas declarations are checksum-verified
 through Hub's catalog loader, and real stored manifests are checked against
-`contracts/runtime/run-v1.schema.json`. Browser acceptance uses Firefox DevTools
+the stored-run contract (`nib.run.v2` writes, v1 reads). Browser acceptance uses Firefox DevTools
 and a real Hub → handler → offline Docker run.

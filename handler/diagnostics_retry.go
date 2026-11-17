@@ -17,6 +17,36 @@ import (
 
 func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if !idPattern.MatchString(id) {
+		runtimeError(w, 400, fmt.Errorf("invalid run ID"))
+		return
+	}
+	s.recoveryMu.Lock()
+	if err := s.reconcileExecutionsLocked(); err != nil {
+		s.recoveryMu.Unlock()
+		runtimeError(w, http.StatusConflict, err)
+		return
+	}
+	s.jobsMu.Lock()
+	if s.stopping {
+		s.jobsMu.Unlock()
+		s.recoveryMu.Unlock()
+		runtimeError(w, http.StatusServiceUnavailable, fmt.Errorf("Handler is stopping; reconnect after starting it again"))
+		return
+	}
+	execution, err := s.reserveExecution(id)
+	s.jobsMu.Unlock()
+	s.recoveryMu.Unlock()
+	if err != nil {
+		runtimeError(w, http.StatusConflict, err)
+		return
+	}
+	queued := false
+	defer func() {
+		if !queued {
+			s.releaseExecution(execution)
+		}
+	}()
 	manifest, err := s.runManifest(id)
 	if err != nil {
 		runtimeError(w, 404, err)
@@ -76,45 +106,21 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		runtimeError(w, 422, fmt.Errorf("select at least one diagnostic"))
 		return
 	}
-	if !s.executionMu.TryLock() {
-		runtimeError(w, 409, fmt.Errorf("wait for the current execution"))
-		return
-	}
-	if err := s.reconcileExecutions(); err != nil {
-		s.executionMu.Unlock()
-		runtimeError(w, http.StatusConflict, err)
-		return
-	}
-	s.jobsMu.Lock()
-	if s.stopping {
-		s.jobsMu.Unlock()
-		s.executionMu.Unlock()
-		runtimeError(w, http.StatusServiceUnavailable, fmt.Errorf("Handler is stopping; reconnect after starting it again"))
-		return
-	}
-	active := false
-	for _, job := range s.jobs {
-		if job.Status == "queued" || job.Status == "running" {
-			active = true
-			break
-		}
-	}
-	s.jobsMu.Unlock()
-	if active {
-		s.executionMu.Unlock()
-		runtimeError(w, 409, fmt.Errorf("wait for queued jobs"))
-		return
-	}
 	operation, err := s.prepareDiagnostics(id, config)
 	if err != nil {
-		s.executionMu.Unlock()
 		runtimeError(w, 500, err)
 		return
 	}
-	go func() {
-		defer s.executionMu.Unlock()
+	queued = true
+	s.enqueueExecution(execution, func(err error) {
+		if err != nil {
+			failed := operation
+			failed.Status, failed.Error = "failed", err.Error()
+			_ = saveOperation(filepath.Join(s.Config.Paths.Runs, id, "logs", "diagnostics-"+failed.ID, "status.json"), failed)
+			return
+		}
 		s.executeDiagnostics(id, operation)
-	}()
+	})
 	writeJSON(w, http.StatusAccepted, operation)
 }
 
@@ -140,13 +146,13 @@ func saveOperation(path string, state DiagnosticOperation) error {
 	return os.Rename(path+".tmp", path)
 }
 
-// The caller owns executionMu, for both initial diagnostics and an explicit retry.
+// The caller owns the run reservation, including when diagnostics shares a job slot.
 func (s *Server) prepareDiagnostics(id string, config map[string]any) (DiagnosticOperation, error) {
 	attempt, err := newRunID(time.Now())
 	if err != nil {
 		return DiagnosticOperation{}, err
 	}
-	state := DiagnosticOperation{ID: attempt, RunID: id, Status: "running", InstanceID: s.instanceID, CreatedAt: time.Now().UTC()}
+	state := DiagnosticOperation{ID: attempt, RunID: id, Status: "queued", InstanceID: s.instanceID, CreatedAt: time.Now().UTC()}
 	directory := filepath.Join(s.Config.Paths.Runs, id)
 	operation := filepath.Join(directory, "logs", "diagnostics-"+attempt)
 	if err := os.MkdirAll(operation, 0o755); err != nil {
@@ -193,6 +199,11 @@ func (s *Server) prepareDiagnostics(id string, config map[string]any) (Diagnosti
 
 func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) DiagnosticOperation {
 	operation := filepath.Join(s.Config.Paths.Runs, id, "logs", "diagnostics-"+state.ID)
+	state.Status = "running"
+	if err := saveOperation(filepath.Join(operation, "status.json"), state); err != nil {
+		state.Status, state.Error = "failed", err.Error()
+		return state
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	name := "nib-diag-" + strings.ToLower(state.ID)
@@ -224,7 +235,7 @@ func (s *Server) executeDiagnostics(id string, state DiagnosticOperation) Diagno
 		}
 	}
 	var identity struct{ Schema, ID string }
-	if readErr == nil && json.Unmarshal(raw, &manifest) == nil && json.Unmarshal(raw, &identity) == nil && identity.Schema == "nib.run.v1" && identity.ID == id {
+	if readErr == nil && json.Unmarshal(raw, &manifest) == nil && json.Unmarshal(raw, &identity) == nil && (identity.Schema == "nib.run.v1" || identity.Schema == "nib.run.v2") && identity.ID == id {
 		for _, item := range manifest.Diagnostics {
 			if item.Kind == "report" && item.OperationID == state.ID && (item.Status == "succeeded" || item.Status == "partial") && item.Entry != "" && item.Path != "" {
 				state.Status, state.ReportEntry = item.Status, item.Entry

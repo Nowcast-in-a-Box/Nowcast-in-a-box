@@ -20,14 +20,17 @@ var errDockerUnreachable = errors.New("cannot verify prior Docker projects are s
 func (s *Server) reconcileExecutions() error {
 	s.recoveryMu.Lock()
 	defer s.recoveryMu.Unlock()
-	s.jobsMu.Lock()
+	return s.reconcileExecutionsLocked()
+}
+
+// recoveryMu serializes this snapshot with execution start and release.
+func (s *Server) reconcileExecutionsLocked() error {
+	s.executionMu.Lock()
 	active := map[string]bool{}
-	for id, job := range s.jobs {
-		// Only an execution this instance is actually running is exempt. A queued
-		// same-run submission has not started and must not hide its old containers.
-		active[id] = job.Status == "running"
+	for id, execution := range s.executions {
+		active[id] = execution.active
 	}
-	s.jobsMu.Unlock()
+	s.executionMu.Unlock()
 	entries, err := os.ReadDir(s.Config.Paths.Runs)
 	if os.IsNotExist(err) {
 		return nil
@@ -60,7 +63,7 @@ func (s *Server) reconcileExecutions() error {
 			if json.Unmarshal(raw, &operation) != nil {
 				return fmt.Errorf("invalid prior diagnostic status; inspect %s", file)
 			}
-			if !(operation.Status == "running" && operation.InstanceID == s.instanceID) && idPattern.MatchString(operation.ID) {
+			if !(active[entry.Name()] && operation.InstanceID == s.instanceID) && idPattern.MatchString(operation.ID) {
 				projects["nib-diag-"+strings.ToLower(operation.ID)] = true
 			}
 		}

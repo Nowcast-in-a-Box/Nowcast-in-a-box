@@ -347,7 +347,7 @@ func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(run, "forecasts"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"schema":"nib.run.v1","id":"saved-run","data":{"id":"sevir"},"forecasts":{"wadepre":{"path":"forecasts/wadepre.npz"}},"diagnostics":[]}`
+	manifest := `{"schema":"nib.run.v2","id":"saved-run","data":{"id":"sevir"},"forecasts":{"wadepre":{"path":"forecasts/wadepre.npz"}},"diagnostics":[]}`
 	if err := os.WriteFile(filepath.Join(run, "manifest.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
