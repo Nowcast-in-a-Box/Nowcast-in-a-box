@@ -1,4 +1,4 @@
-"""Physical fields exchanged by ingestion, models and diagnostics."""
+"""Physical fields exchanged by data adapters, models and diagnostics."""
 
 from dataclasses import dataclass
 from typing import Any
