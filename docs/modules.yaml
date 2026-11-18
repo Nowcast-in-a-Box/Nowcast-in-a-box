@@ -128,7 +128,7 @@ modules:
     purpose: Example data package. Observations stay on the host under NIB_DATA_ROOT.
     paths: []
     do:
-      - manifest.json plus adapter code that runs in the ingestion/container path.
+      - manifest.json plus adapter code that runs in the reader container.
     done_when: Matcher accepts SEVIR with the first model.
     does_not_own:
       - Other datasets

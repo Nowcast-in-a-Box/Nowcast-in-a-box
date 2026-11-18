@@ -14,7 +14,7 @@ Initialize the atlas submodule and build images from the repository root:
 
 ```sh
 git submodule update --init --recursive
-docker build -f adapters/sevir/Dockerfile -t nib-ingestion:dev .
+docker build -f adapters/sevir/Dockerfile -t nib-reader-sevir:local-v1 .
 docker build -f adapters/sevir/wadepre/Dockerfile -t nib-wadepre:dev .
 docker build -f adapters/sevir/nowcastnet/Dockerfile -t nib-nowcastnet:dev .
 docker build -f adapters/sevir/exprecast/Dockerfile -t nib-exprecast:dev .

@@ -35,7 +35,7 @@ read → select exact recent history → validate_input → prepare → predict
 History selection uses the declaration's context length and cadence. It must end
 at the requested initialization time. Missing or incompatible inputs fail;
 neither the runtime nor the model may silently pad, resize or interpolate them.
-The reader must deliver compliant observations. A documented ingestion grid
+The reader must deliver compliant observations. A documented data adapter grid
 transformation is separate from silently repairing input at the model boundary.
 
 Backend choice stays inside the model's Docker image. ONNX Runtime, PyTorch or

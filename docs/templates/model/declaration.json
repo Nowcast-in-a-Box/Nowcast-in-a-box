@@ -1,0 +1,43 @@
+{
+  "schema": "nib.model.v1",
+  "id": "example_model",
+  "version": "0.1.0",
+  "data_adapter_id": "example_data",
+  "task": "precip-nowcast.v1",
+  "status": "template",
+  "weights": {
+    "status": "unavailable",
+    "download_url": null,
+    "sha256": null,
+    "filename": null,
+    "hf": null,
+    "artifacts_relpath": null
+  },
+  "input": {
+    "variable_id": "precipitation_rate",
+    "units": "mm/h",
+    "context_frames": 5,
+    "cadence_minutes": 5,
+    "spatial": [
+      128,
+      128
+    ],
+    "dtype": "float32",
+    "allow_missing": false
+  },
+  "output": {
+    "variable_id": "precipitation_rate",
+    "units": "mm/h",
+    "lead_minutes": [
+      5,
+      10
+    ],
+    "spatial": [
+      128,
+      128
+    ],
+    "dtype": "float32",
+    "allow_missing": false,
+    "grid": "input"
+  }
+}

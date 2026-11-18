@@ -24,7 +24,9 @@ manifests needed to build the containers from that root.
   diagnostics/
     runtime.yaml                 diagnostics image and mounts
     Dockerfile
-  containers/ ingestion/ interfaces/ utils/   source used by Dockerfiles
+  adapters/model_runner.py       shared model image entry point
+  adapters/reader_probe/        read-only sample probe image
+  interfaces/ utils/           shared runtime source
 ```
 
 A data directory without `runtime.yaml` is ignored. The Handler never parses
@@ -63,7 +65,7 @@ verification:
   level_max: 75
   unit: dBZ
 container:
-  image: nib-ingestion:cma-demo
+  image: nib-reader-cma-radar:local-v1
   build:
     context: "."
     dockerfile: adapters/cma_radar/Dockerfile
@@ -150,7 +152,7 @@ see [global map preparation](../../diagnostics/visualization/docs/map_viewer.md)
 
 Mount targets must be absolute container paths. Writes are read-only unless
 `write: true`. The Handler appends no implicit mounts except the job workspace
-used by ingestion (`-v runs/<id>:/workspace`).
+used by the data adapter (`-v runs/<id>:/workspace`).
 
 ## Data folders and settings
 
@@ -196,8 +198,8 @@ For the reference deployment the official registry is
 The Hub's Local page saves the same choice in `nib-settings.json`, so the
 selection is per user and does not need a restart. `auto` is the first-start
 default; a user in China can select `China mirror (NJU)` for subsequent pulls.
-`scripts/publish-images.sh` builds `nib-diagnostics:automatic-flow`,
-`nib-ingestion:cma-demo` and `nib-nowcastnet:cma-demo` under a registry prefix.
+`scripts/publish-images.sh` builds and pushes the data adapter images, diagnostics
+and the reference CMA NowcastNet image under a registry prefix.
 GHCR packages must be public, or the Docker daemon must already be logged in to
 GHCR, for a fresh machine to pull them without credentials.
 

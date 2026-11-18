@@ -1,9 +1,9 @@
 # Local console: YAML orders and immutable runs
 
-The Handler's local console creates, imports, edits and runs orders on this
-machine. The Hub selects and configures, then exports YAML. It does not execute
-orders. Once the required data, images and weights are available locally, the
-console can work without the Hub.
+The Hub downloads a product selection as JSON. The local Handler turns it into
+an order after you supply the event and sample times. Orders, data paths, and
+run history stay on this machine. Once the required data, images and weights
+are available locally, the console can run without the Hub.
 
 ## Open it
 
@@ -13,13 +13,24 @@ Handler if needed and opens the page. `start` and `status` also print its URL.
 The page and its fonts are embedded in the Handler; opening it needs neither
 Docker nor Node.
 
+The console opens on **Dashboard** with current activity, recent runs, software
+version and Docker status. Use **Settings** for this machine, **Orders** to
+import configurations and inspect run history, and **Triggers** to schedule
+saved orders. With no active or recent runs, Dashboard links directly to
+dataset folders and orders.
+
 On macOS, the launchd process survives closing Terminal. On Linux and Windows,
 closing the Handler's background window stops it. Linux needs `xdg-open` to
 open the browser; otherwise the opener prints the URL and exits non-zero.
 
 ## Create or import an order
 
-Choose **Create order**, or import a `.yaml` or `.yml` file exported by the Hub.
+In **Orders**, choose a downloaded file or drop it onto the import area. A Hub
+JSON selects exactly one data product and one or more compatible model
+versions. Import verifies their references against the installed Atlas release;
+it does not choose a time window, save an order or start a job. Review the
+draft, fill in the event and UTC sample starts, then validate and save.
+You can also create an order locally or import an existing NiB YAML order.
 ZIP package import and ZIP execution are no longer supported. Existing run
 records remain visible as read-only history, with logs and results. Saved ZIP
 files without runs are left on disk but are not listed as YAML orders.
@@ -36,10 +47,10 @@ and the sample limit. It exposes:
 - Optional visualization models. Layers, display thresholds and playback remain
   controls in the existing diagnostics viewer.
 
-Use **Validate draft** to check the configuration without saving, probing data
+Under **Draft**, use **Validate draft** to check the configuration without saving, probing data
 or running Docker. **Save defaults** creates an order or saves changes with its
 current revision. A stale revision is rejected; the draft stays visible so it
-can be compared with the reloaded order. **Export saved YAML** downloads the
+can be compared with the reloaded order. Under **Saved order**, **Export saved YAML** downloads the
 saved configuration, including when the form contains unsaved edits.
 
 **Check readiness** is a separate local action for the current draft. It checks
@@ -129,7 +140,7 @@ it does not mean data is missing. Missing data is an observed result of a probe
 or run, and must not be inferred from an unprobed configuration.
 
 CMA metadata preflight checks time windows; regional footprint and pixel
-availability remain unprobed until ingestion. CMA event IDs must match the
+availability are checked when the adapter reads the window. CMA event IDs must match the
 first sample date in YYYYMMDD format.
 
 ## Docker and lifecycle
@@ -143,7 +154,7 @@ readiness and displays submission errors beside the relevant action.
 Handler rejects shutdown while its local work is active. When Docker answers,
 it also checks for active Handler-owned projects before stopping.
 
-The console shows Handler and Docker status separately. **Restart Handler** and
+Docker status is visible on the dashboard. **Restart Handler** and
 **Stop Handler** ask for confirmation; a busy response (HTTP 409) leaves the
 Handler running and displays the rejection. Restart reinitializes services in
 the same process, retaining the session token unless its configured value
@@ -157,36 +168,33 @@ to start Handler, then **Refresh** to reconnect. Drafts remain in the open tab;
 they are not persisted across closing or reloading the page. Polling otherwise
 runs every five seconds while the tab is visible.
 
-## Local settings and resources
+## Local settings
 
-**This Handler** shows the version, origin, configuration file, instance start
-time, and runtime paths. Check these before editing settings when several
-installations exist. The expandable settings form saves the image source policy
-(`official`, `mirror`, or `auto`), official registry and mirror, and an existing
-local data folder associated with a supported data source. Paths remain local
-and are not included in exported YAML. Failed saves retain edits; switching
-data sources or reloading settings asks before discarding an unsaved path.
+In **Settings**, the dataset list marks each folder **Not set**, **Folder set** or
+**Unsaved**. A saved path does not mean that the data has been inspected.
+Under **Handler**, expand **Installation and runtime paths** to see the local configuration.
+Choose an image source under **Container image source** (official, mirror, or automatic).
+An optional custom registry overrides that choice; clear it to use the preset
+again. This changes where trusted image names are resolved, not which images
+an order can select.
 
-**Inspect resources** explicitly rechecks local resources. **Prepare / retry
-selected** submits only supported data/model IDs from the options endpoint.
-The Handler chooses trusted image and weight references; there is no arbitrary
-image field. Errors and actual stages or byte counts appear for each resource,
-without estimated percentages. During preparation the page reads cached status
-while visible; it does not repeatedly request an expensive recheck.
+Select a reader in **Dataset folders** to edit its local folder. Save only the
+ones you intend to use. These paths persist across restarts and never leave the
+machine in an exported order. **Inspect** opens a sample with that dataset's
+reader and shows the result or error. Saving a path does not require a successful
+Inspect. A successful probe is not a guarantee about an order's chosen window;
+every manual and scheduled run still performs its own preflight.
 
-A **prepared** status records the last successful preparation. It does not
-claim that the current Docker daemon still has those resources; inspection and
-each execution check them again. Missing diagnostics images are prepared when
-opening results or starting diagnostics, using the configured image sources.
-Starting the Handler alone does not inspect or download images; resource work
-begins with inspection, preparation, or an execution that needs it.
+Starting the Handler does not download images. Each execution checks its resources again.
 
 ## Triggers
 
 The Handler owns trigger evaluation. A trigger references a saved YAML order
 and creates a new run; it does not edit that order. Legacy package triggers
 remain visible but cannot execute or resume. They can be paused or deleted.
-The creation form lists only valid, writable saved orders.
+Select **New trigger**, choose a saved order, then select **New data arrives**,
+**Fixed interval**, or **Daily at**. Expand **Data window options** to change
+which windows are used. Only writable saved orders are eligible.
 
 Triggers can check for new data every configured interval, or run on an interval
 or at a daily local time. A scheduled run can use the order's own times or the
@@ -198,7 +206,8 @@ The table retains last outcome, errors, next due time, missed runs and
 **Run now**, **Pause / Resume**, and **Delete** controls. Triggers run only while
 the Handler runs. Distinct scheduled points and new data windows can create
 independent runs for the same trigger. Missed scheduled points are reported
-rather than silently caught up.
+rather than silently caught up. Deleting a trigger asks for confirmation and keeps
+the saved order and its run history.
 Trigger state stays in `nib-triggers.json` beside `config.yaml` and
 `nib-settings.json`; it is not part of the YAML order.
 The trigger cursor records its data source and resets when an edited order
@@ -229,7 +238,9 @@ Behaviour worth knowing:
 | `GET /console/fonts/{name}` | Embedded Inter fonts. |
 | `GET /v1/status` | Handler and Docker status. |
 | `POST /v1/control/restart` / `POST /v1/control/stop` | Confirmed lifecycle actions with the same-origin session token; busy returns 409. |
-| `GET /v1/settings` / `PATCH /v1/settings` | Read settings; patch `{image_source, image_registry, image_mirror}` or `{data_id, data_root}`. |
+| `GET /v1/settings` / `PATCH /v1/settings` | List registered datasets, saved folders and image sources. Patch `{image_source, image_override}` or `{data_id, data_root}`. |
+| `POST /v1/datasets/{dataset}/inspect` | Probe a sample in the saved folder with that dataset's reader. Does not start a run. |
+| `POST /v1/orders/import-selection` | Resolve a raw Hub selection into an unsaved local order draft. |
 | `GET /v1/resources?data_id=...` | Cached diagnostics/execution resource groups; add `refresh=true` for deliberate inspection. |
 | `POST /v1/resources/prepare` | Prepare trusted resources selected by `{data_id, models: [...]}`. |
 | `POST /v1/preflight` | Check `{order: object}` or `{yaml: string}`; returns `{ok, checks, execution_context}`. |

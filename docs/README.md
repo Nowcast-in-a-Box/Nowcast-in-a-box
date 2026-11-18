@@ -23,9 +23,3 @@ prebuilt Handler; model inference and diagnostics run inside Docker.
 - [Contracts](../contracts/README.md)
 - [Adapter source](../adapters/README.md)
 - [Diagnostics](../diagnostics/README.md)
-
-## Historical records
-
-The [archive](archive/README.md) retains verification evidence and past plans.
-Its results describe the versions and platforms tested at the time, not current
-release acceptance. Draft documents and images remain in their existing locations.
