@@ -16,6 +16,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  reader-registration:
+    name: Atlas reader registration (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Compare implementations and declarations
+        continue-on-error: true
+        run: python3 tests/adapters/report_atlas_readers.py
+
   handler:
     strategy:
       fail-fast: false
@@ -70,6 +81,11 @@ jobs:
         run: |
           pip install -r tests/requirements-dev.lock.txt
           pip install -r diagnostics/visualization/requirements-viewer.lock.txt
+
+      - name: Check Python style
+        run: |
+          python -m ruff format --check .
+          python -m ruff check .
 
       - name: Cache demo samples
         uses: actions/cache@v4
