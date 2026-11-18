@@ -11,11 +11,11 @@ from pathlib import Path
 
 import matplotlib
 import numpy as np
-
-from diagnostics.fields import display_grid, visualization_field
 from nib_visualization.cma_demo import reflectivity_colormap
 from nib_visualization.viewer_basemap import cache_relative
 from nib_visualization.viewer_bundle import export_field_cogs
+
+from diagnostics.fields import display_grid, visualization_field
 from utils.stored_fields import StoredFields, save_manifest, sha256
 
 _VIS = Path(__file__).resolve().parent / "visualization"

@@ -35,6 +35,7 @@ where = ["src"]
 testpaths = ["../../tests/visualization"]
 
 [tool.ruff]
+extend = "../../ruff.toml"
 line-length = 100
 target-version = "py312"
 

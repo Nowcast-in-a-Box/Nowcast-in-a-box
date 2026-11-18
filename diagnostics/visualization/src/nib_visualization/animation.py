@@ -51,8 +51,10 @@ class _FixedPalettePillowWriter(PillowWriter):
     """Encode all frames with one palette so a static colorbar cannot flicker."""
 
     def finish(self) -> None:
-        palette = self._frames[0].convert("RGB").quantize(
-            colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE
+        palette = (
+            self._frames[0]
+            .convert("RGB")
+            .quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
         )
         frames = [
             frame.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE)

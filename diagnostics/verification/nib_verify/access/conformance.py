@@ -24,7 +24,13 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
-from .base import Capabilities, Field, FieldAccess, FieldUnavailable, describe_capabilities
+from .base import (
+    Capabilities,
+    Field,
+    FieldAccess,
+    FieldUnavailable,
+    describe_capabilities,
+)
 
 UTC = timezone.utc
 
@@ -102,8 +108,13 @@ class Report:
                 else None
             ),
             "checks": [
-                {"name": c.name, "ok": c.ok, "skipped": c.skipped,
-                 "subjects": c.subjects, "detail": c.detail}
+                {
+                    "name": c.name,
+                    "ok": c.ok,
+                    "skipped": c.skipped,
+                    "subjects": c.subjects,
+                    "detail": c.detail,
+                }
                 for c in self.checks
             ],
         }
@@ -125,7 +136,8 @@ class Report:
         failed = len(self.failures)
         lines.append("")
         lines.append(
-            "conforms" if self.ok
+            "conforms"
+            if self.ok
             else f"does NOT conform: {failed} of {len(self.checks)} check(s) failed"
         )
         return "\n".join(lines)
@@ -166,26 +178,39 @@ def check_provider(
 # ----------------------------------------------------------------------
 def _check_capabilities(report: Report, caps: Capabilities) -> None:
     report.checks.append(
-        Check("capabilities() reports a cadence", caps.cadence_minutes > 0,
-              f"{caps.cadence_minutes} minute(s)")
+        Check(
+            "capabilities() reports a cadence",
+            caps.cadence_minutes > 0,
+            f"{caps.cadence_minutes} minute(s)",
+        )
     )
     if not (caps.observation_names or caps.model_ids):
         report.checks.append(
-            Check("capabilities() names something", False, "no observations and no models")
+            Check(
+                "capabilities() names something", False, "no observations and no models"
+            )
         )
         return
     report.checks.append(
-        Check("capabilities() names something", True,
-              f"{len(caps.observation_names)} observation(s), "
-              f"{len(caps.model_ids)} model(s)")
+        Check(
+            "capabilities() names something",
+            True,
+            f"{len(caps.observation_names)} observation(s), "
+            f"{len(caps.model_ids)} model(s)",
+        )
     )
 
     # A unit is what makes a threshold mean anything, so a provider that does not
     # declare one cannot be validated against a config at all.
-    missing = [n for n in (*caps.observation_names, *caps.model_ids) if not caps.unit_of(n)]
+    missing = [
+        n for n in (*caps.observation_names, *caps.model_ids) if not caps.unit_of(n)
+    ]
     report.checks.append(
-        Check("every name declares a unit", not missing,
-              "" if not missing else f"no unit for {missing}")
+        Check(
+            "every name declares a unit",
+            not missing,
+            "" if not missing else f"no unit for {missing}",
+        )
     )
 
 
@@ -193,8 +218,9 @@ def _check_observations(
     report: Report, access: FieldAccess, caps: Capabilities, days
 ) -> tuple[str | None, datetime | None]:
     if not caps.observation_names:
-        report.checks.append(Check("observations can be listed", True,
-                                   "none declared", skipped=True))
+        report.checks.append(
+            Check("observations can be listed", True, "none declared", skipped=True)
+        )
         return None, None
 
     name = caps.observation_names[0]
@@ -205,33 +231,48 @@ def _check_observations(
             times = access.list_observations(name, day, day + WINDOW)
         except Exception as exc:  # noqa: BLE001
             report.checks.append(
-                Check("list_observations answers", False, f"{type(exc).__name__}: {exc}")
+                Check(
+                    "list_observations answers", False, f"{type(exc).__name__}: {exc}"
+                )
             )
             return None, None
         if times:
             time = times[0]
             report.sampled["observation"] = f"{name} @ {time.isoformat()}"
             report.checks.append(
-                Check("list_observations answers", True, f"{len(times)} time(s) on {day.date()}")
+                Check(
+                    "list_observations answers",
+                    True,
+                    f"{len(times)} time(s) on {day.date()}",
+                )
             )
             break
     else:
         report.checks.append(
-            Check("list_observations finds something", True,
-                  f"nothing in {len(days)} candidate window(s)", skipped=True)
+            Check(
+                "list_observations finds something",
+                True,
+                f"nothing in {len(days)} candidate window(s)",
+                skipped=True,
+            )
         )
         return name, None
 
     if len(times) >= 1:
         report.checks.append(
-            Check("listed times are timezone-aware UTC", all(t.tzinfo is not None for t in times))
+            Check(
+                "listed times are timezone-aware UTC",
+                all(t.tzinfo is not None for t in times),
+            )
         )
     if len(times) >= 2:
         gaps = {(b - a).total_seconds() / 60 for a, b in zip(times, times[1:])}
         report.checks.append(
-            Check("every served time is on the cadence",
-                  gaps == {float(caps.cadence_minutes)},
-                  f"gaps {sorted(gaps)} vs cadence {caps.cadence_minutes}")
+            Check(
+                "every served time is on the cadence",
+                gaps == {float(caps.cadence_minutes)},
+                f"gaps {sorted(gaps)} vs cadence {caps.cadence_minutes}",
+            )
         )
 
     # ---------------------------------------------------------------- one field
@@ -243,8 +284,12 @@ def _check_observations(
         )
         return name, time
 
-    _add_merged(report, _check_field(field, caps, expect_time=time, expect_name=name,
-                                     kind="observation"))
+    _add_merged(
+        report,
+        _check_field(
+            field, caps, expect_time=time, expect_name=name, kind="observation"
+        ),
+    )
 
     # ------------------------------------------------------- off-cadence
     # The point of the check is not that it raises, it is that it raises
@@ -254,18 +299,27 @@ def _check_observations(
         stray = access.get_observation(name, off)
     except FieldUnavailable:
         report.checks.append(
-            Check("an off-cadence time raises rather than interpolating", True,
-                  "asked for +1 second")
+            Check(
+                "an off-cadence time raises rather than interpolating",
+                True,
+                "asked for +1 second",
+            )
         )
     except Exception as exc:  # noqa: BLE001
         report.checks.append(
-            Check("an off-cadence time raises rather than interpolating", False,
-                  f"raised {type(exc).__name__}, not FieldUnavailable: {exc}")
+            Check(
+                "an off-cadence time raises rather than interpolating",
+                False,
+                f"raised {type(exc).__name__}, not FieldUnavailable: {exc}",
+            )
         )
     else:
         report.checks.append(
-            Check("an off-cadence time raises rather than interpolating", False,
-                  f"returned a field for {stray.valid_time.isoformat()} instead")
+            Check(
+                "an off-cadence time raises rather than interpolating",
+                False,
+                f"returned a field for {stray.valid_time.isoformat()} instead",
+            )
         )
 
     return name, time
@@ -275,8 +329,9 @@ def _check_predictions(
     report: Report, access: FieldAccess, caps: Capabilities, days, max_leads: int
 ) -> None:
     if not caps.model_ids:
-        report.checks.append(Check("predictions can be listed", True,
-                                   "none declared", skipped=True))
+        report.checks.append(
+            Check("predictions can be listed", True, "none declared", skipped=True)
+        )
         return
 
     model = caps.model_ids[0]
@@ -294,15 +349,25 @@ def _check_predictions(
             break
     else:
         report.checks.append(
-            Check("list_predictions finds a run", True,
-                  f"nothing in {len(days)} candidate day(s)", skipped=True)
+            Check(
+                "list_predictions finds a run",
+                True,
+                f"nothing in {len(days)} candidate day(s)",
+                skipped=True,
+            )
         )
         return
 
-    report.sampled["prediction"] = f"{model} @ {init.isoformat()} leads {leads[:max_leads]}"
+    report.sampled["prediction"] = (
+        f"{model} @ {init.isoformat()} leads {leads[:max_leads]}"
+    )
     bad = [x for x in leads if not isinstance(x, int) or x < 0]
     report.checks.append(
-        Check("leads are whole, non-negative minutes", not bad, "" if not bad else f"{bad}")
+        Check(
+            "leads are whole, non-negative minutes",
+            not bad,
+            "" if not bad else f"{bad}",
+        )
     )
 
     # A listed lead that cannot be fetched is the failure that matters: the
@@ -324,8 +389,11 @@ def _check_predictions(
             )
     _add_merged(report, rows)
     report.checks.append(
-        Check("every listed lead can be fetched", not unserved,
-              "" if not unserved else "; ".join(unserved))
+        Check(
+            "every listed lead can be fetched",
+            not unserved,
+            "" if not unserved else "; ".join(unserved),
+        )
     )
 
     stray = max(leads) + 11
@@ -335,18 +403,27 @@ def _check_predictions(
         access.get_prediction(model, init, stray)
     except FieldUnavailable:
         report.checks.append(
-            Check("an unlisted lead raises rather than inventing a frame", True,
-                  f"asked for lead {stray}")
+            Check(
+                "an unlisted lead raises rather than inventing a frame",
+                True,
+                f"asked for lead {stray}",
+            )
         )
     except Exception as exc:  # noqa: BLE001
         report.checks.append(
-            Check("an unlisted lead raises rather than inventing a frame", False,
-                  f"raised {type(exc).__name__}, not FieldUnavailable: {exc}")
+            Check(
+                "an unlisted lead raises rather than inventing a frame",
+                False,
+                f"raised {type(exc).__name__}, not FieldUnavailable: {exc}",
+            )
         )
     else:
         report.checks.append(
-            Check("an unlisted lead raises rather than inventing a frame", False,
-                  f"lead {stray} was served but is not in {leads[:max_leads]}")
+            Check(
+                "an unlisted lead raises rather than inventing a frame",
+                False,
+                f"lead {stray} was served but is not in {leads[:max_leads]}",
+            )
         )
 
 
@@ -364,41 +441,66 @@ def _check_field(
     three answers to one question, not fifteen lines saying the same thing.
     """
     rows: list[tuple[str, bool, str]] = [
-        (f"a {kind} field carries its own grid",
-         field.coords.shape == field.data.shape,
-         f"{field.coords.shape}, extent {field.coords.extent}"),
+        (
+            f"a {kind} field carries its own grid",
+            field.coords.shape == field.data.shape,
+            f"{field.coords.shape}, extent {field.coords.extent}",
+        ),
         (f"a {kind} field declares a unit", bool(field.unit), repr(field.unit)),
     ]
 
     declared = caps.unit_of(expect_name or field.name)
     if declared is not None:
-        rows.append((f"the {kind} unit is the one capabilities declares",
-                     field.unit == declared,
-                     f"{field.unit!r} vs {declared!r}"))
+        rows.append(
+            (
+                f"the {kind} unit is the one capabilities declares",
+                field.unit == declared,
+                f"{field.unit!r} vs {declared!r}",
+            )
+        )
 
     if expect_time is not None:
-        rows.append((f"the {kind} is for the time that was asked for",
-                     field.valid_time == expect_time, field.valid_time.isoformat()))
+        rows.append(
+            (
+                f"the {kind} is for the time that was asked for",
+                field.valid_time == expect_time,
+                field.valid_time.isoformat(),
+            )
+        )
     elif kind == "prediction":
-        rows.append((f"the {kind} is for the lead that was asked for",
-                     True, field.valid_time.isoformat()))
+        rows.append(
+            (
+                f"the {kind} is for the lead that was asked for",
+                True,
+                field.valid_time.isoformat(),
+            )
+        )
 
     # Missing must be a hole, not a zero dressed up as one.
     values = field.values()
     missing = field.missing
     if not missing.any():
-        rows.append(("missing points come back as NaN, never as zero", None,
-                     "nothing missing in the sampled field"))
+        rows.append(
+            (
+                "missing points come back as NaN, never as zero",
+                None,
+                "nothing missing in the sampled field",
+            )
+        )
         return rows
 
     # Two decidable halves of one property. Nothing outside the mask may be
     # non-finite, and the masked points must actually read as NaN.
     leaked = int((~missing & ~np.isfinite(values)).sum())
     holes = int((~np.isnan(values[missing])).sum())
-    rows.append(("missing points come back as NaN, never as zero",
-                 leaked == 0 and holes == 0,
-                 f"{int(missing.sum())} missing; {leaked} non-finite outside the mask, "
-                 f"{holes} masked point(s) not NaN"))
+    rows.append(
+        (
+            "missing points come back as NaN, never as zero",
+            leaked == 0 and holes == 0,
+            f"{int(missing.sum())} missing; {leaked} non-finite outside the mask, "
+            f"{holes} masked point(s) not NaN",
+        )
+    )
     return rows
 
 
@@ -414,7 +516,8 @@ def _add_merged(report: Report, rows: list[tuple[str, bool, str]]) -> None:
     merged: dict[str, dict] = {}
     for name, ok, detail in rows:
         entry = merged.setdefault(
-            name, {"ok": True, "detail": "", "count": 0, "checked": False, "failed": False}
+            name,
+            {"ok": True, "detail": "", "count": 0, "checked": False, "failed": False},
         )
         if name not in order:
             order.append(name)
@@ -434,8 +537,13 @@ def _add_merged(report: Report, rows: list[tuple[str, bool, str]]) -> None:
         existing = next((c for c in report.checks if c.name == name), None)
         if existing is None:
             report.checks.append(
-                Check(name, entry["ok"], entry["detail"],
-                      skipped=not entry["checked"], subjects=entry["count"])
+                Check(
+                    name,
+                    entry["ok"],
+                    entry["detail"],
+                    skipped=not entry["checked"],
+                    subjects=entry["count"],
+                )
             )
             continue
         # The same property, checked on another field. One line, not two: a
@@ -462,6 +570,9 @@ def _check_undeclared_missing(report: Report, access: FieldAccess) -> None:
     """
     warnings = list(getattr(access, "warnings", []) or [])
     report.checks.append(
-        Check("the provider declares what it is missing", not warnings,
-              "" if not warnings else warnings[0])
+        Check(
+            "the provider declares what it is missing",
+            not warnings,
+            "" if not warnings else warnings[0],
+        )
     )

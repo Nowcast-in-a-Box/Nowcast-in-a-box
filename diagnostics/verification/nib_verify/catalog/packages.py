@@ -46,8 +46,12 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "unit": ("unit", "units", "unit_string"),
     "dtype": ("dtype", "dtypes", "type"),
     "shape": ("shape", "spatial_shape", "grid", "grid_shape"),
-    "cadence_minutes": ("cadence_minutes", "cadence", "time_step_minutes",
-                        "cadence_min"),
+    "cadence_minutes": (
+        "cadence_minutes",
+        "cadence",
+        "time_step_minutes",
+        "cadence_min",
+    ),
     "frame_count": ("frame_count", "frame_counts", "frames", "frame_count_target"),
     "fill_value": ("fill_value", "fill", "no_data", "nodata"),
     "missing": ("missing", "missing_value", "mask"),
@@ -189,7 +193,9 @@ class PackageManifest:
         return f"{self.id:<20} [{self.kind}] {detail}"
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any], path: Path | None = None) -> "PackageManifest":
+    def from_mapping(
+        cls, raw: Mapping[str, Any], path: Path | None = None
+    ) -> "PackageManifest":
         if not isinstance(raw, Mapping):
             raise ManifestError("manifest must be a JSON object")
 
@@ -247,7 +253,8 @@ def find_manifest_files(root: str | Path) -> list[Path]:
     if base.is_file():
         return [base] if base.name.lower() == MANIFEST_FILE_NAME else []
     return sorted(
-        p for p in base.rglob("*")
+        p
+        for p in base.rglob("*")
         if p.is_file() and p.name.lower() == MANIFEST_FILE_NAME
     )
 
@@ -318,10 +325,10 @@ def _extent(value: Any) -> list[float] | None:
     if isinstance(value, Mapping):
         keys = ("lon_min", "lat_min", "lon_max", "lat_max")
         numbers = [_number(value.get(k)) for k in keys]
-        return numbers if all(n is not None for n in numbers) else None      # type: ignore[return-value]
+        return numbers if all(n is not None for n in numbers) else None  # type: ignore[return-value]
     if isinstance(value, (list, tuple)) and len(value) == 4:
         numbers = [_number(v) for v in value]
-        return numbers if all(n is not None for n in numbers) else None      # type: ignore[return-value]
+        return numbers if all(n is not None for n in numbers) else None  # type: ignore[return-value]
     return None
 
 
@@ -389,9 +396,7 @@ class Catalog:
         for p in self.packages:
             if p.id in seen:
                 other = seen[p.id]
-                out.append(
-                    f"duplicate package id {p.id!r}: {other} and {p.path}"
-                )
+                out.append(f"duplicate package id {p.id!r}: {other} and {p.path}")
             seen[p.id] = p.path
             if p.kind == UNKNOWN:
                 out.append(f"{p.id}: declares neither offers nor requires")
@@ -425,6 +430,7 @@ def discover(roots: Sequence[str | Path]) -> Catalog:
       see.
     """
     import json
+
     resolved: list[Path] = []
     found: list[PackageManifest] = []
     skipped: list[str] = []
@@ -468,7 +474,8 @@ def _field_list(value: Any) -> tuple[FieldSpec, ...]:
         # a mapping of name -> spec is also plausible
         return tuple(
             FieldSpec.from_mapping({**v, "name": v.get("name", k)})
-            if isinstance(v, Mapping) else FieldSpec(name=str(k), raw={"value": v})
+            if isinstance(v, Mapping)
+            else FieldSpec(name=str(k), raw={"value": v})
             for k, v in value.items()
         )
     if isinstance(value, (list, tuple)):

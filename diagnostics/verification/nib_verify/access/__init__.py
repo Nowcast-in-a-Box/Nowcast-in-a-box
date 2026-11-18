@@ -25,6 +25,7 @@ not worth the trouble; :mod:`~nib_verify.access.probe` counts reads;
 provider, whichever of these it is.
 """
 
+from . import scenario
 from .base import (
     Capabilities,
     Coords,
@@ -37,7 +38,6 @@ from .base import (
 from .conformance import Check, Report, check_provider
 from .factory import PROVIDERS, build_access
 from .http import HttpAccess, HttpAccessError
-from . import scenario
 from .probe import AccessLog, CountingAccess
 from .synthetic import SyntheticAccess
 from .wire import PROTOCOL, WireError
@@ -74,8 +74,10 @@ def __getattr__(name: str):
     """
     if name == "create_data_app":
         from .mockfeed import create_data_app
+
         return create_data_app
     if name == "ReplayAccess":
         from .replay import ReplayAccess
+
         return ReplayAccess
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

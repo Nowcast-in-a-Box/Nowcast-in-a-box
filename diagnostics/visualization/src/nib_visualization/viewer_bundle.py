@@ -86,9 +86,7 @@ def export_field_cogs(field: VisualizationField, output: Path | str) -> dict:
         frame = {
             "url": filename,
             "sha256": info["sha256"],
-            "lead_seconds": float(
-                field.values.lead_time.values[index] / np.timedelta64(1, "s")
-            ),
+            "lead_seconds": float(field.values.lead_time.values[index] / np.timedelta64(1, "s")),
             "valid_time": utc(field.valid_time[index]),
         }
         if field.interval_start is not None:

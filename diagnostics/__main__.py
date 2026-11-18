@@ -169,11 +169,13 @@ def _batch_main(directory, manifest, request):
                         model,
                         sample.get("sample_id"),
                         attempt_id,
-                        lambda model=model, child=child, attempt_id=attempt_id: visualization(
-                            child,
-                            model,
-                            config.get("basemap", DEFAULT_BASEMAP),
-                            attempt_id=attempt_id,
+                        lambda model=model, child=child, attempt_id=attempt_id: (
+                            visualization(
+                                child,
+                                model,
+                                config.get("basemap", DEFAULT_BASEMAP),
+                                attempt_id=attempt_id,
+                            )
                         ),
                     )
                 )

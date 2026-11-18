@@ -26,7 +26,10 @@ def _sha256(path):
 
 
 def read_cma_mock(
-    directory: Path | str, *, crs: str, display_width: int = 1000,
+    directory: Path | str,
+    *,
+    crs: str,
+    display_width: int = 1000,
 ) -> VisualizationField:
     """Read all input times, with a bounded regular display grid and no time subsampling.
 
@@ -40,9 +43,17 @@ def read_cma_mock(
     entries = []
     for path in Path(directory).glob("*.npz"):
         with np.load(path, allow_pickle=False) as source:
-            meta = {key: source[key].item() for key in (
-                "data_time", "generation_time", "source_file", "source", "product", "unit"
-            )}
+            meta = {
+                key: source[key].item()
+                for key in (
+                    "data_time",
+                    "generation_time",
+                    "source_file",
+                    "source",
+                    "product",
+                    "unit",
+                )
+            }
         if (meta["source"], meta["product"], meta["unit"]) != ("cma_radar", "CREF", "dBZ"):
             raise ValueError(f"unexpected CMA product metadata: {path}")
         observed = datetime.fromisoformat(meta["data_time"])
@@ -68,8 +79,10 @@ def read_cma_mock(
             raise ValueError(f"unaligned CMA grid: {path}")
         if min(raw.shape) < 2 or not np.isfinite(lat).all() or not np.isfinite(lon).all():
             raise ValueError(f"invalid CMA grid: {path}")
-        if resolution <= 0 or not np.allclose(np.diff(lat), -resolution) or not np.allclose(
-            np.diff(lon), resolution
+        if (
+            resolution <= 0
+            or not np.allclose(np.diff(lat), -resolution)
+            or not np.allclose(np.diff(lon), resolution)
         ):
             raise ValueError(f"CMA grid must be regular north-to-south / west-to-east: {path}")
         expected_bbox = [lon[0], lat[-1] - resolution, lon[-1] + resolution, lat[0]]
@@ -97,25 +110,34 @@ def read_cma_mock(
 
     field = VisualizationField(
         values=xr.DataArray(
-            values, dims=("lead_time", "y", "x"),
+            values,
+            dims=("lead_time", "y", "x"),
             coords={"lead_time": times - times[0], "y": y, "x": x},
-            name="Reflectivity", attrs={"units": "dBZ"},
+            name="Reflectivity",
+            attrs={"units": "dBZ"},
         ),
-        crs=crs, init_time=times[0], valid_time=times, temporal_statistic="instantaneous",
+        crs=crs,
+        init_time=times[0],
+        valid_time=times,
+        temporal_statistic="instantaneous",
         provenance={
-            "mock": True, "synthetic": False, "is_real_forecast": False,
+            "mock": True,
+            "synthetic": False,
+            "is_real_forecast": False,
             "source_semantics": "CMA CREF observations replayed as pseudo forecast leads",
             "time_mapping": (
                 "demo init = first observation; valid = observation time; lead = offset"
             ),
             "crs_mapping": f"{crs} explicitly supplied by the integration caller",
-            "native_shape": [ny, nx], "display_shape": [out_y, out_x],
+            "native_shape": [ny, nx],
+            "display_shape": [out_y, out_x],
             "spatial_sampling": (
                 "nearest source cell at regular display-grid centres, preserving native cell-edge "
                 "footprint; no temporal sampling; display-only, not a scientific regridded product"
             ),
             "special_codes": "retained undecoded; display threshold is not quality control",
-            "input_files": records, "input_files_unchanged": True,
+            "input_files": records,
+            "input_files_unchanged": True,
         },
     )
     return validate_field(field)
