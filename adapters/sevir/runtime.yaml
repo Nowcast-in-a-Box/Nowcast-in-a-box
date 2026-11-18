@@ -12,7 +12,7 @@ verification:
   level_max: 255
   unit: raw
 container:
-  image: nib-ingestion:dev
+  image: nib-reader-sevir:local-v1
   build:
     context: "."
     dockerfile: adapters/sevir/Dockerfile

@@ -22,8 +22,8 @@ docker build -f adapters/sevir/Dockerfile -t nib-reader-sevir:local-v1 .
 docker build -f adapters/sevir/nowcastnet/Dockerfile -t nib-nowcastnet:dev .
 ```
 
-Contracts live outside this tree: `contracts/data/<id>.json` and
-`contracts/models/<data-id>/<model-id>.json`. The Python contracts are
+Contracts live outside this tree: `atlas/contracts/data/<id>.json` and
+`atlas/contracts/models/<data-id>/<model-id>.json`. The Python contracts are
 `interfaces/`. Path resolution and the Hugging Face weight fetch are
 `utils/`.
 

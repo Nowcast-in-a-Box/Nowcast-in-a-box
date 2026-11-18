@@ -14,7 +14,8 @@ from utils.weights import file_sha256
 
 class ExPreCastAdapter(DeclaredModelAdapter):
     declaration_path = (
-        Path(__file__).resolve().parents[3] / "contracts/models/sevir/exprecast.json"
+        Path(__file__).resolve().parents[3]
+        / "atlas/contracts/models/sevir/exprecast.json"
     )
 
     def prepare(self, observations):

@@ -69,7 +69,9 @@ def _field_from_bundle(bundle: Mapping[str, Any], time_key: str) -> xr.DataArray
         )
 
     if "latitude" not in field.coords or "longitude" not in field.coords:
-        raise ValueError("CMA CREF field must include latitude and longitude coordinates")
+        raise ValueError(
+            "CMA CREF field must include latitude and longitude coordinates"
+        )
 
     return field
 
@@ -148,7 +150,6 @@ def _dataset_for_time(
     return ds
 
 
-
 def _write_zarr_v2(ds: xr.Dataset, output: Path, **kwargs) -> None:
     """Write Zarr v2 across both older and newer xarray APIs."""
     params = inspect.signature(ds.to_zarr).parameters
@@ -159,6 +160,7 @@ def _write_zarr_v2(ds: xr.Dataset, output: Path, **kwargs) -> None:
         kwargs["zarr_version"] = 2
 
     ds.to_zarr(output, **kwargs)
+
 
 def write_cma_zarr(
     bundle: Mapping[str, Any],

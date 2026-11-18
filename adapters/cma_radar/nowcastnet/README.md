@@ -1,7 +1,7 @@
 # CMA Radar NowcastNet demo
 
 This pairing follows the [model contract](../../../docs/reference/models.md).
-Its [declaration](../../../contracts/models/cma_radar/nowcastnet.json) supplies identity,
+Its [declaration](../../../atlas/contracts/models/cma_radar/nowcastnet.json) supplies identity,
 physical requirements and weight provenance.
 
 - Input: five physical float32 frames of CREF in dBZ at six-minute cadence,
@@ -20,7 +20,7 @@ padding, resizing or interpolation. Runtime validates the forecast before saving
 nib.run.v2; v1 remains readable.
 
 This is a cross-domain demonstration, not evidence of CMA forecast skill. See
-[the demo guide](../../../docs/guides/cma-demo.md) for ingestion and limitations.
+[the demo guide](../../../docs/guides/cma-demo.md) for data preparation and limitations.
 
 Follow the [contribution checks](../../../docs/guides/model-contribution.md#routine-checks):
 routine CI uses small synthetic function tests. Real inference is reserved for

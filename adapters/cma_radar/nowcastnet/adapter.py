@@ -14,7 +14,7 @@ NOTICE = "SEVIR pretrained cross-domain CREF demo; forecast skill is not validat
 class NowcastNetAdapter(SEVIRNowcastNet):
     declaration_path = (
         Path(__file__).resolve().parents[3]
-        / "contracts/models/cma_radar/nowcastnet.json"
+        / "atlas/contracts/models/cma_radar/nowcastnet.json"
     )
     scale = 75.0
 

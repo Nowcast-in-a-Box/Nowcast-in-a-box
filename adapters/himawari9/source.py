@@ -9,16 +9,10 @@ import bz2
 import gc
 import re
 import shutil
+import struct
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
-HSD_RE = re.compile(
-    r"^HS_(H08|H09)_(\d{8})_(\d{4})_B(\d{2})_"
-    r"([A-Z0-9]+)_R(\d{2})_S(\d{2})(\d{2})\.DAT(?:\.bz2)?$",
-    re.IGNORECASE,
-)
-
 
 from interfaces.data import (
     ChannelSpec,
@@ -30,6 +24,13 @@ from interfaces.data import (
     bundle_from_parts,
     loader_config,
 )
+
+HSD_RE = re.compile(
+    r"^HS_(H08|H09)_(\d{8})_(\d{4})_B(\d{2})_"
+    r"([A-Z0-9]+)_R(\d{2})_S(\d{2})(\d{2})\.DAT(?:\.bz2)?$",
+    re.IGNORECASE,
+)
+
 
 # Dataset. Fixed before any request runs.
 ID = "himawari9"
@@ -451,7 +452,51 @@ def load_himawari(config):
     return results
 
 
+_MAX_SAMPLE_HEADER = 1 << 20
+
+
 class Source(DeclaredDataAdapter):
+    def inspect_sample(self, root: Path) -> dict:
+        from utils.sample_files import first_file
+
+        path = first_file(
+            root,
+            lambda p: (
+                p.name.upper().startswith("HS_H09_") and bool(HSD_RE.fullmatch(p.name))
+            ),
+        )
+        with path.open("rb") as stream:
+            if path.suffix.lower() == ".bz2":
+                prefix = bz2.BZ2Decompressor().decompress(
+                    stream.read(3 << 20), max_length=_MAX_SAMPLE_HEADER + 2
+                )
+            else:
+                prefix = stream.read(_MAX_SAMPLE_HEADER + 2)
+        if len(prefix) < 78 or prefix[0] != 1 or prefix[5] != 0:
+            raise ValueError("Invalid little-endian HSD basic information block")
+        basic_size = struct.unpack_from("<H", prefix, 1)[0]
+        offset, size = struct.unpack_from("<II", prefix, 70)
+        if not (78 <= basic_size <= offset - 10 and offset <= _MAX_SAMPLE_HEADER):
+            raise ValueError("Invalid HSD header length or exceeds probe limit")
+        if size < 2 or len(prefix) < offset + 2:
+            raise ValueError("Missing HSD sample")
+        block, length, bits, cols, rows, compression = struct.unpack_from(
+            "<BHHHHB", prefix, basic_size
+        )
+        if (
+            block != 2
+            or not 10 <= length <= offset - basic_size
+            or bits != 16
+            or not cols
+            or not rows
+            or compression != 0
+        ):
+            raise ValueError("Unsupported HSD data information block")
+        return {
+            "sample": path.relative_to(root).as_posix(),
+            "value": struct.unpack_from("<H", prefix, offset)[0],
+        }
+
     CAPABILITIES = DataCapabilities(
         id=ID,
         version=VERSION,

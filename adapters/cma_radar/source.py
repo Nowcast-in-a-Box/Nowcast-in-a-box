@@ -7,11 +7,26 @@ from __future__ import annotations
 
 import bz2
 import datetime as dt
+import io
 import re
+import struct
+import zipfile
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
+
+from interfaces.data import (
+    ChannelSpec,
+    DataBundle,
+    DataCapabilities,
+    DataRequest,
+    RuntimeDataAdapter,
+    SpatialSpec,
+    VariableSpec,
+    bundle_from_parts,
+    loader_config,
+)
 
 _FILENAME_RE = re.compile(
     r"^Z_RADA_C_[^_]+_(?P<generation>\d{14})_P_DOR_[^_]+_CREF_"
@@ -19,18 +34,6 @@ _FILENAME_RE = re.compile(
     re.IGNORECASE,
 )
 
-
-from interfaces.data import (
-    ChannelSpec,
-    DataBundle,
-    DataCapabilities,
-    DataRequest,
-    DeclaredDataAdapter,
-    SpatialSpec,
-    VariableSpec,
-    bundle_from_parts,
-    loader_config,
-)
 
 # Dataset. Fixed before any request runs.
 ID = "cma_radar"
@@ -44,6 +47,19 @@ CHANNELS = "closed"
 NATIVE_CADENCE_MINUTES = 6
 CROP = True
 FORMATS = ("npz", "bin")
+
+
+_CONTEXT_STEPS = 6
+_TARGET_STEPS = 20
+_WINDOW_STEP = dt.timedelta(minutes=NATIVE_CADENCE_MINUTES)
+_LEAD_MINUTES = tuple(
+    NATIVE_CADENCE_MINUTES * step for step in range(1, _TARGET_STEPS + 1)
+)
+_DEMO_NOTICE = (
+    "Cross-domain demo: SEVIR pretrained NowcastNet applied to CREF. "
+    "0..75 dBZ mapped linearly to 0..255; 6 min runtime cadence replaces "
+    "5 min training cadence. Forecast skill is not validated."
+)
 
 
 def _parse_utc(value: str) -> dt.datetime:
@@ -97,30 +113,28 @@ def _discover_cref_files(data_dir: Path) -> list[CREFFile]:
     return files
 
 
+def _latest_cref_files(data_dir: Path) -> dict[dt.datetime, CREFFile]:
+    index: dict[dt.datetime, CREFFile] = {}
+    for item in _discover_cref_files(data_dir):
+        previous = index.get(item.data_time)
+        if previous is None or item.generation_time > previous.generation_time:
+            index[item.data_time] = item
+    return index
+
+
 def _select_latest_generation(
-    files: list[CREFFile],
+    index: dict[dt.datetime, CREFFile],
     data_time: dt.datetime,
 ) -> CREFFile:
-    matched = [f for f in files if f.data_time == data_time]
-
-    if not matched:
-        available = sorted({f.data_time for f in files})
-        nearest = sorted(
-            available,
-            key=lambda t: abs(t - data_time),
-        )[:4]
-
+    if data_time not in index:
+        nearest = sorted(sorted(index), key=lambda t: abs(t - data_time))[:4]
         nearest_text = ", ".join(_iso_utc(t) for t in nearest) if nearest else "none"
-
         raise FileNotFoundError(
             "\nCMA CREF file not found\n"
             f"requested_data_time = {_iso_utc(data_time)}\n"
             f"nearest_available   = {nearest_text}"
         )
-
-    # Several files can represent the same actual radar time.
-    # Use the most recently generated version.
-    return max(matched, key=lambda f: f.generation_time)
+    return index[data_time]
 
 
 def _validate_bbox(bbox) -> list[float]:
@@ -279,7 +293,7 @@ def read_cref(path: str | Path) -> xr.DataArray:
             # [west, south, east, north]
             "native_bounds": native_bounds,
             "decoder_note": (
-                "int16 values scaled by 0.1 following " "the supplied CREF reader"
+                "int16 values scaled by 0.1 following the supplied CREF reader"
             ),
         },
     )
@@ -324,9 +338,7 @@ def load_cma_radar(config: dict) -> dict:
     interval_minutes = int(config["interval_minutes"])
 
     if history_steps < 1 or interval_minutes < 1:
-        raise ValueError(
-            "history_steps and interval_minutes " "must be positive integers"
-        )
+        raise ValueError("history_steps and interval_minutes must be positive integers")
 
     channels = [str(c).upper() for c in config["channels"]]
 
@@ -337,8 +349,8 @@ def load_cma_radar(config: dict) -> dict:
     bbox = region.get("bbox") if isinstance(region, dict) else None
     bbox = _validate_bbox(bbox)
 
-    all_files = _discover_cref_files(data_dir)
-    if not all_files:
+    file_index = _latest_cref_files(data_dir)
+    if not file_index:
         raise FileNotFoundError(f"No CMA CREF .bin files found in {data_dir}")
 
     times = _requested_times(
@@ -359,10 +371,7 @@ def load_cma_radar(config: dict) -> dict:
     results = {}
 
     for requested_time in times:
-        selected = _select_latest_generation(
-            all_files,
-            requested_time,
-        )
+        selected = _select_latest_generation(file_index, requested_time)
 
         full_da = read_cref(selected.path)
         native_bbox = full_da.attrs["native_bounds"]
@@ -436,7 +445,144 @@ def load_cma_radar(config: dict) -> dict:
     return results
 
 
-class Source(DeclaredDataAdapter):
+def _inspect_cref(path):
+    with path.open("rb") as stream:
+        header = stream.read(256)
+        if len(header) != 256 or min(struct.unpack_from("<ii", header, 148)) < 1:
+            raise ValueError("Invalid CREF grid header")
+        flag = struct.unpack_from("<h", header, 166)[0]
+        if flag == 1:
+            # A bzip2 block can require nearly 1 MiB before yielding a byte.
+            cell = bz2.BZ2Decompressor().decompress(stream.read(2 << 20), max_length=2)
+        elif flag == 0:
+            cell = stream.read(2)
+        else:
+            raise ValueError("Unsupported CREF compression")
+        if len(cell) != 2:
+            raise ValueError("No CREF cell within probe limit")
+        return struct.unpack("<h", cell)[0] / 10
+
+
+def _inspect_npz(path):
+    # ZipFile loads the central directory when opened, before member selection.
+    if path.stat().st_size > 64 << 20:
+        raise ValueError("NPZ archive exceeds probe limit")
+    with zipfile.ZipFile(path) as archive:
+        info = archive.getinfo("reflectivity.npy")
+        if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+            raise ValueError("Unsupported NPZ compression")
+        with archive.open(info) as member:
+            prefix = io.BytesIO(member.read(16384))
+    version = np.lib.format.read_magic(prefix)
+    readers = {
+        (1, 0): np.lib.format.read_array_header_1_0,
+        (2, 0): np.lib.format.read_array_header_2_0,
+    }
+    if version not in readers:
+        raise ValueError("Unsupported reflectivity NPY version")
+    shape, _, dtype = readers[version](prefix)
+    if len(shape) != 2 or min(shape) < 1 or dtype.kind not in "iuf":
+        raise ValueError("Expected a numeric reflectivity grid")
+    return float(np.frombuffer(prefix.read(dtype.itemsize), dtype=dtype, count=1)[0])
+
+
+def _window_file_index(path: Path) -> dict[dt.datetime, CREFFile]:
+    root = Path(path)
+    if not root.is_dir():
+        raise FileNotFoundError(
+            "CMA data directory is unavailable; choose the cma-radar folder"
+        )
+    index = _latest_cref_files(root)
+    if not index:
+        raise FileNotFoundError("No CREF files found under the selected directory")
+    return index
+
+
+def _window_times(first: dt.datetime) -> list[dt.datetime]:
+    return [first + _WINDOW_STEP * i for i in range(_CONTEXT_STEPS + _TARGET_STEPS)]
+
+
+def _check_window_times(
+    index: dict[dt.datetime, CREFFile], event_id: str, start: str
+) -> list[dt.datetime]:
+    first = _parse_utc(start)
+    if event_id != first.strftime("%Y%m%d"):
+        raise ValueError("CMA sample date must match the first context time")
+    times = _window_times(first)
+    missing = [_iso_utc(time) for time in times if time not in index]
+    if missing:
+        raise FileNotFoundError("CMA window has missing frames: " + ", ".join(missing))
+    return times
+
+
+def _regional_grid(center_lon: float, center_lat: float) -> dict:
+    from pyproj import CRS
+
+    if not np.isfinite([center_lon, center_lat]).all() or not (
+        76 <= center_lon <= 132 and 15 <= center_lat <= 51
+    ):
+        raise ValueError("Choose a regional center inside 76..132 E, 15..51 N")
+    crs = CRS.from_proj4(
+        f"+proj=laea +lat_0={center_lat} +lon_0={center_lon} +datum=WGS84 +units=m"
+    )
+    axis = (np.arange(128, dtype=np.float64) - 63.5) * 3000
+    return {
+        "crs": crs.to_wkt(),
+        "x": axis.copy(),
+        "y": axis.copy(),
+        "axis_units": "m",
+        "resolution_m": 3000,
+        "center_lon": float(center_lon),
+        "center_lat": float(center_lat),
+        "source": "CMA CREF geographic grid -> regional LAEA; nearest source cell",
+        "missing_policy": (
+            "raw -1280 no echo -> 0; raw <= -1000 otherwise masked; "
+            "negative valid dBZ clipped to 0 for demo"
+        ),
+    }
+
+
+def _regrid(field: xr.DataArray, grid: dict) -> np.ndarray:
+    from pyproj import Transformer
+
+    xx, yy = np.meshgrid(grid["x"], grid["y"])
+    lon, lat = Transformer.from_crs(grid["crs"], "EPSG:4326", always_xy=True).transform(
+        xx, yy
+    )
+    longitude, latitude = field.longitude.values, field.latitude.values
+    col = np.rint((lon - longitude[0]) / (longitude[1] - longitude[0])).astype(int)
+    row = np.rint((lat - latitude[0]) / (latitude[1] - latitude[0])).astype(int)
+    if (
+        (row < 0).any()
+        or (row >= len(latitude)).any()
+        or (col < 0).any()
+        or (col >= len(longitude)).any()
+    ):
+        raise ValueError("3 km regional grid extends outside this radar mosaic")
+    values = np.asarray(field.values[row, col], dtype=np.float32)
+    # The decoder scales raw -1280 (no echo) and <= -1000 flags by 0.1.
+    no_echo = values == -128.0
+    valid = (values > -100.0) | no_echo
+    return np.where(valid, np.maximum(np.where(no_echo, 0, values), 0), np.nan).astype(
+        np.float32
+    )
+
+
+class Source(RuntimeDataAdapter):
+    def inspect_sample(self, root: Path) -> dict:
+        from utils.sample_files import first_file
+
+        path = first_file(
+            root,
+            lambda p: (
+                p.suffix.lower() == ".npz" or bool(_FILENAME_RE.fullmatch(p.name))
+            ),
+        )
+        value = (
+            _inspect_npz(path) if path.suffix.lower() == ".npz" else _inspect_cref(path)
+        )
+        return {"sample": path.relative_to(root).as_posix(), "value": value}
+
     CAPABILITIES = DataCapabilities(
         id=ID,
         version=VERSION,
@@ -450,6 +596,110 @@ class Source(DeclaredDataAdapter):
         native_cadence_minutes=NATIVE_CADENCE_MINUTES,
         formats=FORMATS,
     )
+
+    def list_samples(
+        self,
+        path: Path,
+        *,
+        catalog: Path | None = None,
+        offset: int = 0,
+        limit: int = 100,
+        day: str | None = None,
+    ) -> dict:
+        if offset < 0 or not 1 <= limit <= 500:
+            raise ValueError("sample pagination requires offset>=0 and 1<=limit<=500")
+        index = _window_file_index(path)
+        starts = [
+            start
+            for start in sorted(index)
+            if all(t in index for t in _window_times(start))
+        ]
+        days = sorted({start.strftime("%Y%m%d") for start in starts})
+        if day:
+            starts = [start for start in starts if start.strftime("%Y%m%d") == day]
+        samples = []
+        for row, start in enumerate(starts[offset : offset + limit], start=offset):
+            event_id = start.strftime("%Y%m%d")
+            start_time = _iso_utc(start)
+            samples.append(
+                {
+                    "sample_id": f"{event_id}@{start_time}",
+                    "event_id": event_id,
+                    "row": row,
+                    "context_start_time": start_time,
+                    "init_time": _iso_utc(start + _WINDOW_STEP * (_CONTEXT_STEPS - 1)),
+                    "lead_minutes": list(_LEAD_MINUTES),
+                    "ready": True,
+                    "grid": {"shape": [128, 128], "resolution_m": 3000},
+                    "notice": _DEMO_NOTICE,
+                }
+            )
+        return {
+            "data_id": ID,
+            "total": len(starts),
+            "offset": offset,
+            "limit": limit,
+            "days": days,
+            "day": day,
+            "samples": samples,
+        }
+
+    def check_window(
+        self, path: Path, event_id: str, start: str, *, catalog: Path | None = None
+    ) -> dict:
+        times = _check_window_times(_window_file_index(path), event_id, start)
+        return {
+            "event_id": event_id,
+            "context_start_time": _iso_utc(times[0]),
+            "ready": True,
+        }
+
+    def read_window(
+        self,
+        path: Path,
+        event_id: str,
+        start: str,
+        *,
+        catalog: Path | None = None,
+        center_lon: float | None = None,
+        center_lat: float | None = None,
+    ) -> tuple[dict, dict]:
+        index = _window_file_index(path)
+        times = _check_window_times(index, event_id, start)
+        grid = _regional_grid(
+            118.0 if center_lon is None else center_lon,
+            32.0 if center_lat is None else center_lat,
+        )
+        files = [index[time].path for time in times]
+        values = np.stack([_regrid(read_cref(file), grid) for file in files])
+        if not np.isfinite(values[:_CONTEXT_STEPS]).all():
+            raise ValueError(
+                "Selected CMA region contains missing input pixels; choose another center or time window"
+            )
+        stamps = [_iso_utc(time) for time in times]
+        return {
+            "data_id": ID,
+            "variable": VARIABLE_ID,
+            "unit": VARIABLE_UNITS,
+            "cadence_minutes": NATIVE_CADENCE_MINUTES,
+            "context": values[:_CONTEXT_STEPS],
+            "target": values[_CONTEXT_STEPS:],
+            "context_times": stamps[:_CONTEXT_STEPS],
+            "target_times": stamps[_CONTEXT_STEPS:],
+            "context_start_time": stamps[0],
+            "init_time": stamps[_CONTEXT_STEPS - 1],
+            "lead_minutes": list(_LEAD_MINUTES),
+            "event_id": event_id,
+            "sample_id": f"{event_id}@{stamps[0]}",
+            "row": sorted(index).index(times[0]),
+            "provenance": {
+                "notice": _DEMO_NOTICE,
+                "source_files": [str(file.relative_to(path)) for file in files],
+                "mapping_dbz": [0, 75],
+                "training_data": "SEVIR VIL",
+                "evaluation_levels": [10, 20, 30, 40, 50],
+            },
+        }, grid
 
     def load(self, request: DataRequest) -> DataBundle:
         self.validate(request)
