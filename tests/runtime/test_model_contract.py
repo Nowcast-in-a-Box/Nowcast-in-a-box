@@ -31,7 +31,7 @@ class Declaration(DeclaredModelAdapter):
 
 @pytest.mark.parametrize(
     "path",
-    sorted((ROOT / "contracts/models").glob("*/*.json")),
+    sorted((ROOT / "atlas/contracts/models").glob("*/*.json")),
     ids=lambda p: f"{p.parent.name}/{p.stem}",
 )
 def test_queries_and_packaged_metadata(path):

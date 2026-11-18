@@ -86,7 +86,7 @@ def candidate(tmp_path, monkeypatch):
         declaration["input"].update(context_frames=2, spatial=[2, 2])
         declaration["output"].update(spatial=[2, 2])
         declaration["weights"].update(filename="model.bin", sha256=sha256(weights))
-        contract = f"contracts/models/{data_id}/{model_id}.json"
+        contract = f"atlas/contracts/models/{data_id}/{model_id}.json"
         dockerfile = f"adapters/{data_id}/{model_id}/Dockerfile"
         for name, content in {
             contract: json.dumps(declaration),
@@ -124,11 +124,14 @@ def candidate(tmp_path, monkeypatch):
         def execute(command, **kwargs):
             events.append(command)
             if command[0] == "git":
+                assert "--recurse-submodules" in command
                 # New shared modules are intentionally absent from the tracked list.
                 return SimpleNamespace(stdout="\0".join((contract, dockerfile)) + "\0")
             if command[:3] == ["docker", "buildx", "build"]:
                 Path(command[command.index("--iidfile") + 1]).write_text(IMAGE_ID)
                 context = Path(command[-1])
+                assert (context / contract).is_file()
+                assert not (context / "contracts").exists()
                 assert (context / "interfaces/fields.py").is_file()
                 assert (context / "utils/model_contract.py").is_file()
                 assert not list(context.rglob("*.npz"))
@@ -315,7 +318,7 @@ def test_template_uses_single_declaration_and_raises(tmp_path):
     adapter_dir.mkdir(parents=True)
     adapter = adapter_dir / "adapter.py"
     adapter.write_text((ROOT / "docs/templates/model/adapter.py").read_text())
-    contract = tmp_path / "contracts/models/example_data/example_model.json"
+    contract = tmp_path / "atlas/contracts/models/example_data/example_model.json"
     contract.parent.mkdir(parents=True)
     contract.write_text((ROOT / "docs/templates/model/declaration.json").read_text())
     module = load_module(adapter)
@@ -328,5 +331,5 @@ def test_template_uses_single_declaration_and_raises(tmp_path):
     with pytest.raises(NotImplementedError, match="offline inference"):
         module.ADAPTER.predict(None, weights_path="unused")
     dockerfile = (ROOT / "docs/templates/model/Dockerfile").read_text()
-    assert "COPY contracts/models/example_data/example_model.json " in dockerfile
+    assert "COPY atlas/contracts/models/example_data/example_model.json " in dockerfile
     assert not (adapter_dir / "declaration.json").exists()

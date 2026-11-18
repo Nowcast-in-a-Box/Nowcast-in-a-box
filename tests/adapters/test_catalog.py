@@ -15,7 +15,7 @@ from interfaces.errors import ConstraintError
 
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTERS = ROOT / "adapters"
-CONTRACTS = ROOT / "contracts"
+CONTRACTS = ROOT / "atlas" / "contracts"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 IDS = ("cma_radar", "gk2a", "himawari9", "fy4b", "mtg", "sevir") + tuple(
     f"mlcast_{item}"

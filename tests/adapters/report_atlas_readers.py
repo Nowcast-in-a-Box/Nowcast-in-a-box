@@ -25,17 +25,16 @@ def report(root):
         ids.add(key)
         if row.get("path") != key:
             problems.append(f"{label}: {key} declares a different reader path")
-        for base in {"contracts/data", contracts}:
-            path = root / base / f"{key}.json"
-            if not path.is_file():
-                problems.append(f"{label}: {key} is missing {base}/{key}.json")
-                continue
-            declaration = json.loads(path.read_text())
-            if (declaration.get("id"), declaration.get("version")) != (
-                key,
-                row.get("version"),
-            ):
-                problems.append(f"{label}: {key} ID or version differs in {base}")
+        path = root / contracts / f"{key}.json"
+        if not path.is_file():
+            problems.append(f"{label}: {key} is missing {contracts}/{key}.json")
+            continue
+        declaration = json.loads(path.read_text())
+        if (declaration.get("id"), declaration.get("version")) != (
+            key,
+            row.get("version"),
+        ):
+            problems.append(f"{label}: {key} ID or version differs in {contracts}")
     problems.extend(f"{label}: register {key}" for key in sorted(implemented - ids))
     problems.extend(
         f"{label}: missing reader for {key}" for key in sorted(ids - implemented)

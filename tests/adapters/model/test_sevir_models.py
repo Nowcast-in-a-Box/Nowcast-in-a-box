@@ -19,7 +19,7 @@ from tests.field_fixtures import mock_onnx, observations
 from utils.weights import ensure_weights, file_sha256
 
 ROOT = Path(__file__).resolve().parents[3]
-DECLARATIONS = sorted((ROOT / "contracts/models/sevir").glob("*.json"))
+DECLARATIONS = sorted((ROOT / "atlas/contracts/models/sevir").glob("*.json"))
 
 
 class WeightSkipTests(unittest.TestCase):
