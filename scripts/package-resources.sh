@@ -11,11 +11,10 @@ mkdir -p resources
 cp -R adapters resources/adapters
 cp -R diagnostics resources/diagnostics
 cp -R interfaces resources/interfaces
-cp -R contracts resources/contracts
 cp -R utils resources/utils
 mkdir -p resources/atlas/contracts
 cp -R atlas/runtime atlas/catalog resources/atlas/
-cp -R atlas/contracts/hub resources/atlas/contracts/
+cp -R atlas/contracts/. resources/atlas/contracts/
 # Visualization caches are local build data, not a runtime resource.
 rm -rf resources/diagnostics/visualization/data
 rm -rf resources/diagnostics/visualization/viewer/node_modules \

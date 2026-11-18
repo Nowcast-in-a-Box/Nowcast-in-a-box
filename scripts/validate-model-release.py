@@ -21,7 +21,9 @@ def declaration_for(data_id, model_id):
     from interfaces.model import DeclaredModelAdapter
 
     class Declaration(DeclaredModelAdapter):
-        declaration_path = ROOT / "contracts/models" / data_id / f"{model_id}.json"
+        declaration_path = (
+            ROOT / "atlas/contracts/models" / data_id / f"{model_id}.json"
+        )
 
         def prepare(self, observations):
             raise NotImplementedError
@@ -165,10 +167,11 @@ def build_context(destination, data_id, model_id):
         [
             "git",
             "ls-files",
+            "--recurse-submodules",
             "-z",
             "--",
             "adapters",
-            "contracts/models",
+            "atlas/contracts/models",
             "interfaces",
             "utils",
         ],
