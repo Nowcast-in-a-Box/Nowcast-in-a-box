@@ -44,7 +44,6 @@ contracts/        YAML/manifest schemas. Not a Python package.
 interfaces/       data and model contracts. Not a host package.
 utils/            path resolution and weight download. Not a host package.
 adapters/         packaging-time source; not a host package
-  catalog.json    web index of data readers and paired models
   <data-id>/      one data source; source.py
     <model-id>/   one model; its program is adapter.py
 docs/             architecture and process
@@ -60,7 +59,7 @@ No repository-root `pyproject.toml` or `uv.lock`. Python belongs
 inside a Model Container, or in the diagnostics image.
 `adapters/` is that packaging source. The handler does not import it.
 Data directory names are data names. Model adapters live only under the
-data source they were paired with. `catalog.json` is the web index.
+data source they were paired with. `atlas/runtime/adapters-catalog.json` is the public index.
 Observation samples stay outside git. `scripts/fetch-demo-data.py` downloads a
 small set into the gitignored `testdata/demo-data/`; file-backed tests read
 `NIB_DATA_ROOT` and skip when nothing is there.
@@ -109,7 +108,7 @@ NiB HUB / Catalog                 selection + config; does not execute
         ↓
 Handler (host daemon)             loopback HTTP, URI scheme, preflight, jobs
         ↓ Docker Compose
-Data Ingestion                    read-only /inputs/data
+Data Adapter                    read-only /inputs/data
 Model Container                   one image per algorithm
         ↓
 diagnostics container             metrics and frames; not the model image
@@ -118,7 +117,7 @@ runs/                             diagnostics outputs (gitignored)
 ```
 
 Adapters are optional packaging-time conversion. Runtime data access is
-Data Ingestion.
+Data Adapter.
 
 ## Invariants
 
@@ -157,8 +156,8 @@ Use `filepath` and `os.PathSeparator` for host paths; do not assume `/`.
 Container modules follow their own image. File an issue and get it
 assigned before you write code.
 
-Python: Black. Config is `black.toml`, not a root `pyproject.toml`.
-Run `scripts/format-python.sh` before sending Python changes.
+Python: Ruff. Config is `ruff.toml`, not a root `pyproject.toml`.
+Run `ruff format .` and `ruff check .` before sending Python changes.
 
 [contrib]: CONTRIBUTING.md
 [gh]: docs/guides/github-setup.md

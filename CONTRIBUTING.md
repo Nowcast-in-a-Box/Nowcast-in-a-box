@@ -150,6 +150,6 @@ Use the [documentation index](docs/README.md) to find current guides and referen
 
 ## Runtime boundaries and formatting
 
-The host handler is Go. Model inference, metrics, and visualization run in Docker. Python formatting uses `black.toml` and `scripts/format-python.sh`.
+The host handler is Go. Model inference, metrics, and visualization run in Docker. Install the pinned Ruff from `tests/requirements-dev.lock.txt`. Run `ruff format .` and `ruff check .` from the repository root.
 
 Do not commit weights, checkpoints, ONNX, HDF5, run images, PDFs, Word or Visio files, secrets, runtime outputs under `runs/`, or downloaded `artifacts/`. Do not add a root Python project or `uv.lock`. See [weights](docs/guides/weights.md).

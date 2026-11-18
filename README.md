@@ -118,7 +118,7 @@ Handler local console     edits orders, starts runs, shows history
       │
 Handler (local program)    preflight, container start, run records
       │  Docker Compose
-      ├── Data Ingestion       reads files under a read-only mount
+      ├── Data Adapter       reads files under a read-only mount
       ├── Model Container      one image per algorithm, no network
       └── Diagnostics          comparison images, animation, metrics
       │
@@ -177,7 +177,7 @@ go test ./...
 scripts/cross-build.sh
 ```
 
-The Handler code is in `handler/`. Data readers and model programs are in `adapters/`, one folder per data source, with each model below its data source. `adapters/catalog.json` is the index that the Hub reads. Container definitions live next to the code that they run, in `runtime.yaml` and `Dockerfile` under each data and model folder. Python formatting uses `scripts/format-python.sh` with `black.toml`.
+The Handler code is in `handler/`. Data readers and model programs are in `adapters/`, one folder per data source, with each model below its data source. `atlas/runtime/adapters-catalog.json` is the index that the Hub reads. Container definitions live next to the code that they run, in `runtime.yaml` and `Dockerfile` under each data and model folder. Contributors use `ruff format .` and `ruff check .` for Python.
 
 The release packages are built by the release workflow from a `v*` tag on `main`. The package script is `scripts/package-resources.sh`, and the zip holds user files only.
 
