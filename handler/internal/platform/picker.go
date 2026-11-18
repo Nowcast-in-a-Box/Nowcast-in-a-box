@@ -1,4 +1,4 @@
-package handler
+package platform
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func nativePickFolder() (string, error) {
+func NativePickFolder() (string, error) {
 	var command *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":

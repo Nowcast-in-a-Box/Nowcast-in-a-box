@@ -1,53 +1,19 @@
 package handler
 
 import (
-	"crypto/sha256"
-	"embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
 	"gopkg.in/yaml.v3"
 )
-
-// The offline console is served by the Handler itself: orders saved on this
-// machine can be listed and started without the Hub. Forecast and verification
-// results stay in the diagnostics viewer behind /v1/runs/{id}/files/.
-
-//go:embed console_page.html
-var consolePage string
-
-//go:embed console_assets/fonts
-var consoleFonts embed.FS
-
-// File names must be safe on every platform: no separators or colons, no
-// leading dot, no trailing dot/space, and no Windows-reserved stems. Hub ids
-// are lowercase by contract, but the manifest grammar is not enforced here.
-var packageIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
-
-var windowsReservedNames = map[string]bool{
-	"con": true, "prn": true, "aux": true, "nul": true,
-	"com1": true, "com2": true, "com3": true, "com4": true, "com5": true,
-	"com6": true, "com7": true, "com8": true, "com9": true,
-	"lpt1": true, "lpt2": true, "lpt3": true, "lpt4": true, "lpt5": true,
-	"lpt6": true, "lpt7": true, "lpt8": true, "lpt9": true,
-}
-
-func validPackageID(id string) bool {
-	if !packageIDPattern.MatchString(id) || strings.HasSuffix(id, ".") || strings.HasSuffix(id, " ") {
-		return false
-	}
-	stem, _, _ := strings.Cut(strings.ToLower(id), ".")
-	return !windowsReservedNames[stem]
-}
 
 type orderSummary struct {
 	PackageID     string   `json:"package_id"`
@@ -80,56 +46,6 @@ func requestSummary(request *RuntimeRequest) orderSummary {
 	}
 }
 
-// handleConsole serves the offline control page with this session's token.
-// The token lives in the no-store response only; the page keeps it in memory.
-func (s *Server) handleConsole(w http.ResponseWriter, r *http.Request) {
-	page := strings.Replace(consolePage, `"__NIB_TOKEN__"`, strconv.Quote(s.Token), 1)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = io.WriteString(w, page)
-}
-
-// consoleFontNames are the embedded Inter glyphs (SIL OFL 1.1) the console
-// page loads from its CSS; the bytes are public so no token is required,
-// but the loopback host check still applies.
-var consoleFontNames = map[string]bool{
-	"inter-latin-400-normal.woff2": true,
-	"inter-latin-500-normal.woff2": true,
-	"inter-latin-600-normal.woff2": true,
-}
-
-func handleConsoleFont(w http.ResponseWriter, r *http.Request) {
-	if !IsLoopbackRequestHost(r.Host) {
-		http.Error(w, "refusing non-loopback host", http.StatusForbidden)
-		return
-	}
-	name := r.PathValue("name")
-	if !consoleFontNames[name] {
-		http.NotFound(w, r)
-		return
-	}
-	body, err := consoleFonts.ReadFile("console_assets/fonts/" + name)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	etag := `"` + hex.EncodeToString(sha256Of(body)[:16]) + `"`
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "no-cache")
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	w.Header().Set("Content-Type", "font/woff2")
-	_, _ = w.Write(body)
-}
-
-func sha256Of(body []byte) []byte {
-	digest := sha256.Sum256(body)
-	return digest[:]
-}
-
-// Saved YAML orders are editable; historical runs are read-only fallbacks.
 func (s *Server) handleOrdersList(w http.ResponseWriter, r *http.Request) {
 	cfg := s.currentConfig()
 	summaries := []orderSummary{}
@@ -310,7 +226,7 @@ func (s *Server) readOrderInput(w http.ResponseWriter, r *http.Request) (Order, 
 		Order    *Order  `json:"order"`
 		Revision string  `json:"revision"`
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2*maxOrderBytes))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2*orders.MaxBytes))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil {
 		return Order{}, RuntimeRequest{}, "", err
@@ -327,13 +243,13 @@ func (s *Server) readOrderInput(w http.ResponseWriter, r *http.Request) (Order, 
 	if input.YAML != nil {
 		order, request, err = ParseOrder([]byte(*input.YAML), s.Resources, s.Config.Runtime.MaxBatchSamples)
 	} else {
-		order, request, err = normalizeOrder(*input.Order, s.Resources, s.Config.Runtime.MaxBatchSamples)
+		order, request, err = orders.Normalize(*input.Order, s.Resources, s.Config.Runtime.MaxBatchSamples)
 	}
 	return order, request, input.Revision, err
 }
 
 func (s *Server) loadOrder(id string) (Order, RuntimeRequest, []byte, error) {
-	if !validPackageID(id) || id != strings.ToLower(id) {
+	if !orders.ValidID(id) || id != strings.ToLower(id) {
 		return Order{}, RuntimeRequest{}, nil, fmt.Errorf("invalid order_id")
 	}
 	path := filepath.Join(s.currentConfig().Paths.Orders, id+".yaml")
@@ -341,7 +257,7 @@ func (s *Server) loadOrder(id string) (Order, RuntimeRequest, []byte, error) {
 	if err != nil {
 		return Order{}, RuntimeRequest{}, nil, err
 	}
-	if !info.Mode().IsRegular() || info.Size() > maxOrderBytes {
+	if !info.Mode().IsRegular() || info.Size() > orders.MaxBytes {
 		return Order{}, RuntimeRequest{}, nil, fmt.Errorf("order must be a regular YAML file of at most 1 MiB")
 	}
 	raw, err := os.ReadFile(path)

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package handler
+package platform
 
 import (
 	"fmt"
@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-func lockFile(path string) (func(), error) {
+func LockFile(path string, wait time.Duration) (func(), error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
-	deadline := time.Now().Add(singletonWait)
+	deadline := time.Now().Add(wait)
 	for {
 		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {

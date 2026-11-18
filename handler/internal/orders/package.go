@@ -1,4 +1,4 @@
-package handler
+package orders
 
 import (
 	"archive/zip"
@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/resources"
 )
 
 const maxPackageBytes = 8 << 20
@@ -62,7 +64,7 @@ var MetricFamilies = map[string]string{
 	"fss": "spatial", "corr": "moments",
 }
 
-func metricGroups(config map[string]json.RawMessage, data *DataResource) ([]map[string]any, error) {
+func MetricGroups(config map[string]json.RawMessage, data *resources.DataResource) ([]map[string]any, error) {
 	for key := range config {
 		switch key {
 		case "methods", "levels", "half_windows":
@@ -174,8 +176,8 @@ func metricInts(raw json.RawMessage) ([]int, error) {
 
 // ParseRuntimePackage checks the immutable package before selecting any execution.
 // Templates and deployment material remain inert bytes.
-func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (RuntimeRequest, error) {
-	if resources == nil {
+func ParseRuntimePackage(raw []byte, expected string, registry *resources.Resources) (RuntimeRequest, error) {
+	if registry == nil {
 		return RuntimeRequest{}, fmt.Errorf("runtime resources are not loaded")
 	}
 	var request RuntimeRequest
@@ -294,7 +296,7 @@ func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (Run
 	request.PackageSHA256 = expected
 	itemCategories := map[string]string{}
 	dataItem := ""
-	var dataResource *DataResource
+	var dataResource *resources.DataResource
 	for _, item := range manifest.Items {
 		if item.ID == "" || itemCategories[item.ID] != "" {
 			return request, fmt.Errorf("repeated item")
@@ -313,7 +315,7 @@ func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (Run
 		if dataItem != "" {
 			return request, fmt.Errorf("one data product required")
 		}
-		resource, ok := resources.DataByProductID(item.Product)
+		resource, ok := registry.DataByProductID(item.Product)
 		if !ok {
 			return request, fmt.Errorf("this Handler does not package data product %q; update its resources", item.Product)
 		}
@@ -367,12 +369,12 @@ func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (Run
 		if len(item.Config) != 0 {
 			return request, fmt.Errorf("invalid model configuration")
 		}
-		var model *ModelResource
+		var model *resources.ModelResource
 		var ok bool
 		if item.RuntimeModelID != "" {
-			model, ok = resources.ModelByID(request.DataID, item.RuntimeModelID)
+			model, ok = registry.ModelByID(request.DataID, item.RuntimeModelID)
 		} else {
-			model, ok = resources.ModelByProductID(request.DataID, item.Product)
+			model, ok = registry.ModelByProductID(request.DataID, item.Product)
 		}
 		if !ok {
 			return request, fmt.Errorf("this Handler does not package model %q for data %q", item.Product, request.DataID)
@@ -396,7 +398,7 @@ func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (Run
 			if request.Metrics != nil {
 				return request, fmt.Errorf("invalid evaluation product")
 			}
-			groups, err := metricGroups(item.Config, dataResource)
+			groups, err := MetricGroups(item.Config, dataResource)
 			if err != nil {
 				return request, err
 			}
@@ -459,7 +461,7 @@ func ParseRuntimePackage(raw []byte, expected string, resources *Resources) (Run
 	return request, nil
 }
 
-func dataName(data *DataResource) string {
+func dataName(data *resources.DataResource) string {
 	if data == nil {
 		return "data"
 	}

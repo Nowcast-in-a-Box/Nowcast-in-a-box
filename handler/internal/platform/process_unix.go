@@ -1,6 +1,6 @@
 //go:build !windows
 
-package handler
+package platform
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ import (
 	"syscall"
 )
 
-func processExited(pid int) bool {
+func ProcessExited(pid int) bool {
 	if errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
 		return true
 	}
@@ -22,13 +22,13 @@ func processExited(pid int) bool {
 	return err == nil && strings.HasPrefix(strings.TrimSpace(string(output)), "Z")
 }
 
-func terminateProcess(process *os.Process) error {
+func TerminateProcess(process *os.Process) error {
 	return process.Signal(syscall.SIGTERM)
 }
 
 // listenerPID finds the process listening on a loopback port so an
 // unauthenticated Handler can still be stopped.
-func listenerPID(port int) (int, error) {
+func ListenerPID(port int) (int, error) {
 	if lsof, err := exec.LookPath("lsof"); err == nil {
 		output, err := lsofOutput(lsof, port)
 		if err == nil {

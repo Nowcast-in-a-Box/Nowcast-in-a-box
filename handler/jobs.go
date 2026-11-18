@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/platform"
+
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -51,6 +54,7 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/orders", s.authorize(s.handleOrderSave))
 	mux.HandleFunc("GET /v1/order-options", s.authorize(s.handleOrderOptions))
 	mux.HandleFunc("POST /v1/orders/validate", s.authorize(s.handleOrderValidate))
+	mux.HandleFunc("POST /v1/orders/import-selection", s.authorize(s.importSelection))
 	mux.HandleFunc("GET /v1/orders/{package_id}", s.authorize(s.handleOrder))
 	mux.HandleFunc("PATCH /v1/orders/{package_id}", s.authorize(s.handleOrderSave))
 	mux.HandleFunc("POST /v1/orders/{package_id}/runs", s.authorize(s.handleOrderRun))
@@ -193,7 +197,7 @@ func (s *Server) listSamples(ctx context.Context, dataID string, offset, limit i
 	if day != "" {
 		extra = append(extra, "--day", day)
 	}
-	args, err := s.dataCommandArgs(dataID, data, catalog, extra...)
+	args, err := s.readerCommandArgs(dataID, data, catalog, extra...)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +248,7 @@ func (s *Server) admitOrder(order Order, revision, key, triggerID string) (*Job,
 	if len(key) > 128 {
 		return nil, 400, fmt.Errorf("idempotency key is too long")
 	}
-	order, request, err := normalizeOrder(order, s.Resources, s.Config.Runtime.MaxBatchSamples)
+	order, request, err := orders.Normalize(order, s.Resources, s.Config.Runtime.MaxBatchSamples)
 	if err != nil {
 		return nil, 422, err
 	}
@@ -470,7 +474,7 @@ func (s *Server) executeJob(id string) {
 			return fmt.Errorf("missing configured image")
 		}
 		service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
-		if user := containerUser(); user != "" {
+		if user := platform.ContainerUser(); user != "" {
 			service["user"] = user
 		}
 		composition := map[string]any{"services": map[string]any{"task": service}}
@@ -511,8 +515,8 @@ func (s *Server) executeJob(id string) {
 		s.updateJob(id, "failed", "preflight", err)
 		return
 	}
-	// Ingestion creates a child run inside the job workspace, then publishes its contents.
-	args, err := s.dataCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+	// The data adapter creates a child run inside the job workspace, then publishes its contents.
+	args, err := s.readerCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 	if err != nil {
 		s.updateJob(id, "failed", "preflight", err)
 		return
@@ -521,7 +525,7 @@ func (s *Server) executeJob(id string) {
 		args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 	}
 	args = append([]string{"-v", volumeSpec(directory, "/workspace", false)}, args...)
-	err = run("ingestion", args...)
+	err = run("read-inputs", args...)
 	if err == nil {
 		child := filepath.Join(directory, id)
 		entries, readErr := os.ReadDir(child)
@@ -544,7 +548,7 @@ func (s *Server) executeJob(id string) {
 		}
 	}
 	if err != nil {
-		s.updateJob(id, "failed", "ingestion", err)
+		s.updateJob(id, "failed", "read-inputs", err)
 		return
 	}
 	if len(request.ModelNames) > 0 {
@@ -554,7 +558,7 @@ func (s *Server) executeJob(id string) {
 			readErr = json.Unmarshal(rawManifest, &manifest)
 		}
 		if readErr != nil {
-			s.updateJob(id, "failed", "ingestion", readErr)
+			s.updateJob(id, "failed", "read-inputs", readErr)
 			return
 		}
 		names, _ := manifest["model_names"].(map[string]any)
@@ -567,11 +571,11 @@ func (s *Server) executeJob(id string) {
 		manifest["model_names"] = names
 		raw, marshalErr := json.MarshalIndent(manifest, "", "  ")
 		if marshalErr != nil {
-			s.updateJob(id, "failed", "ingestion", marshalErr)
+			s.updateJob(id, "failed", "read-inputs", marshalErr)
 			return
 		}
 		if writeErr := os.WriteFile(filepath.Join(directory, "manifest.json"), raw, 0o644); writeErr != nil {
-			s.updateJob(id, "failed", "ingestion", writeErr)
+			s.updateJob(id, "failed", "read-inputs", writeErr)
 			return
 		}
 	}
@@ -640,7 +644,7 @@ func (s *Server) runStage(ctx context.Context, directory, id, stage string, args
 		return fmt.Errorf("missing configured image")
 	}
 	service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
-	if user := containerUser(); user != "" {
+	if user := platform.ContainerUser(); user != "" {
 		service["user"] = user
 	}
 	composition := map[string]any{"services": map[string]any{"task": service}}
@@ -695,7 +699,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 	}
 	samplesRoot := filepath.Join(directory, "samples")
 	if err := os.MkdirAll(samplesRoot, 0o755); err != nil {
-		s.updateJob(id, "failed", "ingestion", err)
+		s.updateJob(id, "failed", "read-inputs", err)
 		return
 	}
 	starts := request.SampleStarts
@@ -717,7 +721,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 			eventID = strings.ReplaceAll(start[:10], "-", "")
 		}
 		s.updateJob(id, "running", fmt.Sprintf("sample %d/%d", index+1, len(starts)), nil)
-		args, argErr := s.dataCommandArgs(request.DataID, data, catalog, "--event", eventID, "--start", start, "--runs", "/workspace", "--id", childID, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+		args, argErr := s.readerCommandArgs(request.DataID, data, catalog, "--event", eventID, "--start", start, "--runs", "/workspace", "--id", childID, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 		if argErr != nil {
 			failures = append(failures, childID+": "+argErr.Error())
 			continue
@@ -726,8 +730,8 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 			args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 		}
 		args = append([]string{"-v", volumeSpec(samplesRoot, "/workspace", false)}, args...)
-		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-ingestion", args...); err != nil {
-			failures = append(failures, childID+": ingestion: "+err.Error())
+		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-read-inputs", args...); err != nil {
+			failures = append(failures, childID+": read-inputs: "+err.Error())
 			continue
 		}
 		for _, model := range request.Models {
@@ -774,7 +778,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 		samples = append(samples, sample)
 	}
 	if firstManifest == nil {
-		s.updateJob(id, "failed", "ingestion", fmt.Errorf("no sample window completed: %s", strings.Join(failures, "; ")))
+		s.updateJob(id, "failed", "read-inputs", fmt.Errorf("no sample window completed: %s", strings.Join(failures, "; ")))
 		return
 	}
 	batchManifest := map[string]any{
@@ -791,7 +795,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 		batchManifest["failed_samples"] = failures
 	}
 	if err := s.writeManifestJSON(directory, batchManifest); err != nil {
-		s.updateJob(id, "failed", "ingestion", err)
+		s.updateJob(id, "failed", "read-inputs", err)
 		return
 	}
 	if len(request.Metrics) == 0 && !request.Visualization {
@@ -925,7 +929,7 @@ func (s *Server) handleRunAgain(w http.ResponseWriter, r *http.Request) {
 	}
 	path := filepath.Join(s.Config.Paths.Runs, id, "order.yaml")
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > maxOrderBytes {
+	if err != nil || !info.Mode().IsRegular() || info.Size() > orders.MaxBytes {
 		runtimeError(w, 409, fmt.Errorf("run has no regular frozen YAML order and cannot be repeated"))
 		return
 	}

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/platform"
+
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -299,7 +301,7 @@ func stopRecordedInstance(cfg Config, session localSession) error {
 		_, err := probeAddress(context.Background(), session.URL)
 		if errors.Is(err, errNotRunning) && listenerClosed(session.ReviewURL) {
 			_, recordErr := readSession(cfg)
-			if processExited(session.PID) {
+			if platform.ProcessExited(session.PID) {
 				removeSession(cfg, session.InstanceID)
 				return nil
 			}
@@ -337,7 +339,7 @@ func stopUnidentified(cfg Config, reason error, force bool) error {
 	if !force {
 		return fmt.Errorf("%w; use stop -force to end the unidentified Handler at %s", reason, address)
 	}
-	pid, err := listenerPID(cfg.Handler.Port)
+	pid, err := platform.ListenerPID(cfg.Handler.Port)
 	if err != nil {
 		return err
 	}
@@ -346,7 +348,7 @@ func stopUnidentified(cfg Config, reason error, force bool) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "stopping unidentified Handler %s (PID %d) at %s: %v\n", identity.InstanceID, pid, address, reason)
-	if err := terminateProcess(process); err != nil && !processExited(pid) {
+	if err := platform.TerminateProcess(process); err != nil && !platform.ProcessExited(pid) {
 		return err
 	}
 	deadline := time.Now().Add(12 * time.Second)

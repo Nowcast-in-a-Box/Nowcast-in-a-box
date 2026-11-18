@@ -54,6 +54,9 @@ func qualifyImage(image, registry string) string {
 
 func (s *Server) imageCandidates(image string) []string {
 	config := s.currentConfig()
+	if config.Runtime.ImageOverride != "" {
+		return []string{qualifyImage(image, config.Runtime.ImageOverride)}
+	}
 	source, err := normalizeImageSource(config.Runtime.ImageSource)
 	if err != nil {
 		source = "auto"

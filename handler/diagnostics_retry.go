@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/platform"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -148,7 +151,7 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 	}
 	config := map[string]any{"version": 2, "run": "/run"}
 	if verification != nil {
-		if err := validateSubset(verification.Models, available); err != nil {
+		if err := orders.ValidateSubset(verification.Models, available); err != nil {
 			runtimeError(w, 422, err)
 			return
 		}
@@ -156,7 +159,7 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		mapping["methods"], _ = json.Marshal(verification.Methods)
 		mapping["levels"], _ = json.Marshal(verification.Levels)
 		mapping["half_windows"], _ = json.Marshal(verification.HalfWindows)
-		groups, err := metricGroups(mapping, dataResource)
+		groups, err := orders.MetricGroups(mapping, dataResource)
 		if err != nil {
 			runtimeError(w, 422, err)
 			return
@@ -164,7 +167,7 @@ func (s *Server) handleRetryDiagnostics(w http.ResponseWriter, r *http.Request) 
 		config["metrics"], config["verification_models"] = groups, verification.Models
 	}
 	if visualization != nil {
-		if err := validateSubset(visualization.Models, available); err != nil {
+		if err := orders.ValidateSubset(visualization.Models, available); err != nil {
 			runtimeError(w, 422, err)
 			return
 		}
@@ -245,7 +248,7 @@ func (s *Server) prepareDiagnostics(id string, config map[string]any) (Diagnosti
 	}
 	command := expandCommand(diagnostics.Container.Command, map[string]string{"request": requestPath})
 	service := map[string]any{"image": diagnostics.Container.Image, "command": command, "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
-	if user := containerUser(); user != "" {
+	if user := platform.ContainerUser(); user != "" {
 		service["user"] = user
 	}
 	raw, err = yaml.Marshal(map[string]any{"services": map[string]any{"task": service}})

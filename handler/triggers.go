@@ -6,6 +6,8 @@ package handler
 // trigger never edits an order; it only replaces the start window of one.
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -691,7 +693,7 @@ func (s *Server) handleTriggerCreate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if input.PackageID == nil || !validPackageID(*input.PackageID) {
+	if input.PackageID == nil || !orders.ValidID(*input.PackageID) {
 		runtimeError(w, 422, fmt.Errorf("choose a saved order"))
 		return
 	}

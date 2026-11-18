@@ -1,6 +1,6 @@
 //go:build windows
 
-package handler
+package platform
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"syscall"
 )
 
-func processExited(pid int) bool {
+func ProcessExited(pid int) bool {
 	handle, err := syscall.OpenProcess(syscall.SYNCHRONIZE, false, uint32(pid))
 	if err != nil {
 		return err == syscall.Errno(87)
@@ -22,13 +22,13 @@ func processExited(pid int) bool {
 }
 
 // Windows has no SIGTERM; os.Process.Signal only supports Kill here.
-func terminateProcess(process *os.Process) error {
+func TerminateProcess(process *os.Process) error {
 	return process.Kill()
 }
 
 // listenerPID finds the process listening on a loopback port so an
 // unauthenticated Handler can still be stopped.
-func listenerPID(port int) (int, error) {
+func ListenerPID(port int) (int, error) {
 	out, err := exec.Command("netstat", "-ano", "-p", "tcp").Output()
 	if err != nil {
 		return 0, fmt.Errorf("cannot identify the process on port %d: %w", port, err)

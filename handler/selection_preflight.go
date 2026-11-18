@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,7 +24,7 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		SampleStarts []string `json:"sample_starts"`
 		Models       []string `json:"models"`
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2*maxOrderBytes))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2*orders.MaxBytes))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		runtimeError(w, 400, err)
@@ -44,7 +46,7 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		if request.YAML != nil {
 			order, normalized, err = ParseOrder([]byte(*request.YAML), s.Resources, s.currentConfig().Runtime.MaxBatchSamples)
 		} else {
-			order, normalized, err = normalizeOrder(*request.Order, s.Resources, s.currentConfig().Runtime.MaxBatchSamples)
+			order, normalized, err = orders.Normalize(*request.Order, s.Resources, s.currentConfig().Runtime.MaxBatchSamples)
 		}
 		if err != nil {
 			runtimeError(w, 422, err)
@@ -101,7 +103,7 @@ func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, even
 	}
 	ctx, cancel := context.WithTimeout(parent, time.Minute)
 	defer cancel()
-	args, err := s.dataCommandArgs(dataID, data, catalog, "--check-window", "--event", eventID, "--start", start)
+	args, err := s.readerCommandArgs(dataID, data, catalog, "--check-window", "--event", eventID, "--start", start)
 	if err != nil {
 		return Check{ID: id, OK: false, Message: err.Error()}
 	}
@@ -120,7 +122,7 @@ func (s *Server) windowCheck(parent context.Context, dataID, data, catalog, even
 		return Check{ID: id, OK: false, Message: "selected window metadata was not ready"}
 	}
 	if dataID == "cma_radar" {
-		return Check{ID: id, OK: true, Message: "time-window metadata passed; regional footprint and pixel availability are not probed until ingestion"}
+		return Check{ID: id, OK: true, Message: "time-window metadata passed; regional footprint and pixel availability are not probed until the adapter reads the selected window"}
 	}
 	return Check{ID: id, OK: true, Message: "selected window exists and catalog integrity passed"}
 }

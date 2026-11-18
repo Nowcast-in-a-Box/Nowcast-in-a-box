@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
+
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -86,7 +88,7 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 		}
 	}
 	if raw, err := os.ReadFile(filepath.Join(directory, "order.yaml")); err == nil {
-		if order, err := decodeOrder(raw); err == nil {
+		if order, err := orders.Decode(raw); err == nil {
 			manifest["order"] = order
 		}
 	}
@@ -126,6 +128,53 @@ func (s *Server) runManifest(id string) (map[string]any, error) {
 	return manifest, nil
 }
 
+// Dashboard reads live work independently of the bounded history preview.
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	type row struct {
+		ID      string `json:"id"`
+		OrderID string `json:"order_id,omitempty"`
+		Status  string `json:"status"`
+	}
+	active, recent := []row{}, []row{}
+	live := map[string]bool{}
+	s.jobsMu.Lock()
+	for _, j := range s.jobs {
+		if j.Status == "running" || j.Status == "queued" {
+			active = append(active, row{j.ID, j.Request.OrderID, j.Status})
+			live[j.ID] = true
+		}
+	}
+	s.jobsMu.Unlock()
+	sort.Slice(active, func(i, j int) bool { return active[i].ID > active[j].ID })
+	entries, err := os.ReadDir(s.Config.Paths.Runs)
+	if err != nil && !os.IsNotExist(err) {
+		runtimeError(w, 500, err)
+		return
+	}
+	// Run IDs start with UTC creation time. ReadDir already sorted the names.
+	for i := len(entries) - 1; i >= 0 && len(recent) < 8; i-- {
+		entry := entries[i]
+		id := entry.Name()
+		if !entry.IsDir() || !idPattern.MatchString(id) || live[id] {
+			continue
+		}
+		var job struct {
+			ID, Status string
+			Request    struct {
+				OrderID string `json:"order_id"`
+			}
+		}
+		raw, err := os.ReadFile(filepath.Join(s.Config.Paths.Runs, id, "job.json"))
+		if err != nil || json.Unmarshal(raw, &job) != nil || job.ID != id {
+			continue
+		}
+		if job.Status == "queued" || job.Status == "running" {
+			job.Status = "interrupted"
+		}
+		recent = append(recent, row{id, job.Request.OrderID, job.Status})
+	}
+	writeJSON(w, 200, map[string]any{"active": active, "recent": recent})
+}
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	offset, limit, err := pagination(r)
 	if err != nil {

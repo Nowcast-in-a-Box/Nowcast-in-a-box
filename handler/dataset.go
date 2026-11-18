@@ -162,7 +162,7 @@ func (s *Server) mountHost(name, dataID, modelID, directory, data, catalog strin
 	return "", fmt.Errorf("unknown runtime mount %q", name)
 }
 
-func (s *Server) dataCommandArgs(dataID, data, catalog string, extra ...string) ([]string, error) {
+func (s *Server) readerCommandArgs(dataID, data, catalog string, extra ...string) ([]string, error) {
 	resource, err := s.dataResource(dataID)
 	if err != nil {
 		return nil, err

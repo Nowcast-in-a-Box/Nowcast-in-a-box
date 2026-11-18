@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/console"
+
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -12,8 +14,8 @@ import (
 	"time"
 )
 
-// Version is the handler release identifier reported on /v1/status.
-const Version = "0.1.0"
+// Version is stamped by the build; plain go build has no branch metadata.
+var Version = "dev-unknown"
 
 // Server is the loopback HTTP API.
 type Server struct {
@@ -108,13 +110,15 @@ func randomToken() string {
 // rejected.
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", s.handleConsole)
-	mux.HandleFunc("GET /console/fonts/{name}", handleConsoleFont)
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) { console.ServePage(w, s.Token) })
+	mux.HandleFunc("GET /console/fonts/{name}", console.ServeFont)
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /v1/identity", s.handleIdentity)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
 	mux.HandleFunc("POST /v1/control/stop", s.authorize(s.handleStop))
 	mux.HandleFunc("POST /v1/control/restart", s.authorize(s.handleRestart))
+	mux.HandleFunc("POST /v1/datasets/{dataset}/inspect", s.authorize(s.handleReaderInspect))
+	mux.HandleFunc("GET /v1/dashboard", s.authorize(s.handleDashboard))
 	s.runtimeRoutes(mux)
 	return s.loopbackOnly(s.originControl(s.admitRequests(mux)))
 }

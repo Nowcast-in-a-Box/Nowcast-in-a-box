@@ -1,12 +1,12 @@
 //go:build !windows
 
-package handler
+package platform
 
 import (
 	"os"
 	"strconv"
 )
 
-func containerUser() string {
+func ContainerUser() string {
 	return strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid())
 }
