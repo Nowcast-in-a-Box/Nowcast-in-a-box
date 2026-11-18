@@ -1,2 +1,0 @@
-# Add pinned dependencies for your chosen backend. No backend is prescribed.
-numpy==2.5.3
