@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from nib_verify.core.quantities import (
     accumulate,
     box_sum,
@@ -85,7 +84,6 @@ def test_box_sum_matches_a_naive_loop():
     for half in (0, 1, 2, 3):
         got = box_sum(a, half)
         assert got.shape == a.shape
-        k = 2 * half + 1
         for i in range(a.shape[0]):
             for j in range(a.shape[1]):
                 lo_i, hi_i = max(0, i - half), min(a.shape[0], i + half + 1)
@@ -150,7 +148,7 @@ def test_a_window_that_is_mostly_hole_is_not_used():
     """The floor has to bite somewhere, or it is not a floor."""
     truth = np.zeros((10, 10))
     valid = np.ones((10, 10), dtype=bool)
-    valid[:5, :] = False          # half the grid is gone; 9 of 25 cells left below
+    valid[:5, :] = False  # half the grid is gone; 9 of 25 cells left below
     got = spatial(truth, truth, 1.0, 2, valid)
     assert got["n_valid"] > 0, "the deep half still has whole neighbourhoods"
     assert got["n_valid"] < 100, "and the boundary does not"
@@ -165,7 +163,9 @@ def test_accumulate_dispatches_by_family():
     pred = truth.copy()
     valid = np.ones((8, 8), dtype=bool)
     out = accumulate(
-        truth, pred, valid,
+        truth,
+        pred,
+        valid,
         families=("yes_or_no", "continuous", "moments", "spatial"),
         levels=(5.0,),
         half_windows=(1,),

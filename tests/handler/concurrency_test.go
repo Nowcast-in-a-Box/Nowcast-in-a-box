@@ -27,7 +27,7 @@ type concurrentRunner struct {
 
 func (r *concurrentRunner) Run(ctx context.Context, args ...string) (int, []byte, error) {
 	joined := " " + strings.Join(args, " ") + " "
-	if strings.Contains(joined, " up ") && (strings.Contains(joined, "compose-ingestion.yaml") || r.diagnostics && strings.Contains(joined, "diagnostics-")) {
+	if strings.Contains(joined, " up ") && (strings.Contains(joined, "compose-read-inputs.yaml") || r.diagnostics && strings.Contains(joined, "diagnostics-")) {
 		r.entered <- joined
 		select {
 		case <-r.release:

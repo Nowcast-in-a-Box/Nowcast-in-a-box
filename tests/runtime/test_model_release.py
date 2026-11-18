@@ -1,11 +1,11 @@
 """Release gates use synthetic fields and mocked Docker, never samples or weights."""
 
-from dataclasses import replace
-from datetime import timedelta
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
+from dataclasses import replace
+from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -80,7 +80,7 @@ def candidate(tmp_path, monkeypatch):
         weights = tmp_path / "synthetic.bin"
         weights.write_bytes(b"not model weights")
         declaration = json.loads(
-            (ROOT / "templates/model/declaration.json").read_text()
+            (ROOT / "docs/templates/model/declaration.json").read_text()
         )
         declaration.update(id=model_id, data_adapter_id=data_id)
         declaration["input"].update(context_frames=2, spatial=[2, 2])
@@ -314,10 +314,10 @@ def test_template_uses_single_declaration_and_raises(tmp_path):
     adapter_dir = tmp_path / "adapters/example_data/example_model"
     adapter_dir.mkdir(parents=True)
     adapter = adapter_dir / "adapter.py"
-    adapter.write_text((ROOT / "templates/model/adapter.py").read_text())
+    adapter.write_text((ROOT / "docs/templates/model/adapter.py").read_text())
     contract = tmp_path / "contracts/models/example_data/example_model.json"
     contract.parent.mkdir(parents=True)
-    contract.write_text((ROOT / "templates/model/declaration.json").read_text())
+    contract.write_text((ROOT / "docs/templates/model/declaration.json").read_text())
     module = load_module(adapter)
     assert module.ADAPTER.declaration_path == contract
     obs = observations(
@@ -327,6 +327,6 @@ def test_template_uses_single_declaration_and_raises(tmp_path):
         module.ADAPTER.prepare(obs)
     with pytest.raises(NotImplementedError, match="offline inference"):
         module.ADAPTER.predict(None, weights_path="unused")
-    dockerfile = (ROOT / "templates/model/Dockerfile").read_text()
+    dockerfile = (ROOT / "docs/templates/model/Dockerfile").read_text()
     assert "COPY contracts/models/example_data/example_model.json " in dockerfile
     assert not (adapter_dir / "declaration.json").exists()

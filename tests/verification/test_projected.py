@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-
 from nib_verify.access.base import Coords, Field, ProjectedCoords
 from nib_verify.config.schema import Ruler
 from nib_verify.core.regrid import regrid, target_coords
@@ -23,7 +22,8 @@ def test_projected_identical_grid_preserves_values_and_mask():
 
 def test_geographic_fingerprint_stable_and_projected_distinct():
     ruler = Ruler("sevir", "raw", 5, (0.0, 0.0, 3.0, 3.0), 1.0)
-    import hashlib, json
+    import hashlib
+    import json
 
     payload = {
         "ground_truth": "sevir",

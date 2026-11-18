@@ -93,7 +93,7 @@ func TestStructuredDiagnosticsUseSavedForecastSubsets(t *testing.T) {
 	defer runner.mu.Unlock()
 	for _, call := range runner.calls {
 		joined := strings.Join(call, " ")
-		if strings.Contains(joined, "nib-ingestion") || strings.Contains(joined, "nib-wadepre") || strings.Contains(joined, "nib-nowcastnet") {
+		if strings.Contains(joined, "nib-reader-") || strings.Contains(joined, "nib-wadepre") || strings.Contains(joined, "nib-nowcastnet") {
 			t.Fatalf("retry reran inference: %s", joined)
 		}
 	}

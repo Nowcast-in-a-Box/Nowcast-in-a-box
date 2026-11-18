@@ -3,10 +3,11 @@ import sys
 
 import numpy as np
 import pytest
+from test_stored_fields import fixture_forecast
+from test_stored_fields import run as run
 
 from diagnostics.__main__ import main
 from utils.stored_fields import StoredFields, add_forecast
-from test_stored_fields import run, fixture_forecast
 
 
 @pytest.mark.parametrize(

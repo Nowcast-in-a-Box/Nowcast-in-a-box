@@ -172,7 +172,7 @@ func TestAsyncJobUsesControlledOfflineArgumentsAndIdempotency(t *testing.T) {
 	if len(executions) != 4 || strings.Contains(joined, "diagnostics") {
 		t.Fatalf("calls=%v", runner.calls)
 	}
-	for _, stage := range []string{"ingestion", "wadepre"} {
+	for _, stage := range []string{"read-inputs", "wadepre"} {
 		raw, err := os.ReadFile(filepath.Join(cfg.Paths.Runs, first.ID, "compose-"+stage+".yaml"))
 		if err != nil {
 			t.Fatal(err)

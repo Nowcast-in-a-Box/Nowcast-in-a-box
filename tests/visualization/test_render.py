@@ -26,14 +26,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
-from pyproj import Transformer
-from shapely.geometry import LineString, Polygon
-
 from nib_visualization import PreparedScene, RenderConfig, prepare_scene, render_frame
 from nib_visualization.basemap import LocalBasemap, load_basemap
 from nib_visualization.cli import main as cli_main
 from nib_visualization.field import VisualizationField
 from nib_visualization.fixtures import make_fixture
+from pyproj import Transformer
+from shapely.geometry import LineString, Polygon
 
 REPO_ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 SOURCE_RECORD = REPO_ROOT / "basemap_sources" / "selected-source.json"
@@ -49,8 +48,9 @@ def test_explicit_world_view_keeps_regional_field_and_time_unchanged():
         assert scene.viewport == (-180, 180, -90, 90)
         assert scene.crop_extents_wgs84 == ((-180, 180, -90, 90),)
         assert scene.central_longitude == 0
-        np.testing.assert_allclose(scene.axes.get_extent(ccrs.PlateCarree()),
-                                   [-180, 180, -90, 90])
+        np.testing.assert_allclose(
+            scene.axes.get_extent(ccrs.PlateCarree()), [-180, 180, -90, 90]
+        )
         np.testing.assert_allclose(scene.x_edges, oracle_edges(field.values.x))
         np.testing.assert_allclose(scene.y_edges, oracle_edges(field.values.y))
         assert scene.field_footprint[1] - scene.field_footprint[0] < 20
@@ -65,6 +65,7 @@ def test_explicit_world_view_keeps_regional_field_and_time_unchanged():
 def test_explicit_viewport_rejects_invalid_geographic_extent():
     with pytest.raises(ValueError, match="viewport_wgs84"):
         RenderConfig(viewport_wgs84=(-180, 180, -91, 90))
+
 
 # Canonical-length footer strings (from selected-source.json) exercise wrapping.
 LONG_ATTRIBUTION = (
@@ -315,7 +316,9 @@ def test_r0_invalid_config_raises_value_error(kwargs):
 
 def test_r0_constant_field_and_single_color_limit(tmp_path):
     constant = build_field(
-        values=np.full((2, 4, 5), 3.25), x=np.linspace(8.0, 12.0, 5), y=np.linspace(49.0, 52.0, 4)
+        values=np.full((2, 4, 5), 3.25),
+        x=np.linspace(8.0, 12.0, 5),
+        y=np.linspace(49.0, 52.0, 4),
     )
     scene = prepare_scene(constant, RenderConfig(), germany_basemap())
     try:
@@ -370,7 +373,9 @@ def test_m1_mesh_uses_native_edges_from_centres(grid):
         coords = scene.mesh.get_coordinates()
         assert coords.shape == (y.size + 1, x.size + 1, 2)
         np.testing.assert_allclose(
-            coords[..., 0], np.broadcast_to(expected_x, (y.size + 1, x.size + 1)), rtol=1e-9
+            coords[..., 0],
+            np.broadcast_to(expected_x, (y.size + 1, x.size + 1)),
+            rtol=1e-9,
         )
         np.testing.assert_allclose(
             coords[..., 1],
@@ -419,7 +424,9 @@ def test_m1_gaussian_peak_geographic_alignment(grid):
 
         # scene-level display alignment: known lon/lat -> display -> data cell
         disp = scene.display_crs.transform_point(8.5, 50.0, ccrs.PlateCarree())
-        native = scene.data_cartopy_crs.transform_point(disp[0], disp[1], scene.display_crs)
+        native = scene.data_cartopy_crs.transform_point(
+            disp[0], disp[1], scene.display_crs
+        )
         ci = cell_index_of(scene.x_edges, native[0])
         cj = cell_index_of(scene.y_edges, native[1])
         assert abs(ci - i) <= 1
@@ -440,7 +447,12 @@ def test_m1_latlon_viewport_is_footprint_plus_five_percent_buffer():
         x = field.values.coords["x"].values
         y = field.values.coords["y"].values
         ex, ey = oracle_edges(x), oracle_edges(y)
-        west, east, south, north = float(ex[0]), float(ex[-1]), float(ey[0]), float(ey[-1])
+        west, east, south, north = (
+            float(ex[0]),
+            float(ex[-1]),
+            float(ey[0]),
+            float(ey[-1]),
+        )
         span_lon, span_lat = east - west, north - south
         assert scene.field_footprint == pytest.approx((west, east, south, north))
         assert scene.viewport == pytest.approx(
@@ -662,7 +674,9 @@ def test_m2_descending_y_nan_zero_alignment_and_immutability(tmp_path):
         # spatial oracle through the scene: analytical peak (8.5E, 50N)
         j, i = argmax_cell(mesh_values)
         disp = scene.display_crs.transform_point(8.5, 50.0, ccrs.PlateCarree())
-        native = scene.data_cartopy_crs.transform_point(disp[0], disp[1], scene.display_crs)
+        native = scene.data_cartopy_crs.transform_point(
+            disp[0], disp[1], scene.display_crs
+        )
         ci = cell_index_of(scene.x_edges, native[0])
         cj = cell_index_of(scene.y_edges, native[1])
         assert abs(ci - i) <= 1
@@ -725,7 +739,9 @@ def test_m3_dateline_seam_two_legal_crops_local_viewport(tmp_path):
 
         # both sides of the seam survive in the cropped geometry
         land_geoms = [
-            g for view in scene.basemap_views for g in view.layers["country_land"].geometry
+            g
+            for view in scene.basemap_views
+            for g in view.layers["country_land"].geometry
         ]
         assert any(g.bounds[0] > 170.0 for g in land_geoms)
         assert any(g.bounds[2] < -170.0 for g in land_geoms)
@@ -810,9 +826,8 @@ def test_m4_accumulation_interval_displayed():
 
 
 def test_m4_layer_order_and_line_styles(monkeypatch):
-    from cartopy.mpl.geoaxes import GeoAxes
-
     import nib_visualization.render as render_module
+    from cartopy.mpl.geoaxes import GeoAxes
 
     created: list[dict] = []
 
@@ -868,7 +883,9 @@ def test_m4_texts_inside_canvas_and_footer_clear_of_axes(tmp_path):
 
         def inside(artist):
             box = artist.get_window_extent(renderer=renderer)
-            return box.x0 >= 0.0 and box.y0 >= 0.0 and box.x1 <= width and box.y1 <= height
+            return (
+                box.x0 >= 0.0 and box.y0 >= 0.0 and box.x1 <= width and box.y1 <= height
+            )
 
         assert inside(scene.axes.title)
         assert inside(scene.time_artist)
@@ -891,9 +908,17 @@ def test_m4_cli_map_smoke(tmp_path, capsys):
     out = tmp_path / "nested" / "dir" / "map.png"
     rc = cli_main(
         [
-            "map", "--grid", "latlon", "--lead-index", "2",
-            "--basemap", str(gpkg), "--source-record", str(record),
-            "--output", str(out),
+            "map",
+            "--grid",
+            "latlon",
+            "--lead-index",
+            "2",
+            "--basemap",
+            str(gpkg),
+            "--source-record",
+            str(record),
+            "--output",
+            str(out),
         ]
     )
     assert rc == 0
@@ -904,18 +929,34 @@ def test_m4_cli_map_smoke(tmp_path, capsys):
 
     rc_bad_record = cli_main(
         [
-            "map", "--grid", "latlon", "--lead-index", "0",
-            "--basemap", str(gpkg), "--source-record", str(tmp_path / "missing.json"),
-            "--output", str(tmp_path / "bad.png"),
+            "map",
+            "--grid",
+            "latlon",
+            "--lead-index",
+            "0",
+            "--basemap",
+            str(gpkg),
+            "--source-record",
+            str(tmp_path / "missing.json"),
+            "--output",
+            str(tmp_path / "bad.png"),
         ]
     )
     assert rc_bad_record != 0
 
     rc_bad_lead = cli_main(
         [
-            "map", "--grid", "latlon", "--lead-index", "99",
-            "--basemap", str(gpkg), "--source-record", str(record),
-            "--output", str(tmp_path / "bad2.png"),
+            "map",
+            "--grid",
+            "latlon",
+            "--lead-index",
+            "99",
+            "--basemap",
+            str(gpkg),
+            "--source-record",
+            str(record),
+            "--output",
+            str(tmp_path / "bad2.png"),
         ]
     )
     assert rc_bad_lead != 0
@@ -934,9 +975,17 @@ def test_m4_offline_render_with_sockets_blocked(tmp_path, monkeypatch):
     out = tmp_path / "offline.png"
     rc = cli_main(
         [
-            "map", "--grid", "projected", "--lead-index", "0",
-            "--basemap", str(gpkg), "--source-record", str(record),
-            "--output", str(out),
+            "map",
+            "--grid",
+            "projected",
+            "--lead-index",
+            "0",
+            "--basemap",
+            str(gpkg),
+            "--source-record",
+            str(record),
+            "--output",
+            str(out),
         ]
     )
     assert rc == 0
@@ -952,7 +1001,9 @@ def test_m4_offline_render_with_sockets_blocked(tmp_path, monkeypatch):
 def test_m4_real_cache_map_png(tmp_path, grid):
     cache = Path(os.environ["NIB_BASEMAP_PATH"])
     if not cache.is_file():
-        pytest.fail(f"NIB_BASEMAP_PATH={cache} does not point to an existing cache file")
+        pytest.fail(
+            f"NIB_BASEMAP_PATH={cache} does not point to an existing cache file"
+        )
     field = make_fixture(grid)
     basemap = load_basemap(cache, SOURCE_RECORD)
     scene = prepare_scene(field, RenderConfig(), basemap)

@@ -11,7 +11,6 @@ from dataclasses import replace
 from datetime import date, timedelta, timezone
 
 import pytest
-
 from nib_verify.access import CountingAccess
 from nib_verify.catalog.packages import discover as discover_packages
 from nib_verify.catalog.runs import RunBook, RunConfig
@@ -37,8 +36,14 @@ from .conftest import (
 UTC = timezone.utc
 
 
-def _run_dict(*, model="mlcast-det", data="radar-composite",
-              start="2026-01-01T00:00:00Z", horizon=6, sample_id=None) -> dict:
+def _run_dict(
+    *,
+    model="mlcast-det",
+    data="radar-composite",
+    start="2026-01-01T00:00:00Z",
+    horizon=6,
+    sample_id=None,
+) -> dict:
     run = {"forecast_horizon": horizon}
     if start:
         run["start_time"] = start
@@ -55,7 +60,7 @@ def _runbook(*payloads) -> RunBook:
 # the happy path
 # ======================================================================
 def test_a_matching_run_expands_into_tasks(platform):
-    cfg = make_config()          # member mlcast-det, leads 10/20/30, cadence 10
+    cfg = make_config()  # member mlcast-det, leads 10/20/30, cadence 10
     result = plan(cfg, platform.runbook())
 
     assert not result.rejections
@@ -175,8 +180,11 @@ def test_a_run_from_another_source_is_refused_by_name(platform):
     """The ruler names the observation source. A prediction made from a different
     one is not what the config asked for, and scoring it against the ruler's truth
     would produce a number about an experiment nobody described."""
-    result = plan(make_config(), _runbook(_run_dict(data="satellite-vil")),
-                  catalog=platform.catalog())
+    result = plan(
+        make_config(),
+        _runbook(_run_dict(data="satellite-vil")),
+        catalog=platform.catalog(),
+    )
     assert not result.tasks
     assert result.reasons() == {"other-source": 1}
     assert "satellite-vil" in result.rejections[0].detail
@@ -214,7 +222,9 @@ def test_probe_off_is_the_default():
 
 
 def test_probe_counts_frames_the_observations_do_not_cover():
-    access = CountingAccess(make_access(unavailable_times=(T0 + timedelta(minutes=20),)))
+    access = CountingAccess(
+        make_access(unavailable_times=(T0 + timedelta(minutes=20),))
+    )
     result = plan(make_config(), _runbook(_run_dict()), access=access, probe=True)
     assert result.coverage["available"] == 2
     assert result.coverage["unavailable"] == 1
@@ -224,8 +234,9 @@ def test_probe_counts_frames_the_observations_do_not_cover():
 def test_probe_reports_a_provider_that_cannot_answer_at_all():
     cfg = make_config()
     cfg = replace(cfg, ruler=replace(cfg.ruler, ground_truth="not-a-thing"))
-    result = plan(cfg, _runbook(_run_dict(data="not-a-thing")),
-                  access=make_access(), probe=True)
+    result = plan(
+        cfg, _runbook(_run_dict(data="not-a-thing")), access=make_access(), probe=True
+    )
     assert result.coverage["available"] == 0
     assert "error" in result.coverage
 
@@ -235,12 +246,16 @@ def test_probe_reports_a_provider_that_cannot_answer_at_all():
 # ======================================================================
 def test_two_members_plan_independently():
     cfg = make_config()
-    cfg = replace(cfg, members=(
-        cfg.member("mlcast-det"),
-        Member(name="simvp", variable="vil", unit="kg m-2", leads=(10,)),
-    ))
-    result = plan(cfg, _runbook(_run_dict(model="mlcast-det"),
-                                _run_dict(model="simvp")))
+    cfg = replace(
+        cfg,
+        members=(
+            cfg.member("mlcast-det"),
+            Member(name="simvp", variable="vil", unit="kg m-2", leads=(10,)),
+        ),
+    )
+    result = plan(
+        cfg, _runbook(_run_dict(model="mlcast-det"), _run_dict(model="simvp"))
+    )
     assert len(result.tasks) == 4, "3 for one member, 1 for the other"
     assert result.members == ["mlcast-det", "simvp"]
     assert result.leads == [10, 20, 30]
@@ -263,10 +278,15 @@ def test_the_plan_says_which_models_it_turned_away():
     """`12 not-on-roster` was the whole report, and it is the shape of report
     that hides things: two radar models on a satellite ruler were in the twelve
     and the page named neither."""
-    cfg = make_config()          # roster: mlcast-det only
-    result = plan(cfg, _runbook(_run_dict(model="mlcast-det"),
-                                _run_dict(model="mlcast-alt"),
-                                _run_dict(model="satcast-det")))
+    cfg = make_config()  # roster: mlcast-det only
+    result = plan(
+        cfg,
+        _runbook(
+            _run_dict(model="mlcast-det"),
+            _run_dict(model="mlcast-alt"),
+            _run_dict(model="satcast-det"),
+        ),
+    )
 
     assert result.as_dict()["reasons"] == {"not-on-roster": 2}
     turned_away = {r["model"] for r in result.as_dict()["rejections"]}

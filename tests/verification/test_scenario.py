@@ -21,14 +21,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import nib_verify.demo as demo_module
 import numpy as np
 import pytest
-
-import nib_verify.demo as demo_module
 from nib_verify.access import FieldUnavailable, scenario
 from nib_verify.access.factory import build_access
 from nib_verify.access.synthetic import MISSING_KINDS, SyntheticAccess
-
 from nib_verify.core.regrid import align_pair
 
 from .conftest import T0, make_access
@@ -65,8 +63,10 @@ def interior_points(mask: np.ndarray) -> int:
     """
     core = (
         mask[1:-1, 1:-1]
-        & mask[:-2, 1:-1] & mask[2:, 1:-1]
-        & mask[1:-1, :-2] & mask[1:-1, 2:]
+        & mask[:-2, 1:-1]
+        & mask[2:, 1:-1]
+        & mask[1:-1, :-2]
+        & mask[1:-1, 2:]
     )
     return int(core.sum())
 
@@ -94,9 +94,13 @@ def test_cell_zero_is_untouched_by_the_new_parameters():
     """``cells=1, drift=0`` has to be the same field, or every expectation that
     a noiseless forecast equals the truth needs rewriting."""
     plain = SyntheticAccess()
-    decorated = SyntheticAccess(cells=1, background=0.0,
-                                forecast_lag_minutes=30.0, skill_spread=2.0,
-                                missing_kind="none")
+    decorated = SyntheticAccess(
+        cells=1,
+        background=0.0,
+        forecast_lag_minutes=30.0,
+        skill_spread=2.0,
+        missing_kind="none",
+    )
     coords = plain.obs_coords
     assert np.array_equal(plain.blob(coords, T0), decorated.blob(coords, T0))
 
@@ -137,7 +141,7 @@ def test_every_scenario_is_named_and_described():
 
 def test_an_unknown_scenario_lists_the_real_ones():
     with pytest.raises(ValueError, match="simple.*convective.*widespread.*patchy"):
-        scenario.settings("convectiv")          # a typo, which is the point
+        scenario.settings("convectiv")  # a typo, which is the point
 
 
 def test_settings_can_be_overridden_by_the_caller():
@@ -186,16 +190,20 @@ def test_a_background_raises_the_floor_over_the_whole_domain():
 def test_a_lagging_forecast_is_the_field_from_earlier_not_a_blurred_one():
     """The displacement is the point. A blurred field would score the same at
     every threshold; a displaced one loses the cores and keeps the edges."""
-    access = SyntheticAccess(cells=3, drift=0.08, forecast_lag_minutes=30.0,
-                             forecast_noise=0.0, truth_noise=0.0)
+    access = SyntheticAccess(
+        cells=3,
+        drift=0.08,
+        forecast_lag_minutes=30.0,
+        forecast_noise=0.0,
+        truth_noise=0.0,
+    )
     lead = 30
     predicted = access.get_prediction("mlcast-det", T0, lead)
     observed = access.get_observation("radar-composite", T0 + timedelta(minutes=lead))
     # The lag is lead-dependent now, so ask the access for it rather than writing
     # the formula a second time here where the two would drift apart.
     lag = access.lag_for("mlcast-det", lead)
-    expected = access.blob(access.model_coords,
-                           T0 + timedelta(minutes=lead - lag))
+    expected = access.blob(access.model_coords, T0 + timedelta(minutes=lead - lag))
     assert np.allclose(predicted.data, expected)
     assert not np.array_equal(predicted.data, observed.data)
 
@@ -210,8 +218,9 @@ def test_the_second_model_is_worse_than_the_first():
 
 
 def test_skill_spread_of_zero_makes_the_models_identical():
-    access = SyntheticAccess(model_ids=("a", "b"), forecast_lag_minutes=10.0,
-                             skill_spread=0.0)
+    access = SyntheticAccess(
+        model_ids=("a", "b"), forecast_lag_minutes=10.0, skill_spread=0.0
+    )
     assert np.array_equal(
         access.get_prediction("a", T0, 30).data,
         access.get_prediction("b", T0, 30).data,
@@ -249,9 +258,10 @@ def test_a_dropped_lead_is_listed_by_neither_method():
 def test_a_missing_run_spares_the_first_one():
     """Counting from one. ``index % n == 0`` would blank the run at t_start,
     which is the run every first look begins with."""
-    access = SyntheticAccess(cadence_minutes=10, missing_runs_every=3,
-                             horizon_minutes=60)
-    assert access.list_predictions("mlcast-det", T0)          # +0 min: present
+    access = SyntheticAccess(
+        cadence_minutes=10, missing_runs_every=3, horizon_minutes=60
+    )
+    assert access.list_predictions("mlcast-det", T0)  # +0 min: present
     assert access.list_predictions("mlcast-det", T0 + timedelta(minutes=10))
     assert not access.list_predictions("mlcast-det", T0 + timedelta(minutes=20))
     assert access.list_predictions("mlcast-det", T0 + timedelta(minutes=30))
@@ -316,17 +326,35 @@ def _fleet(**overrides):
         observation_names=("radar-composite", "radar-dbz-hires", "satellite-vil"),
         model_ids=("mlcast-det", "mlcast-alt"),
         sources={
-            "radar-composite": {"variable": "vil", "unit": "kg m-2", "scale": 1.0,
-                                "missing_kind": "range", "missing_points": 60},
-            "radar-dbz-hires": {"variable": "dbz", "unit": "dBZ", "scale": 0.25,
-                                "vmin": -10.0, "vmax": 70.0,
-                                "missing_kind": "none", "missing_points": 0},
-            "satellite-vil": {"variable": "vil", "unit": "kg m-2", "scale": 0.9,
-                              "noise": 9.0, "missing_kind": "random",
-                              "missing_points": 120},
+            "radar-composite": {
+                "variable": "vil",
+                "unit": "kg m-2",
+                "scale": 1.0,
+                "missing_kind": "range",
+                "missing_points": 60,
+            },
+            "radar-dbz-hires": {
+                "variable": "dbz",
+                "unit": "dBZ",
+                "scale": 0.25,
+                "vmin": -10.0,
+                "vmax": 70.0,
+                "missing_kind": "none",
+                "missing_points": 0,
+            },
+            "satellite-vil": {
+                "variable": "vil",
+                "unit": "kg m-2",
+                "scale": 0.9,
+                "noise": 9.0,
+                "missing_kind": "random",
+                "missing_points": 120,
+            },
         },
-        model_sources={"mlcast-det": "radar-composite",
-                       "mlcast-alt": "radar-dbz-hires"},
+        model_sources={
+            "mlcast-det": "radar-composite",
+            "mlcast-alt": "radar-dbz-hires",
+        },
         **overrides,
     )
 
@@ -376,31 +404,44 @@ def test_a_product_keeps_its_own_clipping():
 def test_saying_nothing_about_sources_changes_nothing():
     """The default has to stay byte for byte what it was, or every expectation
     written before products existed moves."""
-    plain = SyntheticAccess(t_start=T0, observation_names=("radar-composite",),
-                            model_ids=("mlcast-det",))
+    plain = SyntheticAccess(
+        t_start=T0, observation_names=("radar-composite",), model_ids=("mlcast-det",)
+    )
     bare = SyntheticAccess(t_start=T0)
     for method in ("get_observation", "get_prediction"):
-        args = ("radar-composite", T0) if method == "get_observation" else ("mlcast-det", T0, 10)
+        args = (
+            ("radar-composite", T0)
+            if method == "get_observation"
+            else ("mlcast-det", T0, 10)
+        )
         a, b = getattr(plain, method)(*args), getattr(bare, method)(*args)
         assert np.array_equal(a.data, b.data)
         assert (a.unit, a.variable) == (b.unit, b.variable)
 
 
-@pytest.mark.parametrize("given, mentions", [
-    ({"not-a-source": {}}, "not observation names"),
-    ({"radar-composite": {"uni": "dBZ"}}, "do not exist"),
-])
+@pytest.mark.parametrize(
+    "given, mentions",
+    [
+        ({"not-a-source": {}}, "not observation names"),
+        ({"radar-composite": {"uni": "dBZ"}}, "do not exist"),
+    ],
+)
 def test_a_source_setting_that_is_wrong_is_refused_at_construction(given, mentions):
     """Not when a field is asked for and quietly comes back as the first one's."""
     with pytest.raises(ValueError, match=mentions):
-        SyntheticAccess(t_start=T0, observation_names=("radar-composite",), sources=given)
+        SyntheticAccess(
+            t_start=T0, observation_names=("radar-composite",), sources=given
+        )
 
 
 def test_a_model_pointed_at_a_source_that_does_not_exist_is_refused():
     with pytest.raises(ValueError, match="not an observation"):
-        SyntheticAccess(t_start=T0, observation_names=("radar-composite",),
-                        model_ids=("mlcast-det",),
-                        model_sources={"mlcast-det": "nope"})
+        SyntheticAccess(
+            t_start=T0,
+            observation_names=("radar-composite",),
+            model_ids=("mlcast-det",),
+            model_sources={"mlcast-det": "nope"},
+        )
 
 
 def test_the_same_storm_sampled_on_two_extents_is_the_same_storm():
@@ -412,15 +453,24 @@ def test_the_same_storm_sampled_on_two_extents_is_the_same_storm():
     storm would stop agreeing -- which shows up as skill collapsing for no reason
     in the weather, the worst kind of wrong answer to go looking for.
     """
-    wide = SyntheticAccess(t_start=T0, vmin=None, vmax=None,
-                           obs_extent=(104.0, 24.0, 126.0, 48.0), obs_shape=(56, 72))
+    wide = SyntheticAccess(
+        t_start=T0,
+        vmin=None,
+        vmax=None,
+        obs_extent=(104.0, 24.0, 126.0, 48.0),
+        obs_shape=(56, 72),
+    )
     narrow = SyntheticAccess(t_start=T0, vmin=None, vmax=None)
 
     inner = wide.get_observation("radar-composite", T0)
     outer = narrow.get_observation("radar-composite", T0)
     # the narrow grid's points all exist in the wide one
-    lon_index = [int(np.argmin(np.abs(wide.obs_coords.lon - x))) for x in outer.coords.lon]
-    lat_index = [int(np.argmin(np.abs(wide.obs_coords.lat - y))) for y in outer.coords.lat]
+    lon_index = [
+        int(np.argmin(np.abs(wide.obs_coords.lon - x))) for x in outer.coords.lon
+    ]
+    lat_index = [
+        int(np.argmin(np.abs(wide.obs_coords.lat - y))) for y in outer.coords.lat
+    ]
     sampled = inner.data[np.ix_(lat_index, lon_index)]
     # The two grids sample different points, and the wide one's cells are twice as
     # far apart, so half a coarse cell of gradient is the whole of the tolerance.
@@ -434,10 +484,16 @@ def test_noise_and_bias_are_measured_in_the_truths_units():
     40-scale one. Added after the unit change it would be 5 of one and 5 of the
     other, which is 2% and 12%: the same number meaning two different forecasts.
     """
-    settings = dict(t_start=T0, vmin=None, vmax=None, truth_noise=0.0,
-                    observation_names=("vil", "rain"), model_ids=("m", "n"),
-                    sources={"rain": {"scale": 0.1, "noise": 0.0}},
-                    model_sources={"m": "rain", "n": "vil"})
+    settings = dict(
+        t_start=T0,
+        vmin=None,
+        vmax=None,
+        truth_noise=0.0,
+        observation_names=("vil", "rain"),
+        model_ids=("m", "n"),
+        sources={"rain": {"scale": 0.1, "noise": 0.0}},
+        model_sources={"m": "rain", "n": "vil"},
+    )
     access = SyntheticAccess(forecast_noise=5.0, **settings)
     scaled = access.get_observation("rain", T0).data
     plain = access.get_observation("vil", T0).data
@@ -450,8 +506,11 @@ def test_noise_and_bias_are_measured_in_the_truths_units():
     # the comparison becomes about the draws instead of about the units.
     def added(model: str) -> float:
         noisy = access.get_prediction(model, T0, 10).data
-        quiet = SyntheticAccess(forecast_noise=0.0, **settings).get_prediction(
-            model, T0, 10).data
+        quiet = (
+            SyntheticAccess(forecast_noise=0.0, **settings)
+            .get_prediction(model, T0, 10)
+            .data
+        )
         return float(np.std(noisy - quiet))
 
     assert abs(added("m") * 10 / added("n") - 1) < 0.05, (added("m"), added("n"))

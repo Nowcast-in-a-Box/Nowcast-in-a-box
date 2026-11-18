@@ -10,10 +10,6 @@ import netCDF4
 import numpy as np
 import pytest
 from matplotlib.colors import ListedColormap
-from PIL import Image
-from pyproj import CRS
-from shapely.geometry import box
-
 from nib_visualization import (
     CompositeBasemap,
     RenderConfig,
@@ -26,6 +22,9 @@ from nib_visualization import (
 from nib_visualization.adapters.cma_mock import read_cma_mock
 from nib_visualization.artifacts import axes_pixel_box, inspect_outputs
 from nib_visualization.terrain import load_etopo
+from PIL import Image
+from pyproj import CRS
+from shapely.geometry import box
 
 
 def digest(path):

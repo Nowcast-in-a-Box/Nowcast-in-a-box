@@ -21,14 +21,13 @@ import copy
 import numpy as np
 import pytest
 import xarray as xr
-from pyproj import CRS
-
 from nib_visualization.field import (
     FieldValidationError,
     VisualizationField,
     frame_at,
     validate_field,
 )
+from pyproj import CRS
 
 INIT = np.datetime64("2026-09-22T00:00:00", "ns")
 Y_LAT = np.array([47.0, 48.0])
@@ -188,7 +187,9 @@ def test_f1_frame_at_selects_lead_values_and_time_semantics():
     np.testing.assert_array_equal(frame.coords["y"].values, Y_LAT)
     np.testing.assert_array_equal(frame.coords["x"].values, X_LON)
     assert frame.coords["lead_time"].values == np.timedelta64(3600, "s")
-    assert frame.coords["valid_time"].values == np.datetime64("2026-09-22T01:00:00", "ns")
+    assert frame.coords["valid_time"].values == np.datetime64(
+        "2026-09-22T01:00:00", "ns"
+    )
     # the frame is a view of the source sequence, not a copied lead stack
     assert np.shares_memory(frame.values, validated.values.values)
 
@@ -265,18 +266,31 @@ def _case_y_single_cell():
 
 F2_CASES = [
     pytest.param("INVALID_SHAPE", "values", _case_2d_values, id="wrong_rank_2d"),
-    pytest.param("INVALID_SHAPE", "values", _case_dim_order_wrong, id="dim_order_wrong"),
-    pytest.param("INVALID_SHAPE", "values", _case_dim_name_wrong, id="dim_name_wrong"),
-    pytest.param("INVALID_SHAPE", "name", lambda: make_latlon_field(name=None), id="name_missing"),
-    pytest.param("INVALID_SHAPE", "name", lambda: make_latlon_field(name=""), id="name_empty"),
     pytest.param(
-        "INVALID_SHAPE", "name", lambda: make_latlon_field(name="  "), id="name_whitespace"
+        "INVALID_SHAPE", "values", _case_dim_order_wrong, id="dim_order_wrong"
+    ),
+    pytest.param("INVALID_SHAPE", "values", _case_dim_name_wrong, id="dim_name_wrong"),
+    pytest.param(
+        "INVALID_SHAPE", "name", lambda: make_latlon_field(name=None), id="name_missing"
     ),
     pytest.param(
-        "INVALID_SHAPE", "values", lambda: make_latlon_field(data=LATLON_DATA.astype("U8")),
+        "INVALID_SHAPE", "name", lambda: make_latlon_field(name=""), id="name_empty"
+    ),
+    pytest.param(
+        "INVALID_SHAPE",
+        "name",
+        lambda: make_latlon_field(name="  "),
+        id="name_whitespace",
+    ),
+    pytest.param(
+        "INVALID_SHAPE",
+        "values",
+        lambda: make_latlon_field(data=LATLON_DATA.astype("U8")),
         id="non_numeric_dtype",
     ),
-    pytest.param("INVALID_SHAPE", "values", _case_y_single_cell, id="y_axis_single_cell"),
+    pytest.param(
+        "INVALID_SHAPE", "values", _case_y_single_cell, id="y_axis_single_cell"
+    ),
     pytest.param(
         "INVALID_GRID",
         "x",
@@ -324,17 +338,29 @@ F2_CASES = [
     pytest.param(
         "INVALID_GRID",
         "y",
-        lambda: make_latlon_field(values=_latlon_values({"lead_time": LEADS_3H, "x": X_LON})),
+        lambda: make_latlon_field(
+            values=_latlon_values({"lead_time": LEADS_3H, "x": X_LON})
+        ),
         id="y_coord_missing",
     ),
-    pytest.param("INVALID_CRS", "crs", lambda: make_latlon_field(crs=None), id="crs_missing"),
     pytest.param(
-        "INVALID_CRS", "crs", lambda: make_latlon_field(crs="NOT_A_CRS"), id="crs_unparseable"
+        "INVALID_CRS", "crs", lambda: make_latlon_field(crs=None), id="crs_missing"
     ),
     pytest.param(
-        "MISSING_UNITS", "units", lambda: make_latlon_field(units=None), id="units_attr_missing"
+        "INVALID_CRS",
+        "crs",
+        lambda: make_latlon_field(crs="NOT_A_CRS"),
+        id="crs_unparseable",
     ),
-    pytest.param("MISSING_UNITS", "units", lambda: make_latlon_field(units=""), id="units_empty"),
+    pytest.param(
+        "MISSING_UNITS",
+        "units",
+        lambda: make_latlon_field(units=None),
+        id="units_attr_missing",
+    ),
+    pytest.param(
+        "MISSING_UNITS", "units", lambda: make_latlon_field(units=""), id="units_empty"
+    ),
 ]
 
 
@@ -403,7 +429,8 @@ F3_TIME_CASES = [
         "lead_time",
         lambda: make_latlon_field(
             lead_time=np.array(
-                ["2026-09-22T00", "2026-09-22T01", "2026-09-22T02"], dtype="datetime64[s]"
+                ["2026-09-22T00", "2026-09-22T01", "2026-09-22T02"],
+                dtype="datetime64[s]",
             ),
         ),
         id="lead_wrong_dtype",
@@ -437,7 +464,9 @@ F3_TIME_CASES = [
     pytest.param(
         "INVALID_TIME",
         "valid_time",
-        lambda: make_latlon_field(valid_time=EXPECTED_VALID_3H + np.timedelta64(3600, "s")),
+        lambda: make_latlon_field(
+            valid_time=EXPECTED_VALID_3H + np.timedelta64(3600, "s")
+        ),
         id="valid_time_contradicts",
     ),
     pytest.param(
@@ -461,7 +490,9 @@ F3_TIME_CASES = [
 ]
 
 
-@pytest.mark.parametrize(("expected_code", "expected_field", "build_field"), F3_TIME_CASES)
+@pytest.mark.parametrize(
+    ("expected_code", "expected_field", "build_field"), F3_TIME_CASES
+)
 def test_f3_rejects_invalid_time_semantics(expected_code, expected_field, build_field):
     with pytest.raises(FieldValidationError) as exc_info:
         validate_field(build_field())
@@ -513,8 +544,12 @@ F3_INTERVAL_CASES = [
 ]
 
 
-@pytest.mark.parametrize(("expected_code", "expected_field", "build_field"), F3_INTERVAL_CASES)
-def test_f3_rejects_invalid_interval_semantics(expected_code, expected_field, build_field):
+@pytest.mark.parametrize(
+    ("expected_code", "expected_field", "build_field"), F3_INTERVAL_CASES
+)
+def test_f3_rejects_invalid_interval_semantics(
+    expected_code, expected_field, build_field
+):
     with pytest.raises(FieldValidationError) as exc_info:
         validate_field(build_field())
     err = exc_info.value
@@ -533,7 +568,9 @@ def test_f4_partial_nan_passes_and_valid_zero_is_preserved():
     # the NaN at (lead 0, y 1, x 1) stays NaN; the valid 0 at (0, 0, 0) stays 0
     assert np.isnan(validated.values.values[0, 1, 1])
     assert validated.values.values[0, 0, 0] == 0.0
-    np.testing.assert_array_equal(np.isnan(validated.values.values), np.isnan(LATLON_DATA))
+    np.testing.assert_array_equal(
+        np.isnan(validated.values.values), np.isnan(LATLON_DATA)
+    )
 
 
 def test_f4_all_nan_lead_frame_is_rejected():
@@ -586,7 +623,9 @@ def test_review_f001_boundary_indices_keep_view_semantics_and_source_unchanged()
     np.testing.assert_array_equal(first.values, LATLON_DATA[0])
     np.testing.assert_array_equal(last.values, LATLON_DATA[2])
     assert first.coords["lead_time"].values == np.timedelta64(0, "s")
-    assert last.coords["valid_time"].values == np.datetime64("2026-09-22T02:00:00", "ns")
+    assert last.coords["valid_time"].values == np.datetime64(
+        "2026-09-22T02:00:00", "ns"
+    )
     assert np.shares_memory(last.values, field.values.values)
     # a failed access must not modify the source any more than a successful one
     with pytest.raises(IndexError):

@@ -390,8 +390,8 @@ func TestDiagnosticRetryDoesNotRerunModels(t *testing.T) {
 	defer runner.mu.Unlock()
 	for _, call := range runner.calls {
 		joined := strings.Join(call, " ")
-		if strings.Contains(joined, "nib-nowcastnet") || strings.Contains(joined, "nib-wadepre") || strings.Contains(joined, "nib-ingestion") {
-			t.Fatalf("retry reran a model or ingestion: %s", joined)
+		if strings.Contains(joined, "nib-nowcastnet") || strings.Contains(joined, "nib-wadepre") || strings.Contains(joined, "nib-reader-") {
+			t.Fatalf("retry reran a model or read-inputs: %s", joined)
 		}
 	}
 	matches, err := filepath.Glob(filepath.Join(run, "logs", "diagnostics-*", "compose.yaml"))

@@ -74,6 +74,11 @@ func TestConsolePageServedWithSessionToken(t *testing.T) {
 	if !strings.Contains(body, "NiB local console") || !strings.Contains(body, `const TOKEN = "token";`) {
 		t.Fatal("console page is missing its marker or the injected token")
 	}
+	for _, route := range []string{"dashboard", "settings", "orders", "triggers"} {
+		if !strings.Contains(body, `class="nav-item" href="#`+route+`"`) {
+			t.Errorf("missing navigation for %s", route)
+		}
+	}
 	req = httptest.NewRequest("GET", "http://example.com:8765/", nil)
 	out = httptest.NewRecorder()
 	server.Routes().ServeHTTP(out, req)

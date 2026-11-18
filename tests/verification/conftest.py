@@ -13,7 +13,9 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diagnostics" / "verification"))
+sys.path.insert(
+    0, str(Path(__file__).resolve().parents[2] / "diagnostics" / "verification")
+)
 
 from nib_verify.access import CountingAccess, SyntheticAccess  # noqa: E402
 from nib_verify.config import (  # noqa: E402
@@ -52,7 +54,9 @@ def make_access(*, peak: float = 250.0, **kwargs) -> SyntheticAccess:
     return SyntheticAccess(**defaults)
 
 
-def make_config(levels=LEVELS_FULL, *, group_id: str = "vil-test") -> VerificationConfig:
+def make_config(
+    levels=LEVELS_FULL, *, group_id: str = "vil-test"
+) -> VerificationConfig:
     return VerificationConfig(
         group_id=group_id,
         name="VIL verification, synthetic",
@@ -141,9 +145,7 @@ MODEL_MANIFEST = {
     "requires": "precip-nowcast.v1",
     "region": "east-china",
     "context_frames": {"required_count": 5, "mode": "latest"},
-    "input": [
-        {"name": "vil", "unit": "kg m-2", "dtype": "float32", "shape": [48, 64]}
-    ],
+    "input": [{"name": "vil", "unit": "kg m-2", "dtype": "float32", "shape": [48, 64]}],
     "output": [
         {
             "name": "vil",
@@ -170,15 +172,18 @@ def write_yaml(path, text: str) -> None:
 
 
 def run_config_text(
-    *, model="mlcast-det", data="radar-composite",
-    start="2026-01-01T00:00:00Z", horizon=6,
+    *,
+    model="mlcast-det",
+    data="radar-composite",
+    start="2026-01-01T00:00:00Z",
+    horizon=6,
 ) -> str:
     return (
         "version: 1\n"
         f"data:\n  id: {data}\n"
         f"model:\n  id: {model}\n"
         "run:\n"
-        f"  start_time: \"{start}\"\n"
+        f'  start_time: "{start}"\n'
         f"  forecast_horizon: {horizon}\n"
     )
 
@@ -216,11 +221,14 @@ def platform(tmp_path) -> PlatformTree:
     data_root.mkdir(parents=True)
 
     config_path = root / "config.yaml"
-    write_yaml(config_path, (
-        "handler:\n  host: 127.0.0.1\n  port: 8765\n"
-        "review:\n  host: 127.0.0.1\n  port: 8766\n"
-        "paths:\n  artifacts: artifacts\n  data_root: inputs/data\n"
-    ))
+    write_yaml(
+        config_path,
+        (
+            "handler:\n  host: 127.0.0.1\n  port: 8765\n"
+            "review:\n  host: 127.0.0.1\n  port: 8766\n"
+            "paths:\n  artifacts: artifacts\n  data_root: inputs/data\n"
+        ),
+    )
 
     # packages live in two unrelated subtrees
     p1 = root / "bundle-a" / "radar-thing" / "manifest.json"
@@ -265,7 +273,6 @@ def serve_data(access, *, host: str = "127.0.0.1"):
     import time
 
     import uvicorn
-
     from nib_verify.access.mockfeed import create_data_app
 
     config = uvicorn.Config(

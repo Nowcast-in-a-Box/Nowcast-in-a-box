@@ -14,13 +14,11 @@ import re
 from pathlib import Path
 
 import nib_verify
-
 import pytest
-
 from nib_verify.catalog.hostconfig import load as load_host
 from nib_verify.server import create_app
 
-from .conftest import make_access, make_config
+from .conftest import make_access
 
 # From the module, not from this file: a test that counts
 # directories breaks the moment it is moved to the layout
@@ -321,17 +319,17 @@ def test_the_legend_is_the_roster_and_clicking_it_hides_a_model():
 
     params = app[app.index("function queryParams") :]
     params = params[: params.index(chr(10) + "}" + chr(10))]
-    assert (
-        'params.append("member", name)' in params
-    ), "hiding a model has to reach the query, not only the picture"
+    assert 'params.append("member", name)' in params, (
+        "hiding a model has to reach the query, not only the picture"
+    )
 
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'id="chart-legend"' in html
     row = html[html.index('id="chart-legend"') - 400 : html.index('id="q-kind"') + 200]
     assert "justify-content:space-between" in row, "the two ends of one row"
-    assert html.index('id="chart-legend"') < html.index(
-        'id="q-kind"'
-    ), "the key on the left, the buttons on the right"
+    assert html.index('id="chart-legend"') < html.index('id="q-kind"'), (
+        "the key on the left, the buttons on the right"
+    )
 
 
 def test_the_gap_marker_is_on_the_page_because_the_canvas_has_no_legend():
@@ -371,9 +369,9 @@ def test_the_time_fields_say_what_they_mean_and_have_a_key_to_confirm_it():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'id="init-panel"' in html and 'id="btn-init-ok"' in html
     assert 'id="q-init-quick"' in html, "the week is a click, not a calendar"
-    assert (
-        'type="hidden" id="q-init-from"' in html
-    ), "the browser's own picker is not used: it draws Today and Clear and there is no way to change that"
+    assert 'type="hidden" id="q-init-from"' in html, (
+        "the browser's own picker is not used: it draws Today and Clear and there is no way to change that"
+    )
     # the panel is inside the same block as the fields it edits, not off to one side
     assert (
         html.index('id="q-init-quick"')
