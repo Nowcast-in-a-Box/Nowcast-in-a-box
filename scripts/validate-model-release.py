@@ -2,12 +2,12 @@
 """Build, validate offline, and optionally push ONE model/platform candidate."""
 
 import argparse
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -80,8 +80,10 @@ def check_run(directory, declaration, *, completed=False):
 
 
 def check_reader(directory, model_id):
-    import numpy as np
     from datetime import timedelta
+
+    import numpy as np
+
     from utils.model_contract import utc
     from utils.stored_fields import StoredFields
 
@@ -167,7 +169,6 @@ def build_context(destination, data_id, model_id):
             "--",
             "adapters",
             "contracts/models",
-            "containers/models",
             "interfaces",
             "utils",
         ],

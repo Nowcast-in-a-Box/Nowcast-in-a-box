@@ -25,6 +25,6 @@ for spec in $targets; do
 	mkdir -p "$dest"
 	out="${dest}/nib-handler-${goos}-${goarch}${ext}"
 	echo "building $out"
-	CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -o "$out" ./handler/cmd/nib-handler
+	CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" bash scripts/build-handler.sh "$out" "${1:-}"
 done
 ls -l bin/linux bin/macos bin/windows
