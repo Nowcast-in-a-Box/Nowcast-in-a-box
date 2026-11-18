@@ -1,0 +1,138 @@
+# 版本信息
+schema: nib.eval-request.v1
+
+# 用户的每次推理任务，计作 run
+run:
+  id: 20230730T1400Z-cref-eastchina
+  task: precip-nowcast.v1
+  issue_time: "2023-07-30T14:00:00Z"
+
+# 变量信息；从 Data Adapter 获取，这里是示例，实际以 Data Adapter 内的信息为准
+variable:
+  id: CREF
+  long_name: composite_reflectivity
+  units: dBZ
+  dtype: float32
+  # 非有限值（NaN、Inf）视为缺测，不进入任何指标。
+  missing: non_finite
+
+# 时序信息
+time:
+  # 单步分钟数
+  step_minutes: 6
+  # 用于输入模型的历史实况帧，相对时间
+  context_offsets_minutes: [-54, -48, -42, -36, -30, -24, -18, -12, -6, 0]
+  # 预报的时间
+  lead_minutes: [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
+
+# 观测值；即视为 Truth 用于计算指标的数据
+observation:
+  future: observation/future.zarr
+  # 最近实况，只给出图。维度 [time, y, x]。
+  context: observation/context.zarr
+  grid:
+    # 数据的投影格式
+    crs: EPSG:4326
+    # 对应的经纬度信息，四个框的坐标
+    # [west, south, east, north]
+    bbox: [104.0, 17.0, 126.0, 44.0]
+    # 分辨率精度
+    resolution_deg: 0.01
+    # 维度
+    dims: [y, x]
+    y: latitude
+    x: longitude
+  # Data adapter 的信息
+  adapter:
+    source: cma_radar
+    loader_module: adapters.cma_radar.source
+    request:
+      data_dir: cma_radar
+      initial_time: "2023-07-30T14:00:00Z"
+      history_steps: 10
+      interval_minutes: 6
+      channels: [CREF]
+      region:
+        bbox: [104.0, 17.0, 126.0, 44.0]
+    metadata:
+      n_times: 10
+      n_channel_fields: 10
+      native_resolution_deg: 0.01
+      available_region: [73.0, 12.2, 135.0, 54.2]
+      output_region: [104.0, 17.0, 126.0, 44.0]
+
+# 同一个 run 里可以有多个模型
+models:
+  - id: wadepre
+    # 预报数据的存储路径
+    forecast: models/wadepre/forecast.zarr
+    # 维度信息
+    dims: [lead, y, x]
+    # 与上方的 variable 字段对应
+    variable: CREF
+    units: dBZ
+    lead_minutes: [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
+    grid:
+      same_as: observation
+  - id: nowcastnet
+    forecast: models/nowcastnet/forecast.zarr
+    dims: [lead, y, x]
+    variable: CREF
+    units: dBZ
+    lead_minutes: [6, 12, 18, 24, 30, 36, 42, 48, 54, 60]
+    # 部分模型的网格与观测网格不同，不同信息时单独写明
+    grid:
+      crs: EPSG:4326
+      bbox: [104.0, 17.0, 126.0, 44.0]
+      resolution_deg: 0.04
+      dims: [y, x]
+      y: latitude
+      x: longitude
+
+# 数据对齐的信息
+# 这里设计的不好
+alignment:
+  target_grid: observation
+  # 重采样方法，支持：nearest, bilinear, bicubic, lanczos
+  forecast_resample: bilinear
+  # 基础的筛选函数，会在framework中实现
+  valid_when:
+    # 有限值
+    - finite_forecast
+    - finite_observation
+    # 在观测网格内
+    - inside_bbox
+
+metrics:
+  # 可直接计算的指标
+  - name: mae
+  - name: rmse
+  # 需要给定参数，如CSI要指定阈值
+  - name: csi
+    threshold: 35
+
+visualization:
+  # 颜色映射表
+  # 只能在几个预定义的 colormap 中选择
+  colormap: radar_reflectivity
+
+  # 输出的图
+  figures:
+    # 逐帧的可视化
+    - id: sequence
+      kind: map_sequence
+      panels: [context, observation, wadepre, nowcastnet]
+      difference_against: observation
+    # 指标值，逐 leadtime
+    - id: scores_by_lead
+      kind: lines
+      metrics: [mae, rmse, csi]
+      # 折线图上标出的 CSI 阈值。列联表仍按上面的全部阈值计算。
+      csi_threshold: 35
+
+# 输出的文件
+outputs:
+  # 计算的指标
+  metrics: products/metrics.json
+  # 逐帧的可视化
+  frames: products/frames/

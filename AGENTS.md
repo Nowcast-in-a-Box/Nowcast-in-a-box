@@ -38,7 +38,7 @@ diagnostics/      image scaffold and rendering library; computation entry pendin
 runs/             diagnostics run outputs (gitignored)
 orders/           saved offline order packages (gitignored)
 artifacts/        downloaded weights and docker config (not committed)
-contracts/        YAML/manifest schemas. Not a Python package.
+atlas/contracts/  shared data and model declarations and protocol schemas.
   data/           data-reader declarations
   models/<data>/  model declarations grouped by data source
 interfaces/       data and model contracts. Not a host package.

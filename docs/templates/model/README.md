@@ -2,7 +2,7 @@
 
 Copy `adapter.py`, `Dockerfile`, `requirements.txt`, and this README into
 `adapters/<data-id>/<model-id>/`. Move the template `declaration.json` to
-`contracts/models/<data-id>/<model-id>.json`; that file is the single declaration
+`atlas/contracts/models/<data-id>/<model-id>.json`; that file is the single declaration
 authority. Do not keep a second declaration in the adapter directory. Replace
 the example IDs and Dockerfile paths, then implement `prepare` and `predict`.
 Both methods raise `NotImplementedError` until implemented. The template has no
@@ -12,7 +12,7 @@ working backend or fabricated forecast.
 inherited `capabilities()`, `weights()`, `input_requirements()`, and
 `output_specification()` queries read it without loading a backend.
 `validate_input(observations)` enforces the declared physical input contract.
-Existing `contracts/models/sevir/*.json` files are concrete schema examples.
+Existing `atlas/contracts/models/sevir/*.json` files are concrete schema examples.
 Register the pair in the catalog separately.
 
 The public boundary is:
@@ -69,7 +69,7 @@ Prepare these before executing a release:
   this and accepts `NIB_RELEASE_PYTHON` as a repository variable selecting the
   preinstalled interpreter. Missing dependencies fail the release.
 - All contributed image source files tracked in the reviewed checkout. The script
-  stages tracked source under `adapters`, `contracts/models`,
+  stages tracked source under `adapters`, `atlas/contracts/models`,
   `interfaces`, and `utils`, restricted to Python, JSON, text dependency files,
   and Dockerfiles. A small explicit list also includes the new shared
   `interfaces/fields.py` and `utils/model_contract.py` during integration.

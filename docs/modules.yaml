@@ -54,7 +54,7 @@ modules:
     role: interface
     name: Shared contracts
     purpose: Manifest and run YAML shapes. Implemented inside containers; declared in git as schemas, not a host library.
-    paths: [contracts/]
+    paths: [atlas/contracts/, docs/reference/contracts.md]
     do:
       - JSON/YAML schemas for data, model, and run config.
       - Field names, dtypes, frame counts, cadence.

@@ -1,0 +1,19 @@
+# Example selection only: matching local observation files must exist.
+schema_version: nib.order.v1
+order_id: cma-local
+data_id: cma_radar
+event_id: "20260701"
+sample_starts:
+  - "2026-07-01T00:00:00Z"
+models:
+  - nowcastnet
+region:
+  center_lon: 118
+  center_lat: 32
+verification:
+  models: [nowcastnet]
+  methods: [mae, fss]
+  levels: [10, 20, 30]
+  half_windows: [1, 3]
+visualization:
+  models: [nowcastnet]

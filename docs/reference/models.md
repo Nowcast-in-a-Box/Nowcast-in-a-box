@@ -1,7 +1,7 @@
 # Model contribution contract
 
 Issue #68 defines the shared boundary below. Model declarations live at
-`contracts/models/<data>/<model>.json` and use `schema: "nib.model.v1"`.
+`atlas/contracts/models/<data>/<model>.json` and use `schema: "nib.model.v1"`.
 
 The declaration records identity, version, paired data source, task, status,
 weights, and the physical `input` and `output` requirements. The adapter's query
@@ -67,10 +67,10 @@ resampling. See [the verification interface](interfaces-we-consume.md).
 
 | Data source | Model | Declaration | Adapter notes |
 | --- | --- | --- | --- |
-| SEVIR VIL | NowcastNet | [JSON](../../contracts/models/sevir/nowcastnet.json) | [README](../../adapters/sevir/nowcastnet/README.md) |
-| SEVIR VIL | exPreCast | [JSON](../../contracts/models/sevir/exprecast.json) | [README](../../adapters/sevir/exprecast/README.md) |
-| SEVIR VIL | WADEPre | [JSON](../../contracts/models/sevir/wadepre.json) | [README](../../adapters/sevir/wadepre/README.md) |
-| CMA Radar | NowcastNet demo | [JSON](../../contracts/models/cma_radar/nowcastnet.json) | [README](../../adapters/cma_radar/nowcastnet/README.md) |
+| SEVIR VIL | NowcastNet | [JSON](../../atlas/contracts/models/sevir/nowcastnet.json) | [README](../../adapters/sevir/nowcastnet/README.md) |
+| SEVIR VIL | exPreCast | [JSON](../../atlas/contracts/models/sevir/exprecast.json) | [README](../../adapters/sevir/exprecast/README.md) |
+| SEVIR VIL | WADEPre | [JSON](../../atlas/contracts/models/sevir/wadepre.json) | [README](../../adapters/sevir/wadepre/README.md) |
+| CMA Radar | NowcastNet demo | [JSON](../../atlas/contracts/models/cma_radar/nowcastnet.json) | [README](../../adapters/cma_radar/nowcastnet/README.md) |
 
 Atlas products are registered manually. A local declaration or adapter does not
 automatically export or publish a Hub product. Weight and image preparation

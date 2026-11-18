@@ -10,7 +10,7 @@ For a model paired with an existing data reader, provide:
 
 | Path | Purpose |
 | --- | --- |
-| `contracts/models/<data>/<model>.json` | `nib.model.v1` declaration: identity, input/output requirements and weight provenance. |
+| `atlas/contracts/models/<data>/<model>.json` | `nib.model.v1` declaration: identity, input/output requirements and weight provenance. |
 | `adapters/<data>/<model>/adapter.py` | Contract queries, validation, preparation, and prediction. |
 | `adapters/<data>/<model>/__init__.py` | Package entry following neighboring adapters. |
 | `adapters/<data>/<model>/requirements.txt` | Dependencies for the chosen backend inside the image. |

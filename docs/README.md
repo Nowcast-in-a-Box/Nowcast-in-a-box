@@ -20,6 +20,6 @@ prebuilt Handler; model inference and diagnostics run inside Docker.
 - [Runtime resources and manifests](reference/runtime-resources.md)
 - [Runtime integration and stored fields](reference/runtime-integration.md)
 - [Verification field interface](reference/interfaces-we-consume.md)
-- [Contracts](../contracts/README.md)
+- [Runtime contracts](reference/contracts.md)
 - [Adapter source](../adapters/README.md)
 - [Diagnostics](../diagnostics/README.md)

@@ -26,7 +26,8 @@ manifests needed to build the containers from that root.
     Dockerfile
   adapters/model_runner.py       shared model image entry point
   adapters/reader_probe/        read-only sample probe image
-  interfaces/ utils/           shared runtime source
+  interfaces/ utils/             shared runtime source
+  atlas/contracts/               model and data declarations, protocol schemas
 ```
 
 A data directory without `runtime.yaml` is ignored. The Handler never parses

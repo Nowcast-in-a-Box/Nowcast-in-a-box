@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir -r /tmp/model-requirements.txt
 COPY interfaces interfaces
 COPY utils utils
 COPY adapters/model_runner.py adapters/model_runner.py
-COPY contracts/models/example_data/example_model.json contracts/models/example_data/example_model.json
+COPY atlas/contracts/models/example_data/example_model.json atlas/contracts/models/example_data/example_model.json
 COPY adapters/example_data/example_model adapters/example_data/example_model
 ENV NIB_MODEL=example_model
 ENV NIB_ADAPTER_MODULE=adapters.example_data.example_model.adapter

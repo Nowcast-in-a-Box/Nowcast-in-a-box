@@ -10,7 +10,7 @@ from interfaces.model import DeclaredModelAdapter
 class Adapter(DeclaredModelAdapter):
     declaration_path = (
         Path(__file__).resolve().parents[3]
-        / "contracts/models/example_data/example_model.json"
+        / "atlas/contracts/models/example_data/example_model.json"
     )
 
     def prepare(self, observations: Observations) -> Any:

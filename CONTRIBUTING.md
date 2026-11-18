@@ -144,7 +144,7 @@ On GitHub, open a pull request from that branch into main:
 
 ## Model contributions
 
-Follow the [model contribution guide](docs/guides/model-contribution.md) for required files, declaration fields, lifecycle and release-candidate acceptance. Declarations use `nib.model.v1` under `contracts/models/<data>/<model>.json`. The runtime validates physical observations, calls model-private preparation and prediction inside Docker, validates the physical forecast, then saves it. Atlas registration is manual.
+Follow the [model contribution guide](docs/guides/model-contribution.md) for required files, declaration fields, lifecycle and release-candidate acceptance. Declarations use `nib.model.v1` under `atlas/contracts/models/<data>/<model>.json`. The runtime validates physical observations, calls model-private preparation and prediction inside Docker, validates the physical forecast, then saves it. Atlas registration is manual.
 
 Use the [documentation index](docs/README.md) to find current guides and reference; historical checks and plans are in the archive.
 

@@ -12,7 +12,7 @@
 | `utils/mlcast_zarr.py` | Shared local Zarr loader, time/region selection, metadata and CRS resolution / 共用本地读取、时空裁剪与元数据处理 |
 | `atlas/runtime/mlcast-sources.json` | Source catalog for sample preparation / 下载数据集信息 |
 | `adapters/mlcast_*/` | Seven lightweight wrappers (`source.py` and their dependencies) / 七个轻量适配入口 |
-| `contracts/data/mlcast_*.json` | Seven data contracts / 七个数据协议 |
+| `atlas/contracts/data/mlcast_*.json` | Seven data contracts / 七个数据协议 |
 | `scripts/mlcast/download_sample.py` | Download one local sample / 单组下载 |
 | `scripts/mlcast/make_request.py` | Generate YAML from a local sample / 根据本地样本生成 YAML |
 | `tests/adapters/` | MLCast tests and catalog check / 新增回归测试与注册验证 |
