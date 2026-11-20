@@ -1,0 +1,9 @@
+# Local test only. Prefer conda-forge pysteps=1.21.5 when C extension wheels are unavailable.
+# Existing NiB CMA Adapter also needs numpy, xarray, and pyproj.
+pysteps==1.21.5
+opencv-python-headless==5.0.0.93
+numpy
+xarray
+pyproj
+matplotlib
+pillow

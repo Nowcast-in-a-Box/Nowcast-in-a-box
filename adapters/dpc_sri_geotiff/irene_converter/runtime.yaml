@@ -1,0 +1,21 @@
+schema: nib.resource.v1
+kind: model
+id: irene_converter
+product_ids: [irene-forecast-field-ensemble]
+name: IRENE GeoTIFF ensemble → NiB ForecastField converter
+weights:
+  file: converter-manifest.json
+  sha256: "35d70a99fa6aca4c801c742a047d00653705eec39499c950425f2e6994425dec"
+  embedded: true
+container:
+  image: nib-irene-converter:local
+  build:
+    context: "."
+    dockerfile: adapters/dpc_sri_geotiff/irene_converter/Dockerfile
+  command: ["--run", "/run", "--input-dir", "/run/outputs/irene"]
+  mounts:
+    - name: run
+      target: /run
+      write: true
+    - name: inputs
+      target: /run/inputs
