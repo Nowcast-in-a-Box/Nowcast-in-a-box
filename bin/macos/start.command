@@ -47,16 +47,36 @@ case "${1:-}" in
 esac
 
 if [[ "$action" == start || "$action" == restart || "$action" == connect ]]; then
-	if "$bin" "$action" -config "$config" "$@"; then
+	log="$(mktemp -t nib-start)"
+	if "$bin" "$action" -config "$config" "$@" >"$log" 2>&1; then
+		url="$(sed -n 's/^console //p' "$log" | head -1)"
+		rm -f "$log"
+		echo "NiB console: ${url:-(no console address reported)}"
+		if [[ -n "$url" && "${NIB_OPEN_CONSOLE:-}" == 1 ]]; then
+			open "$url" || true
+		fi
 		exit 0
 	else
 		status=$?
-		if [[ "$status" -eq 5 ]]; then
-			echo "background startup unavailable; keeping Handler in this Terminal" >&2
-			exec "$bin" serve -config "$config" "$@"
-		fi
-		exit "$status"
 	fi
+	sed 's/^/  /' "$log" >&2
+	rm -f "$log"
+	if [[ "$status" -eq 5 ]]; then
+		echo "background startup unavailable; keeping Handler in this Terminal" >&2
+		if [[ "${NIB_OPEN_CONSOLE:-}" == 1 ]]; then
+			# The foreground Handler keeps this Terminal; open the console in the
+			# background once it is listening.
+			(
+				for _ in $(seq 1 40); do
+					url="$("$bin" status -config "$config" 2>/dev/null | sed -n 's/^console //p' | head -1 || true)"
+					if [[ -n "$url" ]]; then exec open "$url"; fi
+					sleep 1
+				done
+			) >/dev/null 2>&1 &
+		fi
+		exec "$bin" serve -config "$config" "$@"
+	fi
+	exit "$status"
 fi
 
 exec "$bin" "$action" -config "$config" "$@"
