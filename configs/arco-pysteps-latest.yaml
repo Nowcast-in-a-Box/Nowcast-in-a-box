@@ -1,0 +1,40 @@
+# One-command local integration: exact newest ArcoDataHub VMI frames -> local
+# Data Adapter -> stored NiB run -> network-isolated pySTEPS container.
+# Credentials never go here. Set ARCODATAHUB_USERNAME and
+# ARCODATAHUB_ACCESS_KEY, or use the existing private ~/.nib/arcodatahub.json.
+schema: nib.local-latest-pysteps.v1
+arco:
+  url: https://api.arcodatahub.com/S3/opera-plus-it-vmi.zarr
+  snapshot_root: demo_data/arcodatahub
+  history_steps: 3
+  interval_minutes: 5
+  # Transient metadata/chunk failures retry with exponential backoff (2, 4 s).
+  # Invalid credentials and forbidden dataset access fail immediately.
+  retry_attempts: 3
+  retry_delay_seconds: 2
+  # Direct is the safe default for api.arcodatahub.com. Add an explicit
+  # http(s) proxy URL here only on networks that require one.
+  # proxy: http://proxy.example:8080
+  # Leave as latest. Set an exact UTC timestamp only for reproducible replay.
+  end: latest
+adapter:
+  source: mlcast_opera_plus_it_vmi
+  channels: [vmi]
+  region:
+    # A 0.5° box produced only ~56×40 native 1-km cells: adequate for a
+    # smoke test but too small for 100-minute advection.  This wider Italy
+    # domain preserves upstream/downstream context for the 20 forecast steps.
+    bbox: [10.0, 44.0, 13.0, 46.0]
+model:
+  image: nib-pysteps-lk:mlcast-vmi-1
+  build_if_missing: true
+  lead_steps: 20
+  no_echo_dbz: 0.0
+  # Refuse undersized LK inputs instead of silently creating a low-information run.
+  # Existing pinned snapshots with a smaller bbox can still be replayed once
+  # they retain at least this safe baseline; new latest downloads use the
+  # wider region above and are substantially larger.
+  min_grid: [32, 32]
+runs:
+  root: runs
+  atlas_revision: local-arco-pysteps-v1

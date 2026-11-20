@@ -140,14 +140,20 @@ def create_run(root, run_id, window, grid, *, atlas_revision):
             grid,
             **field_options,
         )
-        manifest["observations"]["target"] = write_cube(
-            directory,
-            "inputs/target.npz",
-            window["target"],
-            window["target_times"],
-            grid,
-            **field_options,
-        )
+        # Operational nowcasts do not have future observations at creation
+        # time.  A target remains required for retrospective evaluation, but
+        # is intentionally optional for real-time runs.
+        if "target" in window or "target_times" in window:
+            if "target" not in window or "target_times" not in window:
+                raise ValueError("target and target_times must be supplied together")
+            manifest["observations"]["target"] = write_cube(
+                directory,
+                "inputs/target.npz",
+                window["target"],
+                window["target_times"],
+                grid,
+                **field_options,
+            )
     except Exception as exc:
         manifest.update(status="failed", error=str(exc))
         save_manifest(directory, manifest)
@@ -296,12 +302,14 @@ class StoredFields:
         return self.cache[path]
 
     def capabilities(self):
+        target = self.manifest["observations"].get("target")
+        context = self.manifest["observations"]["context"]
         return {
             "cadence_minutes": self.cadence,
             "observation_names": [self.manifest["data"]["id"]],
             "model_ids": list(self.manifest["forecasts"]),
-            "retrospective": True,
-            "unit": self.manifest["observations"]["target"]["unit"],
+            "retrospective": target is not None,
+            "unit": (target or context)["unit"],
         }
 
     def list_observations(self, name, t0, t1):

@@ -2,6 +2,31 @@
   "version": 1,
   "data_adapters": [
     {
+      "id": "mlcast_opera_plus_it_vmi",
+      "version": "1.0.0",
+      "path": "mlcast_opera_plus_it_vmi",
+      "title": "OPERA + Italy DPC VMI",
+      "instrument": "radar composite",
+      "requirements": "mlcast_opera_plus_it_vmi/requirements.txt",
+      "channels": {
+        "mode": "closed",
+        "variables": [
+          {
+            "id": "vmi",
+            "long_name": "vertical_maximum_intensity",
+            "units": "dBZ"
+          }
+        ]
+      },
+      "spatial": {
+        "crop": true,
+        "bbox_order": ["west", "south", "east", "north"]
+      },
+      "native_cadence_minutes": 5,
+      "formats": ["zarr"],
+      "models": []
+    },
+    {
       "id": "cma_radar",
       "version": "1.0.0",
       "path": "cma_radar",
