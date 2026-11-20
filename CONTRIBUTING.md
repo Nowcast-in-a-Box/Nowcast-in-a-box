@@ -22,8 +22,8 @@ You need basic knowledge of Git, GitHub, and code style. If not, check online tu
 
 So far, this repo has offered two types of issues:
 
-- *Claim*: Say that you want to do something.
-- *Bug:* Report a bug while running, or anything that does not feel right.
+- _Claim_: Say that you want to do something.
+- _Bug:_ Report a bug while running, or anything that does not feel right.
 
 If you are a developer, a claim is for you. Bug reports are mainly for users.
 
@@ -47,12 +47,12 @@ Name a branch like:
 
 The recommended options for {type} are:
 
-- fix  Bug fixed
-- feat  New feature introduced
-- docs Update documentation
-- test Testing related
-- ci Continuous system
-- i18n Internationalization and localization
+- fix: Bug fixed
+- feat: New feature introduced
+- docs: Update documentation
+- test: Testing related
+- ci: Continuous system
+- i18n: Internationalization and localization
 
 You may use others, but keep it neat and formal.
 
@@ -69,7 +69,7 @@ git checkout -b feat/some-work
 
 Work on coding in your branch.
 
-Please keep each branch limited to related work*.*
+Please keep each branch limited to related work.
 
 ### Testing
 
@@ -125,7 +125,6 @@ Commands for committing:
 git add -p
 git commit -m "feat:(#12) add nib:// handler uri scheme"
 ```
-
 
 ## Pull requests
 

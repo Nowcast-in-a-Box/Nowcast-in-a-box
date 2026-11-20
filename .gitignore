@@ -41,7 +41,7 @@ artifacts/*
 !artifacts/.gitkeep
 
 # Generated release resources (manifest/Dockerfile copy).
-resources/
+/resources/
 
 # Diagnostics run outputs. Keep the directory.
 runs/*
