@@ -47,7 +47,7 @@ case "${1:-}" in
 esac
 
 if [[ "$action" == start || "$action" == restart || "$action" == connect ]]; then
-	log="$(mktemp -t nib-start)"
+	log="$(mktemp "${TMPDIR:-/tmp}/nib-start.XXXXXXXX")"
 	if "$bin" "$action" -config "$config" "$@" >"$log" 2>&1; then
 		url="$(sed -n 's/^console //p' "$log" | head -1)"
 		rm -f "$log"

@@ -44,6 +44,11 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        env:
+          # Atlas pins SHA-256 checksums of the original file bytes.
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: "false"
         with:
           # tests/handler and tests/runtime compare against the atlas catalog.
           submodules: recursive
