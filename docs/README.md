@@ -23,3 +23,7 @@ prebuilt Handler; model inference and diagnostics run inside Docker.
 - [Runtime contracts](reference/contracts.md)
 - [Adapter source](../adapters/README.md)
 - [Diagnostics](../diagnostics/README.md)
+
+## Historical records
+
+- [Archived checks and plans](archive/README.md)
