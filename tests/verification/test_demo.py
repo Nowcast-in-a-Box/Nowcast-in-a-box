@@ -14,10 +14,7 @@ reading at the end must not be a perfect score.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-
 import pytest
-
 from nib_verify import demo as demo_module
 from nib_verify.catalog import discover_packages, discover_runs
 from nib_verify.catalog.matching import check_pair
@@ -36,8 +33,9 @@ def small_demo(monkeypatch):
 
 @pytest.fixture
 def built(tmp_path):
-    return demo_module.build(tmp_path / "nib-demo", say=lambda _line: None,
-                             init_times=6)
+    return demo_module.build(
+        tmp_path / "nib-demo", say=lambda _line: None, init_times=6
+    )
 
 
 # ======================================================================
@@ -58,7 +56,10 @@ def test_every_pair_the_demo_puts_together_passes_the_matcher(built):
     for data in catalog.data_packages:
         for model in catalog.model_packages:
             result = check_pair(data, model)
-            same_unit = data.as_dict()["ruler_defaults"]["unit"] ==                 model.as_dict()["ruler_defaults"]["unit"]
+            same_unit = (
+                data.as_dict()["ruler_defaults"]["unit"]
+                == model.as_dict()["ruler_defaults"]["unit"]
+            )
             if same_unit:
                 assert result.ok, f"{data.id} x {model.id}: {result.errors}"
             else:
@@ -99,7 +100,10 @@ def test_the_demo_config_can_be_loaded_and_is_a_complete_ruler(built):
     assert {m.name for m in cfg.members} == set(demo_module.MODELS)
     # every family, so the review page has something in each tab of the picker
     assert {g.family for g in cfg.metrics} == {
-        "yes_or_no", "continuous", "moments", "spatial"
+        "yes_or_no",
+        "continuous",
+        "moments",
+        "spatial",
     }
 
 
@@ -184,8 +188,7 @@ def test_an_unknown_scenario_is_refused_before_anything_is_written(tmp_path):
 
 def test_the_scenario_reaches_the_generator(tmp_path):
     for name in ("simple", "convective", "patchy"):
-        demo = demo_module.build(tmp_path / name, scenario=name,
-                                 say=lambda _l: None)
+        demo = demo_module.build(tmp_path / name, scenario=name, say=lambda _l: None)
         assert demo.scenario == name
 
 
@@ -221,13 +224,19 @@ def test_the_headline_is_not_a_perfect_score(tmp_path, capsys):
     # back as a unit mismatch.
     settings = demo_module.catalogue(demo.scenario)
     with serve_in_thread(build_access("mock", **settings)) as url:
-        demo_module.verify(demo, access=build_access("mock", **settings),
-                           data_url=url, say=lambda _l: None)
+        demo_module.verify(
+            demo,
+            access=build_access("mock", **settings),
+            data_url=url,
+            say=lambda _l: None,
+        )
 
     rows = demo_module.headline(demo, say=lambda _l: None)
     values = [v for row in rows for v in row["values"].values() if v is not None]
     assert len(values) >= 6
-    assert any(v < 0.95 for v in values), "every score is perfect; the demo shows nothing"
+    assert any(v < 0.95 for v in values), (
+        "every score is perfect; the demo shows nothing"
+    )
     assert any(v > 0.0 for v in values)
 
 
@@ -243,7 +252,9 @@ def test_the_demo_command_runs_end_to_end_and_stops(tmp_path, capsys):
 
 
 def test_the_demo_command_says_what_it_did(tmp_path, capsys):
-    assert main(["demo", "--where", str(tmp_path / "nib-demo"), "--no-serve"]) == EXIT_OK
+    assert (
+        main(["demo", "--where", str(tmp_path / "nib-demo"), "--no-serve"]) == EXIT_OK
+    )
     out = capsys.readouterr().out
     for stage in ("1/6", "2/6", "3/6", "4/6", "5/6", "6/6"):
         assert stage in out, stage
@@ -252,8 +263,9 @@ def test_the_demo_command_says_what_it_did(tmp_path, capsys):
 
 
 def test_the_demo_command_refuses_a_bad_scenario(tmp_path, capsys):
-    code = main(["demo", "--where", str(tmp_path / "nib-demo"),
-                 "--scenario", "sunny", *QUIET])
+    code = main(
+        ["demo", "--where", str(tmp_path / "nib-demo"), "--scenario", "sunny", *QUIET]
+    )
     assert code == EXIT_FAILURE
     assert "unknown scenario" in capsys.readouterr().err
 
@@ -274,7 +286,9 @@ def test_the_demo_command_is_silent_when_asked(tmp_path, capsys):
 
 def test_the_demo_writes_where_it_was_told(tmp_path):
     main(["demo", "--where", str(tmp_path / "elsewhere"), "--no-serve", *QUIET])
-    assert (tmp_path / "elsewhere" / "configs" / f"{demo_module.CONFIG_ID}.json").is_file()
+    assert (
+        tmp_path / "elsewhere" / "configs" / f"{demo_module.CONFIG_ID}.json"
+    ).is_file()
 
 
 # ======================================================================
@@ -324,7 +338,7 @@ def test_every_product_has_two_models_and_a_config_of_its_own(built):
     for source in demo_module.SOURCES:
         models = [f for f in demo_module.FORECASTS if f.source == source.id]
         assert len(models) == 2, source.id
-        manifest = catalog.get(source.id)
+        catalog.get(source.id)
         for forecast in models:
             output = catalog.get(forecast.id).output_fields[0]
             assert (output.name, output.unit) == (source.variable, source.unit)
@@ -378,7 +392,10 @@ def test_the_configs_share_almost_no_parameters(built):
     assert a.ruler.extent != b.ruler.extent, "each instrument has its own footprint"
     # the radar's footprint is inside the satellite's, which is why one model grid
     # can serve both
-    ra, rb = demo_module.source_of("radar-composite"), demo_module.source_of("satellite-rain")
+    ra, rb = (
+        demo_module.source_of("radar-composite"),
+        demo_module.source_of("satellite-rain"),
+    )
     for lo, hi in ((0, 2), (1, 3)):
         assert rb.extent[lo] <= ra.extent[lo] and ra.extent[hi] <= rb.extent[hi]
     assert [m.leads for m in a.members] != [m.leads for m in b.members]
@@ -409,8 +426,10 @@ def test_each_ground_truth_declares_its_own_extent(built):
     # share a footprint on purpose -- the rain estimate and the brightness
     # temperature are both from the same satellite -- so the check is that they are
     # not *all* one extent.
-    extents = {tuple(catalog.get(s.id).as_dict()["ruler_defaults"]["extent"])
-               for s in demo_module.SOURCES}
+    extents = {
+        tuple(catalog.get(s.id).as_dict()["ruler_defaults"]["extent"])
+        for s in demo_module.SOURCES
+    }
     assert len(extents) > 1
     assert len({s.resolution for s in demo_module.SOURCES}) > 1
 
@@ -428,7 +447,8 @@ def test_every_model_grid_covers_both_products(built):
     # onto a ruler as a matter of course. rfc/matching.md open point 2 asks
     # whether that error should stay; this is what it costs while it does.
     assert tuple(model.input_fields[0].shape) == tuple(
-        demo_module.source_of("radar-composite").shape)
+        demo_module.source_of("radar-composite").shape
+    )
     for source in demo_module.SOURCES:
         lo, la, hi, ha = source.extent
         assert demo_module.MODEL_EXTENT[0] <= lo and hi <= demo_module.MODEL_EXTENT[2]
@@ -443,7 +463,8 @@ def test_a_run_reaches_exactly_as_far_as_its_product_claims(built):
         assert run.forecast_horizon == product.frames, run.path
         reach = run.forecast_horizon * demo_module.CADENCE_MINUTES
         exercise = demo_module.exercise(
-            "radar-demo" if run.data_id == "radar-composite" else "rain-demo")
+            "radar-demo" if run.data_id == "radar-composite" else "rain-demo"
+        )
         assert max(exercise.leads) <= reach, run.path
 
 

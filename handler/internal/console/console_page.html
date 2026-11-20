@@ -1,0 +1,1923 @@
+<!doctype html>
+<!-- Visual language mirrors the NiB Hub provisioning interface: Inter,
+     #0057dc primary, light canvas #f6f8fc, white panels, 12px radius.
+     Fonts: Inter (SIL OFL 1.1, see console_assets/fonts/LICENSE).
+     Icons: Tabler (MIT), same stroke set the Hub uses. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NiB local console</title>
+<style>
+  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-400-normal.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
+  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-500-normal.woff2") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; }
+  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-600-normal.woff2") format("woff2"); font-style: normal; font-weight: 600; font-display: swap; }
+
+  :root {
+    color-scheme: light;
+    --blue: #0057dc; --blue-deep: #0047bc; --blue-soft: #eff5ff;
+    --ink: #17212b; --muted: #5f7086;
+    --line: #dce5f0; --line-strong: #c6d4e6; --bg: #f6f8fc;
+    --green: #05ae51; --green-soft: #effaf3;
+    --orange: #ef8000; --orange-soft: #fff5eb;
+    --red: #c43b30; --red-soft: #fdf1ef;
+    --radius: 12px; --rail: 228px;
+    font-family: Inter, Arial, Helvetica, sans-serif;
+    color: var(--ink); font-size: 14px; line-height: 1.5;
+    background: var(--bg);
+  }
+  * { box-sizing: border-box; }
+  /* .state-block and .orders-table-wrap set their own display, which would
+     otherwise win over the UA [hidden] rule and leave hidden nodes visible. */
+  [hidden] { display: none !important; }
+  body { margin: 0; min-width: 320px; background: var(--bg); }
+  ::selection { background: #dceaff; color: var(--ink); }
+  h1, h2, p { margin: 0; }
+  h1 { font-size: clamp(24px, 2vw, 30px); line-height: 1.15; letter-spacing: -0.5px; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 20px; line-height: 1.25; letter-spacing: -0.3px; font-weight: 600; text-wrap: balance; }
+  a { color: var(--blue); text-underline-offset: 3px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; color: #3d5573; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); line-height: 1.5; }
+  .ui-icon { display: inline-block; flex: 0 0 auto; width: 20px; height: 20px; line-height: 0; }
+  .ui-icon svg { width: 100%; height: 100%; stroke: currentColor; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+  * { scrollbar-width: thin; scrollbar-color: #c9d6e6 transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: #c9d6e6; border-radius: 6px; border: 2px solid var(--bg); }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  .skip-link { position: fixed; top: 12px; left: 12px; z-index: 10; padding: 10px 16px; border-radius: 7px; background: var(--blue); color: #fff; transform: translateY(calc(-100% - 16px)); }
+  .skip-link:focus { transform: none; }
+
+  /* ------------------------------------------------------------- shell */
+  .app-frame { display: flex; min-height: 100vh; }
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--rail); background: #fff; border-right: 1px solid var(--line); z-index: 5; overflow-y: auto; display: flex; flex-direction: column; padding: 0 14px 18px; }
+  .brand { min-height: 88px; display: flex; align-items: center; gap: 12px; padding: 0 8px; }
+  .brand-mark { display:grid; place-items:center; width:40px; height:40px; border-radius:8px; background:#143c72; color:white; font-weight:600; }
+  .brand-copy { display: flex; flex-direction: column; min-width: 0; }
+  .brand-copy strong { font-size: 14px; letter-spacing: -0.2px; white-space: nowrap; }
+  .brand-copy span { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .sidebar nav { padding:12px 0 0; display:flex; flex-direction:column; gap:4px; }
+  .nav-section-title { min-height: 36px; display: flex; align-items: center; padding: 0 10px; color: #5b6f88; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }
+  .nav-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 42px; padding: 8px 10px; border-left: 2px solid transparent; border-radius: 8px; color: #4f627a; font-size: 13px; text-decoration: none; }
+  .nav-item:hover { background: #f3f7fc; }
+  .nav-item--active { background: var(--blue-soft); border-left-color: var(--blue); color: var(--blue); font-weight: 600; }
+  .nav-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--blue); color: #fff; font-size: 11px; font-weight: 600; }
+  .nav-item:not(.nav-item--active) .nav-count { background: #e3eaf3; color: #51637a; }
+  .sidebar-note { display: flex; align-items: center; gap: 8px; margin: auto 8px 0; padding-top: 18px; color: var(--muted); font-size: 11px; }
+  .sidebar-note strong { color: #5c6c80; background: #eef2f7; border-radius: 4px; padding: 3px 6px; text-transform: uppercase; }
+
+  .app-shell { margin-left: var(--rail); flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { width: 100%; min-height: 88px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 14px 28px; border-bottom: 1px solid var(--line); background: #fff; }
+  .title-group { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+  .title-group p { color: var(--muted); line-height: 1.4; max-width: 72ch; }
+  .topbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+
+  .runtime-status { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 38px; padding: 8px 12px; border: 1px solid transparent; border-radius: 999px; background: #f2f5f9; color: #52667f; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .runtime-status-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #98a7b8; }
+  .runtime-status--connected { background: var(--green-soft); color: #0b6b3a; }
+  .runtime-status--connected .runtime-status-dot { background: var(--green); box-shadow: 0 0 0 3px rgb(5 174 81 / 12%); }
+  .runtime-status--reconnecting { background: var(--orange-soft); color: #8a5900; }
+  .runtime-status--reconnecting .runtime-status-dot { background: var(--orange); }
+  .runtime-status--disconnected { background: var(--red-soft); color: #8d342b; }
+  .runtime-status--disconnected .runtime-status-dot { background: var(--red); }
+
+  main { width: 100%; max-width: 1480px; margin: 0 auto; padding: 28px clamp(20px, 2.5vw, 36px) 44px; flex: 1; min-width: 0; }
+
+  /* ------------------------------------------------------------- panels */
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 1px 2px rgb(41 60 85 / 4%); padding: 22px 22px 24px; min-width: 0; }
+  .panel + .panel { margin-top: 22px; }
+  .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .heading-note { font-size: 12px; color: var(--muted); }
+  #editor-revision, #editor-title, #run-title { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+
+  /* ------------------------------------------------------------- buttons */
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  button:focus-visible, a:focus-visible, summary:focus-visible, .orders-table-wrap:focus-visible { outline: 3px solid #78aaff; outline-offset: 2px; }
+  .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid transparent; border-radius: 7px; padding: 10px 18px; line-height: 1.3; text-decoration: none; transition: transform 160ms ease-out; }
+  .primary .ui-icon, .secondary .ui-icon { width: 18px; height: 18px; }
+  .primary { background: var(--blue); color: #fff; font-weight: 600; }
+  .primary:hover:not(:disabled) { background: var(--blue-deep); }
+  .primary:disabled { background: #e3e7ed; color: #8c98a7; }
+  .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: scale(0.97); }
+  .secondary { background: #fff; border-color: var(--line-strong); color: var(--ink); }
+  .secondary:hover:not(:disabled) { border-color: #a9bede; background: #f6f9fd; }
+  .secondary:disabled { color: var(--muted); background: #f2f5f9; border-color: var(--line); }
+  .table-button { min-height: 32px; padding: 6px 12px; font-size: 13px; }
+
+  /* ------------------------------------------------------------- badges */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; border: 1px solid transparent; }
+  .badge--neutral { color: #66768a; background: #eef2f6; border-color: #dbe3ec; }
+  .badge--info { color: #1c5fd6; background: #eff5ff; border-color: #c9dcfb; }
+  .badge--success { color: #0a8a3f; background: var(--green-soft); border-color: #c6ead4; }
+  .badge--warning { color: #a35c00; background: var(--orange-soft); border-color: #ffdcb9; }
+  .badge--danger { color: var(--red); background: var(--red-soft); border-color: #efb9b3; }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ------------------------------------------------------------- tables */
+  .orders-table-wrap { max-width: 100%; overflow-x: auto; }
+  .orders-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13.5px; }
+  .orders-table-wrap .orders-table { min-width: 720px; }
+  .orders-table th { text-align: left; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .orders-table td { padding: 13px 12px; border-bottom: 1px solid #edf2f8; vertical-align: middle; }
+  .orders-table tr:last-child td { border-bottom: 0; }
+  .orders-table tbody tr:hover td { background: #f7fafd; }
+  .orders-table td.numeric, .orders-table td.time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* Identifiers are long and unbreakable: clip them instead of letting every
+     row grow to two lines. The full value stays in the title attribute. */
+  .orders-table td.identity { overflow: hidden; }
+  .orders-table td.identity code, .orders-table td.identity span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .orders-table td { overflow: hidden; text-overflow: ellipsis; }
+  .orders-table th.sticky-head { position: sticky; top: 0; z-index: 1; background: #fff; }
+  .orders-table td.muted-cell { color: var(--muted); font-size: 12px; }
+  .source-tag { display: inline-block; padding: 2px 7px; border-radius: 4px; background: #eef3f9; color: #4f6b8a; font-size: 11px; font-weight: 600; }
+  .source-tag--run { background: #f3efff; color: #6a45c8; }
+  .row-link { color: var(--blue); font-weight: 500; text-decoration: none; }
+  .row-link:hover { text-decoration: underline; }
+  .cell-code code { display: block; }
+  .cell-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+  /* ------------------------------------------------------------- states */
+  .state-block { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+  .empty-title { font-weight: 600; }
+  .error-note { display: flex; gap: 10px; align-items: baseline; margin: 12px 0 0; padding: 12px 14px; border: 1px solid #efb9b3; border-radius: 8px; background: var(--red-soft); color: #7c2d24; line-height: 1.55; overflow-wrap: anywhere; }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #d8e3f2; border-top-color: var(--blue); animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* first data paint is the page's one motion moment */
+  .enter { animation: rise 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+
+  /* ------------------------------------------------------------- import */
+  .import-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .file-label { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 10px 16px; border: 1px dashed var(--line-strong); border-radius: 7px; background: #f8fafc; color: #4f627a; font-size: 13px; cursor: pointer; }
+  .file-label:hover { border-color: #a9bede; background: #f6f9fd; color: var(--blue); }
+  .file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .file-name { color: var(--ink); font-weight: 500; }
+  .file-name:empty::after { content: "no file chosen"; color: var(--muted); font-weight: 400; }
+
+  /* ------------------------------------------------------------- log */
+  /* A run log is terminal output, so it gets Hub's dark technical panel and
+     opens as a full-width row instead of widening a table cell. */
+  .run-detail > td { padding: 0 0 16px; background: #f7fafd; }
+  .run-detail .run-log { margin: 0 12px; }
+  .run-log-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border: 1px solid #24364b; border-bottom: 0; border-radius: 9px 9px 0 0; background: #172536; color: #aebdd0; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+  .run-log-output { max-height: 320px; margin: 0; padding: 7px 0; overflow: auto; border: 1px solid #24364b; border-top: 0; border-radius: 0 0 9px 9px; background: #101b29; color: #d6e2ee; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.55; white-space: normal; }
+  .run-log-line { display: flex; align-items: flex-start; gap: 10px; padding: 1px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .run-log-line:hover { background: #162638; }
+  .run-log-number { flex: 0 0 26px; color: #5e7085; text-align: right; user-select: none; }
+  .run-log-prefix { flex: 0 0 150px; max-width: 150px; overflow: hidden; color: #71859b; text-overflow: ellipsis; white-space: nowrap; }
+  .run-log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .run-log-line--file { margin-top: 8px; padding-top: 8px; border-top: 1px solid #24364b; }
+  .run-log-line--file:first-child { margin-top: 0; padding-top: 1px; border-top: 0; }
+  .run-log-file { padding: 1px 6px; border-radius: 4px; background: #1a2c42; color: #8ec0ff; font-size: 10px; font-weight: 600; }
+  .run-log-line--success .run-log-message { color: #7be0a0; }
+  .run-log-line--warning .run-log-message { color: #ffc56e; }
+  .run-log-line--error .run-log-message { color: #ff9b91; }
+  .run-log-line--json .run-log-message { color: #a8c7ff; }
+  .run-log-line--muted .run-log-message { color: #8497aa; }
+  .run-log-json-key { color: #9cc8ff; }
+  .run-log-json-string { color: #9bdfb2; }
+  .run-log-json-number { color: #ffc56e; }
+  .run-log-json-literal { color: #ff9b91; }
+  .run-log-empty { padding: 14px 12px; color: #8497aa; }
+
+  /* ------------------------------------------------------------ triggers */
+  .trigger-form { display:grid; gap:14px; max-width:47rem; margin:18px 0 24px; padding:18px 0; border-block:1px solid var(--line); }
+  .trigger-form fieldset { margin:0; padding:0; border:0; min-width:0; }
+  .trigger-form legend { padding:0 0 6px; font-weight:600; }
+  .trigger-modes { display:flex; flex-wrap:wrap; gap:4px; } .trigger-modes label { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border:1px solid var(--line); border-radius:4px; cursor:pointer; }
+  .trigger-modes label:has(:checked) { background:#edf4ff; color:#194d90; border-color:#608ac5; } .trigger-modes input { margin:0; }
+  .trigger-form .field { max-width:28rem; } .trigger-form details label {margin:8px 0;} .trigger-form input[type=number], .trigger-form input[type=time] {max-width:12rem;}
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > span { font-size: 11px; font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase; color: var(--muted); }
+  .field select, .field input { min-height: 40px; width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: #fff; font-size: 13.5px; }
+  .field select:focus-visible, .field input:focus-visible { outline: 3px solid #78aaff; outline-offset: 1px; }
+  .field .field-hint { font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .form-actions { display: flex; align-items: center; gap: 10px; }
+  .trigger-flag { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+  .trigger-flag--missed { color: #a35c00; }
+
+  @media (max-width: 680px) {
+    /* Phones get a stacked card per row: a table of long unbreakable ids is
+       unreadable at 300px, and it forced a page-wide horizontal scrollbar. */
+    .orders-table-wrap .orders-table { min-width: 0; width: 100%; }
+    .orders-table { font-size: 13px; }
+    .orders-table thead { display: none; }
+    .orders-table, .orders-table tbody, .orders-table tr, .orders-table td { display: block; width: auto; }
+    .orders-table tr { padding: 13px 0; border-bottom: 1px solid #edf2f8; }
+    .orders-table tr:last-child { border-bottom: 0; }
+    .orders-table tbody tr:hover td { background: transparent; }
+    .orders-table td { padding: 1px 0; border: 0; overflow: hidden; }
+    .orders-table td.identity code, .orders-table td.identity span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .orders-table td.cell-code.identity code { font-size: 12px; }
+    .orders-table td.actions-cell { margin-top: 9px; }
+    .orders-table .optional { display: none; }
+    .run-detail > td { padding: 0 0 12px; }
+    .run-detail .run-log { margin: 0; }
+    .run-log-output { max-height: 260px; }
+    .run-log-prefix { display: none; }
+    main { padding-top: 18px; }
+  }
+
+  @media (max-width: 880px) {
+    /* The rail becomes a top bar, so the frame must stack instead of staying a row. */
+    .app-frame { flex-direction: column; }
+    .sidebar { position: static; width: auto; flex-direction: row; align-items: center; gap: 10px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { min-height: 0; padding: 0; }
+    .sidebar nav { flex-direction: row; padding: 0 0 0 8px; }
+    .nav-section-title, .sidebar-note { display: none; }
+    .app-shell { margin-left: 0; }
+    .topbar { min-height: 0; flex-wrap: wrap; }
+  }
+
+  @media (max-width: 560px) {
+    .brand-copy { display: none; }
+    .sidebar { gap: 6px; padding: 8px 12px; }
+  }
+  .panel + .panel { margin-top: 22px; }
+  fieldset { min-width: 0; margin: 18px 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); }
+  legend { padding: 0 10px 0 0; font-weight: 600; }
+  .parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .field-wide { grid-column: 1 / -1; }
+  .field label { font-weight: 500; }
+  .field textarea { width: 100%; padding: 10px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 7px; font: inherit; }
+  input, textarea { caret-color: var(--blue); }
+  input[readonly] { background: var(--bg); color: var(--muted); }
+  :focus-visible { outline: 3px solid #78aaff; outline-offset: 3px; }
+  .file-label:focus-within { outline: 3px solid #78aaff; outline-offset: 3px; }
+  .choice-list { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  .check-field { display: flex; gap: 8px; align-items: center; min-height: 36px; }
+  .check-field input { width: 18px; height: 18px; accent-color: var(--blue); }
+  .editor-actions, .paging { flex-wrap: wrap; margin-top: 16px; }
+  .config-output { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--bg); border-radius: 7px; }
+  #run-inspector { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 20px; }
+  @media (max-width: 680px) { .parameter-grid { grid-template-columns: minmax(0, 1fr); } .editor-actions > button { flex: 1 1 140px; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  #runtime-identity { overflow-wrap: anywhere; }
+  summary { cursor: pointer; padding: 10px 0; font-weight: 500; }
+  @media (max-width: 880px) { .sidebar { flex-wrap: wrap; } .sidebar nav { flex-wrap: wrap; } }
+  @media (max-width: 680px) { .field input, .field select, .field textarea { font-size: 16px; } }
+  main > section { display:none; }
+  body[data-page="dashboard"] #dashboard-view, body[data-page="settings"] #management, body[data-page="orders"] :is(#orders-view,#import,#order-editor,#runs), body[data-page="triggers"] #triggers-view { display:block; }
+  [hidden] { display:none !important; }
+  #status-chip:not(.runtime-status--disconnected) { display:none; }
+  .instrument { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:28px; background:#143c72; color:#fff; border-left:6px solid #75afff; }
+  .instrument h2 { color:inherit; font-size:1rem; margin:0; } #active-count { font-size:3.25rem; line-height:1.2; font-variant-numeric:tabular-nums; }
+  .instrument dl { margin:0; } .instrument dt { font-size:.8rem; color:#d2e6ff; } .instrument dd { margin:2px 0 8px; font-weight:600; } #dash-version { overflow-wrap:anywhere; }
+  .activity-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin-top:28px; } .activity-grid section { border-top:2px solid #7196c7; padding-top:14px; } .activity-grid ul { padding:0; list-style:none; } .activity-grid li { display:flex; justify-content:space-between; align-items:center; gap:8px; overflow-wrap:anywhere; padding:10px 0; border-bottom:1px solid var(--line); }
+  #first-run { margin-top:24px; padding:24px 0; border-block:1px solid var(--line); }
+  .first-actions { display:flex; gap:20px; flex-wrap:wrap; align-items:center; margin-top:16px; }
+  .instrument dl { min-width:0; max-width:100%; }
+  .handler-controls { margin-top:32px; padding-top:24px; border-top:1px solid var(--line); }
+  .handler-controls .section-heading { justify-content:flex-start; }
+  .order-action-group > .editor-actions { margin:0; }
+  #preflight-status { color:var(--muted); }
+  .delete-trigger { flex-basis:100%; text-align:start; background:none; color:#943b32; border:0; border-top:1px solid var(--line); margin-top:4px; }
+  .delete-trigger:hover { text-decoration:underline; }
+  .orders-table td.time { font-family:ui-monospace,monospace; }
+  .folder-browser { display:grid; grid-template-columns:minmax(11rem, 30%) minmax(0,1fr); gap:20px; align-items:start; }
+  #dataset-list { max-height:18rem; overflow:auto; display:grid; gap:2px; border-right:1px solid var(--line); padding-right:8px; }
+  #dataset-list button { display:grid; gap:2px; min-height:48px; background:transparent; text-align:left; border:0; border-radius:4px; padding:8px 12px; color:var(--ink); overflow-wrap:anywhere; }
+  #dataset-list button:hover { background:var(--bg); }
+  #dataset-list button:focus-visible { outline-offset:-3px; }
+  #dataset-list small { color:var(--muted); font-size:12px; }
+  #dataset-list small.unsaved { color:#805100; font-weight:600; }
+  #dataset-list button[aria-pressed=true] { background:#edf3ff; color:#164d98; box-shadow:inset 3px 0 #1762c3; }
+  #dataset-rows fieldset { margin:0; min-width:0; } #dataset-rows .form-actions { flex-wrap:wrap; }
+  .priority-strip, #image-priority { display:flex; align-items:center; flex-wrap:wrap; gap:7px; } .priority-strip { color:var(--muted); font-size:.85rem; }
+  .source-step { color:#254e80; background:#edf4ff; padding:3px 9px; border-radius:4px; overflow-wrap:anywhere; }
+  .config-output .run-log-json-key { color:#204f91; } .config-output .run-log-json-string { color:#216149; } .config-output :is(.run-log-json-literal,.run-log-json-number) { color:#813c75; }
+  .action-icon { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .field > span, .orders-table th, .badge { text-transform:none; letter-spacing:0; font-size:12px; }
+  @media(max-width:680px) { .folder-browser { grid-template-columns:minmax(0,1fr); gap:12px; } #dataset-list {max-height:9rem; border:1px solid var(--line); padding:4px;} .instrument { flex-wrap:wrap; } }
+  @media(max-width:680px) { .activity-grid {grid-template-columns:1fr;} .sidebar nav {width:100%; display:grid; grid-template-columns:1fr 1fr; padding:0;} .sidebar .nav-item {min-width:0;} .sidebar .ui-icon {display:inline-flex;} .nav-section-title {display:none;} }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="app-frame">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">NiB</span>
+      <span class="brand-copy"><strong>Nowcast-in-a-Box</strong><span>Local console</span></span>
+    </div>
+    <nav aria-label="Main navigation">
+      <a class="nav-item" href="#dashboard"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v8H3zM14 3h7v4h-7zM3 15h7v6H3zM14 11h7v10h-7z"/></svg></span>Dashboard</a>
+      <a class="nav-item" href="#settings"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h8m5 0h5M3 17h3m5 0h10"/><circle cx="13" cy="7" r="3"/><circle cx="8" cy="17" r="3"/></svg></span>Settings</a>
+      <a class="nav-item" href="#orders">
+        <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
+        Orders <span class="nav-count" id="nav-order-count" hidden>0</span>
+      </a>
+      <a class="nav-item" href="#triggers">
+        <span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m13 2-10 12h8l-1 8 11-13h-8l1-7z"/></svg></span>
+        Triggers <span class="nav-count" id="nav-trigger-count" hidden>0</span>
+      </a>
+    </nav>
+    <p class="sidebar-note"><strong>Offline</strong> no Hub needed</p>
+  </aside>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="title-group">
+        <h1 id="page-title" tabindex="-1">Dashboard</h1>
+        <p id="status-detail" aria-live="polite">checking handler…</p>
+      </div>
+      <div class="topbar-actions">
+        <span id="status-chip" class="runtime-status" aria-live="polite"><span class="runtime-status-dot"></span><span id="status-chip-text">checking…</span></span>
+        <button id="refresh" data-icon="refresh" class="secondary" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section id="dashboard-view" aria-label="Runtime overview">
+        <div class="instrument"><div><h2>Active tasks</h2><strong id="active-count">…</strong></div><dl><dt>Docker</dt><dd id="dash-docker">Checking…</dd><dt>Handler version</dt><dd id="dash-version">Checking…</dd></dl></div>
+        <div id="dashboard-error" role="status"></div>
+        <div id="dashboard-activity" class="activity-grid" hidden><section><h2>Current work</h2><ul id="dash-running"></ul></section><section><h2>Recent outcomes</h2><ul id="dash-outcomes"></ul></section></div>
+        <section id="first-run" hidden><h2>No runs yet</h2><div class="first-actions"><a class="primary" href="#settings">Set dataset folders</a><a href="#orders">Open orders</a></div></section>
+      </section>
+      <section class="panel" id="management" aria-labelledby="management-title">
+        <h2 id="management-title">Local configuration</h2>
+        <div id="local-settings">
+          <form id="image-settings-form">
+            <fieldset id="image-settings-fields" disabled><legend>Container image source</legend><div class="parameter-grid">
+              <label class="field"><span>Source policy</span><select id="image-source"><option value="official">Official registry</option><option value="mirror">Mirror</option><option value="auto">Automatic fallback</option></select></label>
+              <label class="field"><span>Registry override (optional)</span><input id="image-override" autocomplete="off" spellcheck="false"></label>
+            </div><p class="priority-strip"><span>Pull order</span><output id="image-priority" for="image-source image-override"></output></p>
+            <div class="form-actions editor-actions"><button class="secondary" type="submit">Save image settings</button></div></fieldset>
+          </form>
+          <fieldset id="data-settings-fields" disabled><legend>Dataset folders</legend>
+            <p class="muted">Clearing a folder removes its association. Files stay on this machine.</p>
+            <div class="folder-browser"><div id="dataset-list" role="group" aria-label="Datasets"></div><div id="dataset-rows"></div></div>
+          </fieldset>
+          <template id="dataset-row"><fieldset>
+            <legend></legend>
+            <label class="field"><span>Local folder path</span><input name="root" autocomplete="off" spellcheck="false"></label>
+            <div class="form-actions editor-actions"><button type="button" class="primary" name="save" data-icon="save">Save folder</button><button type="button" class="secondary" name="inspect" data-icon="inspect">Inspect sample</button><button type="button" class="secondary" name="clear">Clear folder</button></div>
+            <p role="status"></p><pre class="config-output" hidden></pre>
+          </fieldset></template>
+          <p id="settings-status" role="status"></p><button id="reload-settings" type="button" class="secondary">Reload settings</button>
+        </div>
+        <section class="handler-controls" aria-label="Handler controls">
+          <div class="section-heading"><h2>Handler</h2><span id="handler-health" role="status">Connecting…</span></div>
+          <p id="docker-health" role="status">Docker: not checked</p>
+          <details><summary>Installation and runtime paths</summary><p id="runtime-identity" class="muted"></p><pre id="runtime-config" class="config-output"></pre></details>
+          <div class="form-actions editor-actions"><button id="restart-handler" type="button" class="secondary" disabled>Restart Handler</button><button id="stop-handler" type="button" class="secondary" disabled>Stop Handler</button></div>
+          <p id="lifecycle-status" role="status"></p>
+        </section>
+      </section>
+      <section class="panel" id="import" aria-label="Create or import an order">
+        <div class="section-heading">
+          <h2>Local orders</h2>
+          <button id="new-order" class="primary" type="button" disabled>Create order</button>
+        </div>
+        <p class="muted">Import a local YAML order, or complete a Hub JSON selection with local sample times.</p>
+        <div class="import-row" id="order-drop">
+          <label class="file-label" for="package-file">
+            <input type="file" id="package-file" accept=".yaml,.yml,.json,application/json,application/yaml,text/yaml">
+            <span>Choose or drop an order file</span><span class="file-name" id="file-name"></span>
+          </label>
+          <button id="save-order" class="secondary" type="button" disabled>Import file</button>
+        </div>
+        <div id="import-error" role="status"></div>
+        <div id="options-error" role="status"></div>
+      </section>
+
+      <section class="panel" id="order-editor" aria-labelledby="editor-title" hidden>
+        <div class="section-heading"><h2 id="editor-title">Order defaults</h2><span class="heading-note" id="editor-revision"></span></div>
+        <p class="muted">Editing defaults affects future runs only. Changes to data, times, region or inference models require a new run.</p>
+        <form id="order-form">
+          <fieldset id="order-fields" disabled>
+            <legend>Inference inputs</legend>
+            <div class="parameter-grid">
+              <div class="field"><label for="order-id">Order ID</label><input id="order-id" required pattern="[a-z0-9][a-z0-9._\-]{0,127}" autocomplete="off"><span class="field-hint">Lowercase letters, digits, dot, underscore and dash. Unique on this machine.</span></div>
+              <div class="field"><label for="order-data">Data source</label><select id="order-data" required></select></div>
+              <div class="field"><label for="order-event">Event ID</label><input id="order-event" required autocomplete="off"></div>
+              <div class="field field-wide"><label for="order-starts">Sample start times (UTC)</label><textarea id="order-starts" rows="4" required placeholder="2026-01-01T00:00:00Z" aria-describedby="sample-hint"></textarea><span class="field-hint" id="sample-hint">One UTC RFC3339 time per line, ending in Z.</span></div>
+            </div>
+            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div></fieldset>
+            <fieldset id="order-region" hidden><legend>Region centre</legend><div class="parameter-grid">
+              <div class="field"><label for="order-lon">Longitude (°E)</label><input id="order-lon" type="number" step="any"></div>
+              <div class="field"><label for="order-lat">Latitude (°N)</label><input id="order-lat" type="number" step="any"></div>
+            </div><p class="muted" id="region-hint"></p></fieldset>
+            <fieldset><legend>Fixed model geometry</legend><div class="parameter-grid" id="order-fixed"></div></fieldset>
+            <div id="order-diagnostics"></div>
+          </fieldset>
+          <p id="editor-status" role="status" class="muted"></p>
+          <div id="editor-error" role="status"></div>
+          <fieldset class="order-action-group"><legend>Draft</legend><div class="form-actions editor-actions">
+            <button id="validate-order" class="secondary" type="button">Validate draft</button>
+            <button id="preflight-order" class="secondary" type="button">Check readiness</button>
+            <button id="save-defaults" data-icon="save" class="primary" type="submit">Save defaults</button>
+          </div></fieldset>
+          <p id="preflight-status" role="status">Readiness not checked. Every start also runs backend checks.</p><div id="preflight-checks"></div>
+          <fieldset class="order-action-group"><legend>Saved order</legend><div class="form-actions editor-actions">
+            <button id="start-selected" class="secondary" type="button" disabled>Start new run</button>
+            <button id="export-order" class="secondary" type="button" disabled>Export saved YAML</button>
+          </div></fieldset>
+        </form>
+      </section>
+
+      <section class="panel" id="orders-view" aria-label="Saved orders" style="margin-top:22px">
+        <div class="section-heading">
+          <h2>Saved orders</h2>
+          <span class="heading-note" id="orders-note"></span>
+        </div>
+        <label class="field">Filter orders and runs<select id="order-filter"><option value="">All orders</option></select></label>
+        <div id="orders-error"></div>
+        <div id="orders-docker" hidden></div>
+        <div id="orders-action-error"></div>
+        <div id="orders-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading orders"></div></div>
+        <div class="orders-table-wrap" id="orders-wrap" hidden tabindex="0">
+          <table class="orders-table">
+            <colgroup><col style="width:22%"><col style="width:18%"><col style="width:11%"><col style="width:11%"><col style="width:7%"><col style="width:12%"><col style="width:19%"></colgroup>
+            <thead><tr><th>Package</th><th>Order</th><th class="optional">Data</th><th class="optional">Models</th><th class="optional">Samples</th><th class="optional">Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="orders-body"></tbody>
+          </table>
+        </div>
+        <div id="orders-empty" hidden></div>
+      </section>
+
+      <section class="panel" id="triggers-view" style="margin-top:22px" aria-label="Triggers">
+        <div class="section-heading">
+          <h2>Saved triggers</h2><span class="heading-note" id="triggers-note"></span>
+          <button class="primary" type="button" id="new-trigger" data-icon="add" disabled>New trigger</button>
+        </div>
+        <p class="muted">Run a saved order on new data or a schedule.</p>
+        <p id="trigger-no-orders" hidden><a href="#orders">Create a saved order</a> to add a trigger.</p>
+        <div id="triggers-error"></div>
+        <form class="trigger-form" id="trigger-form" hidden>
+          <h3 id="trigger-form-title">New trigger</h3>
+          <label class="field">
+            <span>Saved order</span>
+            <select id="trigger-package" required></select>
+          </label>
+          <fieldset><legend>Run when</legend><div class="trigger-modes">
+            <label><input type="radio" name="condition" value="new_data" checked>New data arrives</label>
+            <label><input type="radio" name="condition" value="interval">Fixed interval</label>
+            <label><input type="radio" name="condition" value="daily">Daily at</label>
+          </div></fieldset>
+          <label class="field" id="trigger-poll-field">
+            <span>Check every (minutes)</span>
+            <input id="trigger-poll" type="number" min="1" max="1440" step="1" value="10">
+          </label>
+          <label class="field" id="trigger-interval-field" hidden>
+            <span>Interval (minutes)</span>
+            <input id="trigger-interval" type="number" min="5" max="1440" step="1" value="60" required>
+          </label>
+          <label class="field" id="trigger-daily-field" hidden>
+            <span>Local time</span>
+            <input id="trigger-daily" type="time" value="08:00">
+          </label>
+          <details id="trigger-options"><summary>Data window options</summary>
+          <label class="field" id="trigger-source-field" hidden>
+            <span>Start window</span>
+            <select id="trigger-source">
+              <option value="latest_ready">Newest ready data</option>
+              <option value="order">The order's own time</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Windows per run</span>
+            <select id="trigger-window">
+              <option value="latest">Newest only</option>
+              <option value="all">All new windows</option>
+            </select>
+          </label>
+          </details>
+          <div class="form-actions">
+            <button class="primary" id="trigger-add" type="submit">Add trigger</button>
+            <button class="secondary" id="trigger-cancel" type="button">Cancel</button>
+          </div>
+        </form>
+        <div id="trigger-action-error"></div>
+        <div id="triggers-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading triggers"></div></div>
+        <div class="orders-table-wrap" id="triggers-wrap" hidden tabindex="0" style="margin-top:16px">
+          <table class="orders-table">
+            <colgroup><col style="width:19%"><col style="width:24%"><col style="width:12%"><col style="width:17%"><col style="width:28%"></colgroup>
+            <thead><tr><th>Trigger</th><th>When</th><th class="optional">Windows</th><th>Last / next</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="triggers-body"></tbody>
+          </table>
+        </div>
+        <div id="triggers-empty" hidden></div>
+      </section>
+
+      <section class="panel" id="runs" aria-label="Recent runs">
+        <div class="section-heading">
+          <h2>Recent runs</h2>
+          <span class="heading-note">results open in the diagnostics page</span>
+        </div>
+        <div class="form-actions paging"><span id="runs-filter" role="status">All orders</span><button id="all-runs" class="secondary" type="button">Show all orders</button></div>
+        <div id="runs-error" role="status"></div>
+        <div id="runs-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading runs"></div></div>
+        <div class="orders-table-wrap" id="runs-wrap" hidden tabindex="0">
+          <table class="orders-table">
+            <colgroup><col style="width:24%"><col style="width:19%"><col style="width:13%"><col style="width:13%"><col style="width:31%"></colgroup>
+            <thead><tr><th>Run</th><th>Order</th><th>Status</th><th class="optional">Updated</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="runs-body"></tbody>
+          </table>
+        </div>
+        <div id="runs-empty" hidden></div>
+        <div class="form-actions paging" aria-label="Run history pages"><button id="runs-prev" class="secondary" type="button" disabled>Previous</button><span id="runs-page" role="status"></span><button id="runs-next" class="secondary" type="button" disabled>Next</button></div>
+        <section id="run-inspector" aria-labelledby="run-title" hidden>
+          <h3 id="run-title" tabindex="-1">Run details</h3>
+          <p class="muted">Inputs are frozen. To change data, times, region or inference models, edit an order and start a new run.</p>
+          <div id="run-detail-error" role="status"></div>
+          <div id="run-summary"></div>
+          <button id="repeat-inference" class="secondary" type="button" disabled>Repeat inference</button>
+          <p id="repeat-status" role="status"></p>
+          <details><summary>Frozen configuration and saved forecasts</summary><pre id="run-config" class="config-output"></pre></details>
+          <h3>Diagnostics for this run</h3>
+          <p class="muted">Use saved forecasts from this run. Coverage is in the results viewer; “not probed” does not mean data is missing. Layers, display thresholds and playback are viewer controls.</p>
+          <form id="run-diagnostics-form"><div id="run-diagnostics"></div><button id="run-diagnostics-submit" class="primary" type="submit" disabled>Run diagnostics</button></form>
+          <div id="run-diagnostics-status" role="status"></div>
+          <h3>Operation history</h3><div id="run-operations"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+"use strict";
+const TOKEN = "__NIB_TOKEN__";
+
+async function api(path, options) {
+  if (lifecycle && !path.startsWith("/v1/control/") && path !== "/v1/status") throw new Error("Handler lifecycle action in progress or polling paused. Reconnect with Refresh first.");
+  const response = await fetch(path, { ...options, headers: { Authorization: "Bearer " + TOKEN, ...options?.headers } });
+  let body = null;
+  try { body = await response.json(); } catch { /* empty body */ }
+  if (!response.ok) { const error = new Error((body && (body.message || body.error)) || (path + " failed: " + response.status)); error.status = response.status; throw error; }
+  return body;
+}
+
+function el(tag, text) {
+  const node = document.createElement(tag);
+  if (text !== undefined && text !== null && text !== "") node.textContent = String(text);
+  return node;
+}
+function cell(child, className) {
+  const td = el("td");
+  if (className) td.className = className;
+  if (Array.isArray(child)) child.forEach(c => c && td.append(c)); else if (child) td.append(child);
+  return td;
+}
+function code(text) { return el("code", text); }
+function icon(svgPath, className) {
+  const span = el("span");
+  span.className = "ui-icon" + (className ? " " + className : "");
+  span.setAttribute("aria-hidden", "true");
+  span.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + svgPath + "</svg>";
+  return span;
+}
+const ARROW = '<path d="M5 12l14 0"/><path d="M13 18l6 -6"/><path d="M13 6l6 6"/>';
+
+const TONES = {
+  queued: "badge--neutral", running: "badge--info", succeeded: "badge--success",
+  partial: "badge--warning", failed: "badge--danger", interrupted: "badge--danger",
+};
+function statusBadge(status) {
+  const value = status || "unknown";
+  const badge = el("span", value.replaceAll("_", " "));
+  badge.className = "badge " + (TONES[status] || "badge--neutral");
+  if (status === "running" || status === "queued") {
+    badge.prepend(el("span"));
+    badge.firstChild.className = "badge-dot";
+    badge.classList.add("badge--live");
+  }
+  return badge;
+}
+function formatTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleString(undefined, {
+    month: "short", day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+function note(id, text) {
+  const node = document.getElementById(id);
+  node.textContent = text || "";
+  node.hidden = !text;
+}
+
+let ordersCache = [];
+let dockerReady = null;
+let painted = { orders: false, runs: false };
+function paint(tableBodyId, wrapId, emptyId, rows, emptyBlock) {
+  document.getElementById(tableBodyId).replaceChildren(...rows);
+  const has = rows.length > 0;
+  document.getElementById(wrapId).hidden = !has;
+  document.getElementById(emptyId).hidden = has;
+  if (!has && emptyBlock) document.getElementById(emptyId).replaceChildren(emptyBlock);
+  const key = tableBodyId.replace(/-body$/, "");
+  if (!painted[key]) {
+    painted[key] = true;
+    rows.forEach((row, index) => { row.classList.add("enter"); row.style.animationDelay = Math.min(index * 24, 240) + "ms"; });
+  }
+}
+
+async function loadStatus() {
+  try {
+    const status = await api("/v1/status", { signal: AbortSignal.timeout(8000) });
+    if (lifecycle === "stopped" || lifecycle === "stopping") return;
+    lastStatus = status;
+    dockerReady = Boolean(status.docker?.ok);
+    $("status-chip").className = "runtime-status runtime-status--connected";
+    $("status-chip-text").textContent = "Handler " + (status.handler_state || "online");
+    $("handler-health").textContent = "Handler: " + (status.handler_state || "online") + " · Active jobs: " + (status.active_jobs ?? "unknown");
+    $("docker-health").textContent = "Docker: " + (dockerReady ? "ready" : "not ready") + (status.docker?.message ? " · " + status.docker.message : "");
+    $("status-detail").textContent = dockerReady ? "" : "Start Docker to run inference or diagnostics. Local editing remains available.";
+    $("active-count").textContent = status.active_jobs ?? "?"; $("dash-version").textContent = status.version || "Unknown";
+    $("dash-docker").textContent = dockerReady ? "Ready" : "Not ready";
+    $("runtime-identity").textContent = "Version " + status.version + " · " + location.origin + " · Config: " + status.config_file;
+    if (currentPage === "settings") {
+      const output = $("runtime-config"); output.replaceChildren();
+      highlightJSON(JSON.stringify({ instance_id: status.instance_id, started_at: status.started_at, host: status.host, port: status.port, config_file: status.config_file, paths: status.paths, review: status.review, preflight: status.preflight, resources_error: status.resources_error }, null, 2), output);
+    }
+    if (lifecycle === "restarting" && status.instance_id && status.instance_id !== restartInstance && status.handler_state === "running") {
+      lifecycle = ""; invalidatePreflight();
+      $("lifecycle-status").textContent = "Restart confirmed: connected to a new Handler instance. Drafts are retained.";
+    }
+    $("restart-handler").disabled = $("stop-handler").disabled = Boolean(lifecycle) || status.active_jobs > 0;
+    if (lifecycle === "restarting" && Date.now() > restartDeadline) {
+      lifecycle = "restart-unconfirmed";
+      $("lifecycle-status").textContent = "Restart not confirmed. Use Refresh to check again; do not repeat the request while its outcome is unknown.";
+    }
+  } catch (cause) {
+    if (lifecycle === "stopped" || lifecycle === "stopping") return;
+    dockerReady = null; $("active-count").textContent = "?"; $("dash-docker").textContent = $("dash-version").textContent = "Unknown";
+    $("status-chip").className = "runtime-status runtime-status--disconnected";
+    $("status-chip-text").textContent = lifecycle === "restarting" ? "Reconnecting…" : "Handler unreachable";
+    $("handler-health").textContent = $("status-chip-text").textContent;
+    $("docker-health").textContent = "Docker: unknown while Handler is unreachable";
+    $("status-detail").textContent = cause.message;
+    $("restart-handler").disabled = $("stop-handler").disabled = true;
+    if (lifecycle === "restarting" && Date.now() > restartDeadline) {
+      lifecycle = "restart-unconfirmed";
+      $("lifecycle-status").textContent = "Handler has not reconnected. Start it with the local launcher, then use Refresh. Drafts are retained.";
+    }
+  }
+}
+
+function emptyOrdersBlock() {
+  const block = el("div");
+  block.className = "state-block";
+  const title = el("span", "No orders saved on this machine yet."); title.className = "empty-title";
+  block.append(title, el("span", "Create an order or import YAML above. Older package history remains read-only."));
+  return block;
+}
+
+async function loadOrders() {
+  const errorBox = document.getElementById("orders-error");
+  const loading = document.getElementById("orders-loading");
+  try {
+    const page = await api("/v1/orders");
+    ordersCache = page.orders || [];
+    errorBox.replaceChildren();
+  } catch (cause) {
+    loading.hidden = true;
+    errorBox.replaceChildren(noteBlock(String(cause)));
+    return;
+  }
+  loading.hidden = true;
+  paintOrders(); paintTriggerOrderOptions();
+}
+function paintOrders() {
+  const ids = new Set(ordersCache.map(order => order.order_id || order.package_id).filter(Boolean));
+  if (runOrderFilter) ids.add(runOrderFilter);
+  const all = el("option", "All orders"); all.value = "";
+  $("order-filter").replaceChildren(all, ...Array.from(ids).sort().map(id => el("option", id)));
+  $("order-filter").value = runOrderFilter;
+  const count = document.getElementById("nav-order-count");
+  count.textContent = String(ordersCache.length);
+  count.hidden = ordersCache.length === 0;
+  note("orders-note", ordersCache.length + (ordersCache.length === 1 ? " order" : " orders"));
+  const rows = [];
+  for (const order of ordersCache) {
+    if (runOrderFilter && (order.order_id || order.package_id) !== runOrderFilter) continue;
+    const row = document.createElement("tr");
+    if (order.error) {
+      const actions = el("div"); actions.className = "cell-actions";
+      const badge = el("span", "cannot start"); badge.className = "badge badge--danger";
+      actions.append(badge, el("span", order.error));
+      const history = el("button", "View history"); history.type = "button"; history.className = "secondary table-button";
+      history.addEventListener("click", () => filterRuns(order.order_id || order.package_id)); actions.append(history);
+      row.append(
+        cell(order.package_id, "identity"),
+        cell("", "cell-code optional"), cell("", "cell-code optional"), cell("", "optional"), cell("", "numeric optional"),
+        cell(sourceTag(order), "optional"),
+        cell(actions, "actions-cell")
+      );
+    } else {
+      const actions = el("div"); actions.className = "cell-actions";
+      const open = el("button", order.read_only ? "View history" : "Edit defaults"); open.className = "secondary table-button"; open.type = "button";
+      open.addEventListener("click", () => openOrder(order));
+      actions.append(open);
+      if (!order.read_only && order.source === "saved") {
+        const start = el("button", "Start new run"); start.className = "primary table-button"; start.type = "button";
+        start.addEventListener("click", () => startOrder(order, start));
+        const trigger = el("button", "Add trigger"); trigger.className = "secondary table-button"; trigger.type = "button";
+        trigger.onclick = () => { location.hash = "#triggers"; openTriggerForm(order.package_id); };
+        actions.append(start, trigger);
+      }
+      row.append(
+        cell(identityCode(order.package_id), "cell-code identity"),
+        cell(identityCode(order.order_id), "cell-code identity"),
+        cell([order.data_id, order.event_id].filter(Boolean).map(code), "cell-code optional"),
+        cell((order.models || []).join(", "), "optional"),
+        cell(order.samples, "numeric optional"),
+        cell(sourceTag(order), "optional"),
+        cell(actions, "actions-cell")
+      );
+    }
+    rows.push(row);
+  }
+  paint("orders-body", "orders-wrap", "orders-empty", rows, emptyOrdersBlock());
+}
+
+function noteBlock(message) {
+  const block = el("div", message);
+  block.className = "error-note";
+  block.setAttribute("role", "alert");
+  return block;
+}
+
+async function loadRuns() {
+  const loading = document.getElementById("runs-loading");
+  let page;
+  const generation = ++runsGeneration;
+  const query = new URLSearchParams({ limit: String(runPageSize), offset: String(runOffset) });
+  if (runOrderFilter) query.set("order_id", runOrderFilter);
+  try { page = await api("/v1/runs?" + query); }
+  catch (cause) {
+    if (generation !== runsGeneration) return;
+    loading.hidden = true;
+    $("runs-error").replaceChildren(noteBlock("Could not load runs: " + cause.message));
+    return;
+  }
+  if (generation !== runsGeneration) return;
+  $("runs-error").replaceChildren();
+  loading.hidden = true;
+  const runs = page.runs || [];
+  $("runs-prev").disabled = runOffset === 0;
+  $("runs-next").disabled = page.total !== undefined ? runOffset + runs.length >= page.total : runs.length < runPageSize;
+  $("runs-page").textContent = runs.length ? (runOffset + 1) + "–" + (runOffset + runs.length) + (page.total !== undefined ? " of " + page.total : "") : "No runs on this page";
+  const rows = [];
+  for (const run of runs) {
+    const job = run.job || {};
+    const request = job.request || {};
+    const row = document.createElement("tr");
+    row.dataset.runId = run.id;
+    row.append(
+      cell(identityCode(run.id), "cell-code identity"),
+      cell(identityCode(run.order?.order_id || request.order_id || ""), "cell-code identity"),
+      (() => {
+        const td = cell(statusBadge(run.status));
+        if (job.stage && (run.status === "running" || run.status === "queued")) { const s = el("div", job.stage); s.className = "muted"; s.style.fontSize = "12px"; s.style.marginTop = "4px"; td.append(s); }
+        if (job.error) td.append(noteBlock(job.error));
+        return td;
+      })(),
+      cell(formatTime(job.updated_at), "time optional"),
+      (() => {
+        const td = cell();
+        td.className = "actions-cell";
+        const actions = el("div"); actions.className = "cell-actions";
+        const report = reportEntry(run);
+        if (report) {
+          const link = el("a", "Open results");
+          link.className = "row-link";
+          link.href = "/v1/runs/" + encodeURIComponent(run.id) + "/files/" + report.split("/").map(encodeURIComponent).join("/");
+          link.target = "_blank"; link.rel = "noopener";
+          link.append(icon(ARROW));
+          actions.append(link);
+        }
+        const inspect = el("button", "Details / diagnostics"); inspect.type = "button"; inspect.className = "secondary table-button";
+        inspect.addEventListener("click", () => openRun(run.id)); actions.append(inspect);
+        const toggle = el("button", openLogId === run.id ? "Hide log" : "Log");
+        toggle.dataset.logToggle = "true";
+        toggle.type = "button";
+        toggle.className = "secondary table-button";
+        toggle.setAttribute("aria-expanded", openLogId === run.id ? "true" : "false");
+        toggle.addEventListener("click", () => toggleRunLog(run.id));
+        actions.append(toggle);
+        td.append(actions);
+        return td;
+      })()
+    );
+    rows.push(row);
+  }
+  paint("runs-body", "runs-wrap", "runs-empty", rows, (() => {
+    const block = el("div"); block.className = "state-block";
+    const title = el("span", "No runs yet."); title.className = "empty-title";
+    block.append(title, el("span", "Start a saved order above; runs appear here."));
+    return block;
+  })());
+  // Repainting must not close an open log: re-insert it under its run.
+  if (openLogId) {
+    const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(openLogId) + '"]');
+    if (row) row.after(renderRunLog(openLogId, openLogLines, openLogError));
+    else openLogId = null;
+  }
+}
+
+// A long identifier is clipped in the cell but stays complete on hover.
+function identityCode(text) {
+  if (!text) return el("span");
+  const node = code(text);
+  const holder = el("span");
+  holder.title = text;
+  holder.append(node);
+  return holder;
+}
+
+function sourceTag(order) {
+  const tag = el("span", order.read_only ? "History · read-only" : "Saved YAML");
+  tag.className = "source-tag" + (order.read_only ? " source-tag--run" : "");
+  if (order.run_id) tag.title = "runs/" + order.run_id;
+  return tag;
+}
+
+let openLogId = null;
+let openLogLines = null;
+let openLogError = "";
+
+function toggleRunLog(runId) {
+  const previous = openLogId;
+  openLogId = openLogId === runId ? null : runId;
+  openLogLines = null;
+  openLogError = "";
+  closeLogRow(previous);
+  if (!openLogId) { void paintRunLogButtons(); return; }
+  const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(openLogId) + '"]');
+  if (row) row.after(renderRunLog(openLogId, null, ""));
+  void paintRunLogButtons();
+  void loadRunLog(openLogId);
+}
+
+function closeLogRow(runId) {
+  if (!runId) return;
+  const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(runId) + '"]');
+  row?.nextElementSibling?.classList.contains("run-detail") && row.nextElementSibling.remove();
+}
+
+async function paintRunLogButtons() {
+  for (const button of document.querySelectorAll("#runs-body button[data-log-toggle]")) {
+    const row = button.closest("tr");
+    const open = row.dataset.runId === openLogId;
+    button.textContent = open ? "Hide log" : "Log";
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+}
+
+function renderRunLog(runId, lines, error) {
+  const row = document.createElement("tr");
+  row.className = "run-detail";
+  row.dataset.logFor = runId;
+  const td = el("td");
+  td.colSpan = 5;
+  const panel = el("div"); panel.className = "run-log";
+  const toolbar = el("div"); toolbar.className = "run-log-toolbar";
+  const label = el("span", "Container output");
+  const count = el("span", lines === null ? "loading…" : lines.length + (lines.length === 1 ? " line" : " lines"));
+  toolbar.append(label, count);
+  panel.append(toolbar);
+  const pre = el("pre"); pre.className = "run-log-output";
+  pre.setAttribute("aria-label", "Technical log output");
+  if (error) pre.append(runLogLine({ text: error, tone: "error" }, 0));
+  else if (lines === null) pre.append(runLogLine({ text: "Loading the log…", tone: "muted" }, 0));
+  else if (lines.length === 0) pre.append(runLogLine({ text: "No log output yet.", tone: "muted" }, 0));
+  else lines.forEach((line, index) => pre.append(runLogLine(line, index)));
+  panel.append(pre);
+  td.append(panel);
+  row.append(td);
+  return row;
+}
+
+function runLogLine(line, index) {
+  const node = el("span");
+  node.className = "run-log-line run-log-line--" + line.tone + (line.file ? " run-log-line--file" : "");
+  if (!line.file) {
+    const number = el("span", String(index + 1).padStart(2, "0"));
+    number.className = "run-log-number";
+    number.setAttribute("aria-hidden", "true");
+    node.append(number);
+  }
+  if (line.file) {
+    const file = el("span", line.file); file.className = "run-log-file";
+    node.append(file);
+    return node;
+  }
+  if (line.prefix) {
+    const prefix = el("span", line.prefix);
+    prefix.className = "run-log-prefix"; prefix.title = line.prefix;
+    node.append(prefix);
+  }
+  const message = el("span");
+  message.className = "run-log-message";
+  if (line.tone === "json") highlightJSON(line.text, message);
+  else message.textContent = line.text;
+  node.append(message);
+  return node;
+}
+
+const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+function highlightJSON(text, holder) {
+  let last = 0;
+  for (const match of text.matchAll(JSON_TOKEN)) {
+    const index = match.index ?? 0;
+    if (index > last) holder.append(text.slice(last, index));
+    if (match[1]) {
+      const node = el("span", match[1]);
+      node.className = match[2] ? "run-log-json-key" : "run-log-json-string";
+      holder.append(node);
+      if (match[2]) holder.append(match[2]);
+    } else if (match[3]) {
+      const node = el("span", match[3]); node.className = "run-log-json-literal"; holder.append(node);
+    } else if (match[4]) {
+      const node = el("span", match[4]); node.className = "run-log-json-number"; holder.append(node);
+    }
+    last = index + match[0].length;
+  }
+  if (last < text.length) holder.append(text.slice(last));
+}
+
+// Same reading rules as the Hub log panel: file separators, container prefixes,
+// pretty-printed JSON payloads, and tone by outcome.
+function prettyJSON(value) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+  try { return JSON.stringify(JSON.parse(trimmed), null, 2); } catch { return null; }
+}
+function toneOf(value) {
+  const text = value.toLowerCase();
+  if (/\bexited with code [1-9]\d*\b/.test(text)) return "error";
+  if (/\bexited with code 0\b/.test(text)) return "success";
+  if (/\b(error|failed|failure|traceback|exception|fatal)\b/.test(text)) return "error";
+  if (/\bwarn(?:ing)?\b/.test(text)) return "warning";
+  if (/^(container|attaching|aborting|stopping|stopped)\b/.test(text)) return "muted";
+  return "plain";
+}
+function parseLog(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  while (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  return lines.map((line) => {
+    if (/^(?:[\w./-]+\.(?:log|json)|diagnostics-[\wTZ-]+)$/.test(line.trim())) return { file: line.trim(), text: line.trim(), tone: "muted" };
+    if (line.trim() === "[earlier output truncated]") return { text: line.trim(), tone: "muted" };
+    const match = line.match(/^(\S+)\s+\|\s?(.*)$/);
+    const content = match ? match[2] : line;
+    const json = prettyJSON(content);
+    return { prefix: match?.[1], text: json ?? content, tone: json ? "json" : toneOf(content || line) };
+  });
+}
+
+async function loadRunLog(runId) {
+  let lines = null;
+  let error = "";
+  try {
+    const out = await api("/v1/jobs/" + encodeURIComponent(runId) + "/log");
+    lines = parseLog(out.tail || "");
+  } catch (cause) {
+    error = String(cause.message || cause);
+  }
+  if (openLogId !== runId) return;
+  openLogLines = lines;
+  openLogError = error;
+  closeLogRow(runId);
+  const row = document.querySelector('#runs-body tr[data-run-id="' + CSS.escape(runId) + '"]');
+  if (row) row.after(renderRunLog(runId, lines, error));
+}
+function reportEntry(run) {
+  const attempts = Array.isArray(run.diagnostics) ? run.diagnostics : [];
+  let entry = "";
+  for (const attempt of attempts) {
+    if (attempt && attempt.kind === "report" && (attempt.status === "succeeded" || attempt.status === "partial")) entry = attempt.entry || "";
+  }
+  return entry;
+}
+
+const startAttempts = new Map();
+async function startOrder(order, button) {
+  if (order.read_only || order.source !== "saved") return;
+  if (settingsBusy || imageSettingsDirty || dataSettingsDirty) { showActionError("Save local settings before starting a run."); return; }
+  if (editorDirty && selectedOrder?.order_id === order.order_id) {
+    showActionError("Save or discard your draft before starting a new run."); return;
+  }
+  if (dockerReady === false) {
+    showActionError("Docker is not running. Start Docker, then start the run again."); return;
+  }
+  const id = order.order_id || order.package_id;
+  const attemptId = id + ":" + order.revision;
+  let attempt = startAttempts.get(attemptId);
+  if (attempt?.busy) return;
+  if (!attempt) { attempt = { key: "local:" + crypto.randomUUID(), busy: false }; startAttempts.set(attemptId, attempt); }
+  attempt.busy = true;
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Starting…";
+  document.getElementById("orders-action-error").replaceChildren();
+  try {
+    const result = await api("/v1/orders/" + encodeURIComponent(id) + "/runs", {
+      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+      body: JSON.stringify({ revision: order.revision }),
+    });
+    startAttempts.delete(attemptId);
+    await filterRuns(id);
+    if (result.id || result.job?.id) await openRun(result.id || result.job.id);
+    await loadOrders();
+  } catch (cause) {
+    showActionError("Could not start " + id + ": " + cause.message + " Retry uses the same submission key; reload the order if its revision changed.");
+  } finally {
+    attempt.busy = false;
+    button.disabled = false;
+    button.textContent = previous;
+    syncEditorActions();
+  }
+}
+
+function showActionError(message) {
+  const box = document.getElementById("orders-action-error");
+  box.replaceChildren(noteBlock(message));
+}
+
+// The status poll already knows whether Docker answers; surface it next to the
+// orders so the Start button is never a silent no-op.
+function updateDockerNotice() {
+  const box = document.getElementById("orders-docker");
+  if (dockerReady !== false) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  box.hidden = false;
+  box.replaceChildren(noteBlock("Docker is not running. Saved orders stay listed; start Docker before running one."));
+}
+
+let importFile = null;
+async function saveOrder() {
+  const input = $("package-file"), button = $("save-order"), errorBox = $("import-error");
+  const file = importFile;
+  if (!file || editorBusy) return;
+  errorBox.replaceChildren();
+  const hub = /\.json$/i.test(file.name);
+  if (!hub && !/\.ya?ml$/i.test(file.name)) { errorBox.append(noteBlock("Choose a .yaml, .yml or .json file.")); return; }
+  if (hub && !orderOptions) { errorBox.append(noteBlock("Order options must load before importing a Hub selection.")); return; }
+  if (!discardDraft()) return;
+  editorBusy = true; editorGeneration++; syncEditorActions();
+  input.disabled = true; button.disabled = true; button.textContent = "Importing…";
+  try {
+    const content = await file.text();
+    if (hub) {
+      const { order } = await api("/v1/orders/import-selection", { method: "POST", headers: { "Content-Type": "application/json" }, body: content });
+      if (!order || !orderOptions.data.some(data => data.id === order.data_id)) throw new Error("Unsupported data source in selection.");
+      showOrder(null, order); markOrderDirty();
+      $("editor-status").textContent = "Hub selection imported. Complete the sample times and save the order.";
+    } else {
+      const detail = await api("/v1/orders", jsonRequest("POST", { yaml: content }));
+      if (orderOptions) showOrder(detail);
+      await loadOrders(); await filterRuns(detail.order_id);
+      errorBox.append(el("p", "Imported " + detail.order_id + "."));
+    }
+    importFile = null; input.value = ""; $("file-name").textContent = "";
+  } catch (cause) {
+    errorBox.append(noteBlock("Import failed: " + cause.message));
+  } finally {
+    input.disabled = false; button.disabled = !importFile; button.textContent = "Import file";
+    editorBusy = false; syncEditorActions();
+    if (hub && !importFile) $("order-starts").focus();
+  }
+}
+
+// Order drafts and run diagnostics are deliberately outside polling renders.
+const $ = id => document.getElementById(id);
+const jsonRequest = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+let orderOptions = null;
+let selectedOrder = null;
+let editorDirty = false;
+let editorBusy = false;
+let editorGeneration = 0;
+let runOffset = 0;
+let runOrderFilter = "";
+const runPageSize = 50;
+let runsGeneration = 0;
+let selectedRunId = null;
+let diagnosticsRunId = null;
+let diagnosticsBusy = false;
+
+function discardDraft() {
+  return !editorBusy && (!editorDirty || window.confirm("Discard unsaved order changes?"));
+}
+function syncEditorActions() {
+  const saved = selectedOrder && !selectedOrder.read_only && selectedOrder.source === "saved";
+  $("order-fields").disabled = editorBusy || !orderOptions || Boolean(selectedOrder?.read_only);
+  $("save-defaults").disabled = editorBusy || !orderOptions || Boolean(selectedOrder?.read_only);
+  $("validate-order").disabled = $("save-defaults").disabled;
+  $("preflight-order").disabled = $("save-defaults").disabled || preflightBusy;
+  $("export-order").disabled = editorBusy || !saved;
+  $("start-selected").disabled = editorBusy || !saved || editorDirty;
+  $("new-order").disabled = editorBusy || !orderOptions;
+}
+function markOrderDirty() {
+  editorDirty = true; editorGeneration++;
+  invalidatePreflight();
+  $("editor-status").textContent = "Unsaved changes. Save defaults before starting a new run.";
+  syncEditorActions();
+}
+async function loadOrderOptions() {
+  try {
+    const options = await api("/v1/order-options");
+    if (!options.data?.length) throw new Error("No supported data sources are configured");
+    orderOptions = options;
+    $("order-data").replaceChildren(...orderOptions.data.map(data => {
+      const option = el("option", data.name || data.id); option.value = data.id; return option;
+    }));
+    $("sample-hint").textContent = "One UTC RFC3339 time per line, ending in Z. Maximum " + orderOptions.max_batch_samples + " samples.";
+    syncEditorActions();
+  } catch (cause) {
+    $("options-error").replaceChildren(noteBlock("Order options could not load: " + cause.message + ". Reload the page to retry."));
+  }
+}
+function choices(holder, name, options, selected) {
+  holder.replaceChildren();
+  for (const [index, item] of options.entries()) {
+    const value = typeof item === "string" ? item : item.id;
+    const input = el("input"); input.type = "checkbox"; input.name = name; input.value = value;
+    input.id = name + "-" + index; input.checked = (selected || []).includes(value);
+    const label = el("label", typeof item === "string" ? item : (item.name || item.id)); label.htmlFor = input.id;
+    const field = el("div"); field.className = "check-field"; field.append(input, label); holder.append(field);
+  }
+}
+function checked(name) { return Array.from(document.querySelectorAll('input[name="' + name + '"]:checked'), input => input.value); }
+function diagnosticFields(holderId, prefix, models, config, data) {
+  const holder = $(holderId); holder.replaceChildren();
+  for (const kind of ["verification", "visualization"]) {
+    const group = el("fieldset"); group.append(el("legend", kind === "verification" ? "Verification" : "Visualization"));
+    const enabled = el("input"); enabled.type = "checkbox"; enabled.id = prefix + "-" + kind; enabled.checked = Boolean(config[kind]);
+    const label = el("label", kind === "verification" ? "Compute verification" : "Render visualization"); label.htmlFor = enabled.id;
+    const toggle = el("div"); toggle.className = "check-field"; toggle.append(enabled, label); group.append(toggle);
+    const fields = el("fieldset"); fields.id = enabled.id + "-fields"; fields.append(el("legend", "Models"));
+    fields.disabled = !enabled.checked;
+    const modelList = el("div"); modelList.className = "choice-list";
+    choices(modelList, prefix + "-" + kind + "-models", models, config[kind]?.models || models.map(model => typeof model === "string" ? model : model.id));
+    fields.append(modelList);
+    if (kind === "verification") {
+      const methods = el("fieldset"); methods.append(el("legend", "Methods"));
+      const methodList = el("div"); methodList.className = "choice-list";
+      choices(methodList, prefix + "-methods", orderOptions.methods, config.verification?.methods || []);
+      methods.append(methodList); fields.append(methods);
+      const grid = el("div"); grid.className = "parameter-grid";
+      for (const [key, title] of [["levels", "Threshold levels"], ["half_windows", "Half-window sizes (grid cells)"]]) {
+        const field = el("div"); field.className = "field";
+        const input = el("input"); input.id = prefix + "-" + key; input.type = "text";
+        input.value = (config.verification?.[key] || []).join(", ");
+        const label = el("label", title); label.htmlFor = input.id;
+        const hint = el("span", key === "levels" && data?.verification
+          ? "Comma-separated; " + data.verification.level_min + " to " + data.verification.level_max + " " + data.verification.unit + ". Required for threshold and FSS methods."
+          : "Comma-separated integers from 0 to 16. Required for FSS.");
+        hint.className = "field-hint"; hint.id = input.id + "-hint"; input.setAttribute("aria-describedby", hint.id);
+        field.append(label, input, hint); grid.append(field);
+      }
+      fields.append(grid);
+    } else {
+      fields.append(el("p", "Select models only. Layers, display thresholds and playback are available in the results viewer."));
+    }
+    enabled.addEventListener("change", () => { fields.disabled = !enabled.checked; });
+    group.append(fields); holder.append(group);
+  }
+}
+function numberList(id, integers) {
+  const text = $(id).value.trim();
+  if (!text) return undefined;
+  const parts = text.split(/[\s,]+/);
+  if (parts.some(part => !part)) throw new Error("Remove empty entries from the number list.");
+  const values = parts.map(Number);
+  if (values.some(value => !Number.isFinite(value) || (integers && (!Number.isInteger(value) || value < 0)))) {
+    throw new Error(integers ? "Half-window sizes must be non-negative integers." : "Threshold levels must be numbers.");
+  }
+  return values;
+}
+function readDiagnostics(prefix, eligible) {
+  const result = {};
+  for (const kind of ["verification", "visualization"]) {
+    if (!$(prefix + "-" + kind).checked) continue;
+    const models = checked(prefix + "-" + kind + "-models");
+    if (!models.length || models.some(model => !eligible.includes(model))) throw new Error("Choose eligible " + kind + " models.");
+    result[kind] = { models };
+    if (kind === "verification") {
+      const methods = checked(prefix + "-methods");
+      if (!methods.length) throw new Error("Choose at least one verification method.");
+      result[kind].methods = methods;
+      const levels = numberList(prefix + "-levels", false);
+      const windows = numberList(prefix + "-half_windows", true);
+      if (levels) result[kind].levels = levels;
+      if (windows) result[kind].half_windows = windows;
+    }
+  }
+  return result;
+}
+function populateDataFields(order) {
+  const data = orderOptions.data.find(item => item.id === $("order-data").value);
+  if (!data) throw new Error("This data source is not available locally.");
+  choices($("order-models").querySelector(".choice-list"), "inference-models", data.models, order.models || []);
+  $("order-region").hidden = !data.region;
+  for (const axis of ["lon", "lat"]) {
+    const input = $("order-" + axis); input.required = Boolean(data.region); input.disabled = !data.region;
+    if (data.region) {
+      input.min = data.region[axis + "_min"]; input.max = data.region[axis + "_max"];
+      input.value = order.region?.["center_" + axis] ?? data.region["center_" + axis];
+    }
+  }
+  $("region-hint").textContent = data.region ? "Allowed centre: longitude " + data.region.lon_min + " to " + data.region.lon_max + "; latitude " + data.region.lat_min + " to " + data.region.lat_max + "." : "";
+  $("order-fixed").replaceChildren();
+  for (const [key, label] of [["context_frames", "Context frames"], ["target_frames", "Target frames"], ["cadence_minutes", "Cadence (minutes)"], ["width", "Width (cells)"], ["height", "Height (cells)"]]) {
+    const field = el("div"); field.className = "field";
+    const input = el("input"); input.id = "fixed-" + key; input.readOnly = true; input.value = data.fixed[key];
+    const text = el("label", label); text.htmlFor = input.id; field.append(text, input); $("order-fixed").append(field);
+  }
+  diagnosticFields("order-diagnostics", "defaults", data.models, order, data);
+  syncDiagnosticModels();
+}
+function syncDiagnosticModels() {
+  const models = checked("inference-models");
+  for (const kind of ["verification", "visualization"]) {
+    for (const input of document.querySelectorAll('input[name="defaults-' + kind + '-models"]')) {
+      input.disabled = !models.includes(input.value);
+      if (input.disabled) input.checked = false;
+    }
+  }
+}
+function showOrder(detail, draft) {
+  selectedOrder = detail; editorDirty = false; editorGeneration++;
+  invalidatePreflight();
+  const order = draft || detail?.order || { data_id: orderOptions.data[0]?.id, models: [] };
+  $("order-editor").hidden = false;
+  $("editor-title").textContent = detail ? "Order defaults · " + order.order_id : "Create an order";
+  $("editor-revision").textContent = detail?.revision ? "Revision " + detail.revision : "Not saved";
+  $("order-id").value = order.order_id || ""; $("order-id").readOnly = Boolean(detail);
+  $("order-data").value = order.data_id;
+  $("order-event").value = order.event_id || "";
+  $("order-starts").value = (order.sample_starts || []).join("\n");
+  populateDataFields(order);
+  $("editor-error").replaceChildren();
+  $("editor-status").textContent = detail ? "Saved defaults. Existing runs keep their frozen configuration." : "Choose inputs and save this order before starting a run.";
+  syncEditorActions();
+}
+async function openOrder(summary) {
+  if (!discardDraft()) return;
+  const generation = ++editorGeneration;
+  await filterRuns(summary.order_id || summary.package_id);
+  if (generation !== editorGeneration) return;
+  if (summary.read_only || summary.source !== "saved") {
+    selectedOrder = null; editorDirty = false; $("order-editor").hidden = true;
+    $("runs-filter").textContent += " · Read-only history; create a YAML order to start new runs.";
+    return;
+  }
+  try {
+    if (!orderOptions) throw new Error("Order options are unavailable. Reload the page to retry.");
+    const detail = await api("/v1/orders/" + encodeURIComponent(summary.order_id || summary.package_id));
+    if (generation !== editorGeneration) return;
+    showOrder(detail); $("order-editor").scrollIntoView({ block: "start" }); $("order-event").focus({ preventScroll: true });
+  } catch (cause) { showActionError("Could not load order: " + cause.message); }
+}
+function readOrder() {
+  if (!$("order-form").reportValidity()) return null;
+  const models = checked("inference-models");
+  if (!models.length) throw new Error("Choose at least one inference model.");
+  const starts = $("order-starts").value.trim().split(/\s+/);
+  if (starts.length > orderOptions.max_batch_samples) throw new Error("Too many sample starts; maximum " + orderOptions.max_batch_samples + ".");
+  if (starts.some(time => !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(time) || !Number.isFinite(Date.parse(time)))) throw new Error("Use UTC RFC3339 sample starts ending in Z, one per line.");
+  const order = { schema_version: "nib.order.v1", order_id: $("order-id").value.trim(), data_id: $("order-data").value, event_id: $("order-event").value.trim(), sample_starts: starts, models, ...readDiagnostics("defaults", models) };
+  if (!$("order-region").hidden) order.region = { center_lon: Number($("order-lon").value), center_lat: Number($("order-lat").value) };
+  return order;
+}
+async function submitOrder(validateOnly) {
+  if (editorBusy) return;
+  $("editor-error").replaceChildren();
+  try {
+    const order = readOrder(); if (!order) return;
+    editorBusy = true; editorGeneration++; syncEditorActions();
+    const body = { order };
+    if (selectedOrder) body.revision = selectedOrder.revision;
+    const path = validateOnly ? "/v1/orders/validate" : selectedOrder ? "/v1/orders/" + encodeURIComponent(selectedOrder.order_id) : "/v1/orders";
+    const detail = await api(path, jsonRequest(validateOnly || !selectedOrder ? "POST" : "PATCH", body));
+    if (validateOnly) $("editor-status").textContent = "Draft is valid. No save, data probe or Docker execution was performed.";
+    else { showOrder(detail); await loadOrders(); await filterRuns(detail.order_id); }
+  } catch (cause) {
+    $("editor-error").replaceChildren(noteBlock(cause.message + " Your draft is retained. If the saved revision changed, reload the order before saving again."));
+  } finally { editorBusy = false; syncEditorActions(); }
+}
+async function exportOrder() {
+  if (!selectedOrder) return;
+  try {
+    const response = await fetch("/v1/orders/" + encodeURIComponent(selectedOrder.order_id) + "?download=1", { headers: { Authorization: "Bearer " + TOKEN } });
+    if (!response.ok) throw new Error("YAML download failed (" + response.status + ").");
+    const url = URL.createObjectURL(await response.blob());
+    const link = el("a"); link.href = url; link.download = selectedOrder.order_id + ".yaml";
+    document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (cause) { $("editor-error").replaceChildren(noteBlock(cause.message)); }
+}
+async function filterRuns(orderId) {
+  runOrderFilter = orderId || ""; runOffset = 0; paintOrders();
+  $("runs-filter").textContent = runOrderFilter ? "Order: " + runOrderFilter : "All orders";
+  await loadRuns();
+}
+async function openRun(id) {
+  if (diagnosticsBusy) return;
+  selectedRunId = id; diagnosticsRunId = null;
+  $("run-inspector").hidden = false; $("run-title").textContent = "Run · " + id;
+  $("run-summary").replaceChildren(); $("run-config").textContent = "Loading frozen configuration…";
+  $("run-operations").replaceChildren(); $("run-diagnostics").replaceChildren(); $("run-diagnostics-status").replaceChildren();
+  $("run-diagnostics-submit").disabled = true;
+  await loadRunDetail(id);
+  $("run-title").focus();
+}
+async function loadRunDetail(id) {
+  try {
+    const run = await api("/v1/runs/" + encodeURIComponent(id));
+    if (id !== selectedRunId) return;
+    $("run-detail-error").replaceChildren();
+    const summary = $("run-summary"); summary.replaceChildren(statusBadge(run.status), el("p", "Revision: " + (run.revision || "legacy history")));
+    summary.append(el("p", "Inference: " + (run.inference_status || run.status) + " · Diagnostics: " + (run.diagnostics_status || "not requested")));
+    if (run.job?.error) summary.append(noteBlock(run.job.error));
+    const report = reportEntry(run);
+    if (report) { const link = el("a", "Open results and Coverage"); link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; summary.append(link); }
+    summary.append(el("p", "Stage: " + (run.job?.stage || "not reported")));
+    renderChecks(summary, run.job?.preflight || []);
+    $("repeat-inference").disabled = !run.order || repeatBusy || ["queued", "running"].includes(run.status);
+    $("run-config").textContent = JSON.stringify({ order: run.order || null, request: run.job?.request, execution_context: run.job?.execution_context, revision: run.revision, forecasts: run.forecasts, samples: run.samples }, null, 2);
+    const operations = run.operations?.length ? run.operations : run.operation ? [run.operation] : [];
+    const list = el("ol");
+    for (const operation of operations) { const item = el("li"); item.append(statusBadge(operation.status), el("pre", JSON.stringify(operation, null, 2))); item.lastChild.className = "config-output"; list.append(item); }
+    $("run-operations").replaceChildren(operations.length ? list : el("p", "No diagnostic operations recorded."));
+    if (diagnosticsRunId !== id && orderOptions) {
+      diagnosticsRunId = id;
+      const models = Object.keys(run.forecasts || {});
+      if (run.order && models.length) {
+        const data = orderOptions.data.find(item => item.id === run.order.data_id);
+        diagnosticFields("run-diagnostics", "retry", models, run.order, data);
+      } else { $("run-diagnostics").append(el("p", run.order ? "No saved forecasts are available for diagnostics." : "Read-only history: no frozen YAML order is available for diagnostic changes.")); }
+    }
+    $("run-diagnostics-submit").disabled = diagnosticsBusy || !run.order || !Object.keys(run.forecasts || {}).length || !orderOptions || ["queued", "running"].includes(run.status) || ["queued", "running"].includes(run.operation?.status);
+  } catch (cause) { if (id === selectedRunId) $("run-detail-error").replaceChildren(noteBlock("Could not load run: " + cause.message)); }
+}
+async function submitDiagnostics() {
+  if (diagnosticsBusy || !selectedRunId) return;
+  const id = selectedRunId;
+  $("run-diagnostics-status").replaceChildren();
+  try {
+    const eligible = Array.from(document.querySelectorAll('input[name="retry-verification-models"]'), input => input.value);
+    const body = readDiagnostics("retry", eligible);
+    if (!body.verification && !body.visualization) throw new Error("Enable verification or visualization first.");
+    diagnosticsBusy = true; $("run-diagnostics-submit").disabled = true;
+    await api("/v1/runs/" + encodeURIComponent(id) + "/diagnostics", jsonRequest("POST", body));
+    $("run-diagnostics-status").append(el("p", "Diagnostics submitted. Frozen inference inputs are unchanged."));
+  } catch (cause) { $("run-diagnostics-status").append(noteBlock(cause.message)); }
+  finally { diagnosticsBusy = false; await loadRunDetail(id); }
+}
+
+// ---------------------------------------------------------------- triggers
+
+let triggersCache = [];
+let editingTriggerId = "", triggerSaving = false;
+function openTriggerForm(packageId, trigger = null) {
+  if (triggerSaving) return;
+  editingTriggerId = trigger?.id || "";
+  $("trigger-form").hidden = false; $("trigger-form").reset(); $("trigger-options").open = !!trigger; paintTriggerOrderOptions();
+  if (packageId) $("trigger-package").value = packageId;
+  $("trigger-package").disabled = Boolean(trigger);
+  if (trigger) {
+    $("trigger-form").elements.condition.value = trigger.kind === "new_data" ? "new_data" : trigger.daily_at ? "daily" : "interval";
+    $("trigger-poll").value = trigger.poll_minutes || 10;
+    $("trigger-interval").value = trigger.interval_minutes || 60;
+    $("trigger-daily").value = trigger.daily_at || "08:00";
+    $("trigger-source").value = trigger.start_source || "latest_ready";
+    $("trigger-window").value = trigger.window_mode || "latest";
+  }
+  $("trigger-add").textContent = trigger ? "Save trigger" : "Add trigger";
+  $("trigger-form-title").textContent = trigger ? "Edit trigger" : "New trigger";
+  syncTriggerForm(); showTriggerError("");
+  requestAnimationFrame(() => (trigger ? $("trigger-form").querySelector(":checked[type=radio]") : $("trigger-package")).focus());
+}
+function closeTriggerForm() {
+  editingTriggerId = ""; $("trigger-form").hidden = true; $("trigger-package").disabled = false;
+  showTriggerError(""); $("new-trigger").focus();
+}
+
+const OUTCOME_TONES = { started: "badge--success", skipped: "badge--neutral", busy: "badge--info", failed: "badge--danger" };
+
+function triggerWhenLabel(trigger) {
+  if (trigger.kind === "new_data") return "New data · checks every " + trigger.poll_minutes + " min";
+  if (trigger.daily_at) return "Every day at " + trigger.daily_at;
+  return "Every " + trigger.interval_minutes + " min";
+}
+
+function triggerWindowLabel(trigger) {
+  const windows = trigger.window_mode === "all" ? "All new windows" : "Newest only";
+  if (trigger.kind === "schedule") {
+    return trigger.start_source === "order" ? "Order's own time" : windows + " · newest data";
+  }
+  return windows;
+}
+
+function triggerState(trigger) {
+  const box = el("div");
+  const badge = el("span", trigger.last_fired_at ? (trigger.last_outcome || "unknown") : "never ran");
+  badge.className = "badge " + (OUTCOME_TONES[trigger.last_outcome] || "badge--neutral");
+  box.append(badge);
+  if (trigger.last_fired_at) {
+    const when = el("span", formatTime(trigger.last_fired_at));
+    when.className = "trigger-flag";
+    box.append(when);
+  }
+  if (trigger.enabled && trigger.next_due) {
+    const next = el("span", "next " + formatTime(trigger.next_due));
+    next.className = "trigger-flag";
+    box.append(next);
+  }
+  // A stopped Handler never catches up, so say what it skipped instead.
+  if (trigger.missed_count) {
+    const missed = el("span", "missed " + trigger.missed_count + (trigger.missed_count === 1 ? " scheduled run" : " scheduled runs") + " while the Handler was stopped" + (trigger.last_missed_at ? " (last " + formatTime(trigger.last_missed_at) + ")" : ""));
+    missed.className = "trigger-flag trigger-flag--missed";
+    box.append(missed);
+  }
+  if (trigger.kind === "new_data" && trigger.last_skipped) {
+    const skipped = el("span", trigger.last_skipped + " older window" + (trigger.last_skipped === 1 ? "" : "s") + " skipped on the last run");
+    skipped.className = "trigger-flag";
+    box.append(skipped);
+  }
+  if (trigger.last_error) box.append(noteBlock(trigger.last_error));
+  return box;
+}
+
+function triggerRow(trigger) {
+  const row = document.createElement("tr");
+  const identity = el("div");
+  identity.append(identityCode(trigger.id), el("span", trigger.enabled ? "Enabled" : "Paused"));
+  const actions = el("div");
+  actions.className = "cell-actions";
+  const fire = el("button", "Run now");
+  fire.className = "secondary table-button";
+  fire.type = "button";
+  const executable = ordersCache.some(order => order.package_id === trigger.package_id && order.source === "saved" && !order.read_only && !order.error);
+  fire.disabled = !executable;
+  if (!executable) { fire.title = "Legacy or unavailable order: cannot execute"; identity.append(el("p", "Legacy or unavailable order · execution disabled")); }
+  fire.addEventListener("click", () => fireTrigger(trigger.id, fire));
+  const toggle = el("button", trigger.enabled ? "Pause" : "Resume");
+  toggle.className = "secondary table-button";
+  toggle.type = "button";
+  toggle.disabled = !trigger.enabled && !executable;
+  toggle.addEventListener("click", () => patchTrigger(trigger.id, { enabled: !trigger.enabled }, toggle));
+  const remove = el("button", "Delete");
+  remove.className = "secondary table-button";
+  remove.type = "button";
+  remove.addEventListener("click", () => deleteTrigger(trigger.id, remove));
+  const edit = el("button", "Edit"); edit.className = "secondary table-button"; edit.type = "button"; edit.disabled = !executable;
+  edit.onclick = () => openTriggerForm(trigger.package_id, trigger);
+  actions.append(edit, toggle, fire);
+  if (trigger.last_run_id) {
+    const run = el("button", "View last run"); run.className = "secondary table-button"; run.type = "button";
+    run.onclick = async () => { location.hash = "#orders"; await filterRuns(trigger.package_id); await openRun(trigger.last_run_id); };
+    actions.append(run);
+  }
+  remove.className = "delete-trigger table-button";
+  actions.append(remove);
+  row.append(
+    cell(identity, "identity"),
+    cell(triggerWhenLabel(trigger)),
+    cell(triggerWindowLabel(trigger), "optional"),
+    cell(triggerState(trigger)),
+    cell(actions, "actions-cell")
+  );
+  return row;
+}
+
+function emptyTriggersBlock() {
+  const block = el("div");
+  block.className = "state-block";
+  const title = el("span", "No triggers yet.");
+  title.className = "empty-title";
+  block.append(title);
+  return block;
+}
+
+async function loadTriggers() {
+  const errorBox = document.getElementById("triggers-error");
+  const loading = document.getElementById("triggers-loading");
+  try {
+    const page = await api("/v1/triggers");
+    triggersCache = page.triggers || [];
+    errorBox.replaceChildren();
+  } catch (cause) {
+    loading.hidden = true;
+    errorBox.replaceChildren(noteBlock(String(cause)));
+    return;
+  }
+  loading.hidden = true;
+  const count = document.getElementById("nav-trigger-count");
+  count.textContent = String(triggersCache.length);
+  count.hidden = triggersCache.length === 0;
+  note("triggers-note", triggersCache.length ? String(triggersCache.length) : "");
+  paintTriggerRows();
+}
+function paintTriggerRows() {
+  const rows = [];
+  let previous = null;
+  for (const trigger of [...triggersCache].sort((a, b) => a.package_id.localeCompare(b.package_id))) {
+    if (trigger.package_id !== previous) {
+      const row = el("tr"), heading = el("th", "Order: " + trigger.package_id);
+      heading.colSpan = 5; row.append(heading); rows.push(row); previous = trigger.package_id;
+    }
+    rows.push(triggerRow(trigger));
+  }
+  paint("triggers-body", "triggers-wrap", "triggers-empty", rows, emptyTriggersBlock());
+}
+
+// The order list is the only source of valid package ids.
+function paintTriggerOrderOptions() {
+  const select = document.getElementById("trigger-package");
+  const previous = select.value;
+  const usable = ordersCache.filter(order => !order.error && !order.read_only && order.source === "saved");
+  const options = usable.map(order => {
+    const option = el("option", order.package_id);
+    option.value = order.package_id;
+    return option;
+  });
+  if (options.length === 0) {
+    const option = el("option", "No saved order on this machine");
+    option.value = "";
+    options.push(option);
+  }
+  select.replaceChildren(...options);
+  if (previous && usable.some(order => order.package_id === previous)) select.value = previous;
+  $("trigger-add").disabled = triggerSaving || !select.value || (editingTriggerId && select.value !== previous);
+  $("new-trigger").disabled = triggerSaving || !usable.length; $("trigger-no-orders").hidden = !!usable.length;
+}
+
+// Only the fields the chosen condition needs stay visible.
+function syncTriggerForm() {
+  const mode = $("trigger-form").elements.condition.value, scheduled = mode !== "new_data", daily = mode === "daily";
+  const orderTime = scheduled && $("trigger-source").value === "order";
+  for (const [key, visible] of Object.entries({poll: !scheduled, source: scheduled, interval: scheduled && !daily, daily, window: !orderTime})) {
+    const input = $("trigger-" + key);
+    input.closest("label").hidden = !visible; input.disabled = !visible; input.required = visible;
+  }
+}
+
+function showTriggerError(message) {
+  const box = document.getElementById("trigger-action-error");
+  box.replaceChildren(message ? noteBlock(message) : "");
+}
+
+async function addTrigger() {
+  const button = document.getElementById("trigger-add");
+  if (triggerSaving) return;
+  const packageId = $("trigger-package").value;
+  showTriggerError("");
+  if (!packageId) {
+    showTriggerError("Choose a saved order first.");
+    return;
+  }
+  const mode = $("trigger-form").elements.condition.value, kind = mode === "new_data" ? "new_data" : "schedule";
+  const id = editingTriggerId;
+  const body = id ? { kind } : { package_id: packageId, kind, enabled: true };
+  if (!$("trigger-window").disabled) body.window_mode = $("trigger-window").value;
+  if (kind === "new_data") {
+    body.poll_minutes = Number(document.getElementById("trigger-poll").value);
+  } else {
+    body.start_source = document.getElementById("trigger-source").value;
+    if (mode === "daily") {
+      body.daily_at = $("trigger-daily").value; body.interval_minutes = 0;
+    } else {
+      body.interval_minutes = Number($("trigger-interval").value); body.daily_at = "";
+    }
+  }
+  triggerSaving = true; button.disabled = true; button.textContent = "Saving…";
+  $("trigger-form").inert = true;
+  try {
+    await api(id ? "/v1/triggers/" + encodeURIComponent(id) : "/v1/triggers", jsonRequest(id ? "PATCH" : "POST", body));
+    triggerSaving = false; closeTriggerForm();
+  } catch (cause) {
+    showTriggerError("Could not save the trigger: " + cause.message);
+  } finally {
+    triggerSaving = false; $("trigger-form").inert = false;
+    button.textContent = editingTriggerId ? "Save trigger" : "Add trigger";
+    paintTriggerOrderOptions(); await refresh();
+  }
+}
+
+async function fireTrigger(id, button) {
+  showTriggerError("");
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Running…";
+  try {
+    const result = await api("/v1/triggers/" + encodeURIComponent(id) + "/fire", { method: "POST" });
+    if (result.last_outcome === "failed") showTriggerError("Run now failed: " + (result.last_error || "see the run log"));
+    else if (result.last_outcome === "skipped") showTriggerError("Nothing new to run: the newest window already ran.");
+    else if (result.last_outcome === "busy") showTriggerError("Its previous run is still active; try again when it finishes.");
+  } catch (cause) {
+    showTriggerError("Run now failed: " + cause.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = previous;
+    await refresh();
+  }
+}
+
+async function patchTrigger(id, patch, button) {
+  showTriggerError("");
+  button.disabled = true;
+  try {
+    await api("/v1/triggers/" + encodeURIComponent(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  } catch (cause) {
+    showTriggerError("Could not update the trigger: " + cause.message);
+  } finally {
+    await refresh();
+  }
+}
+
+async function deleteTrigger(id, button) {
+  if (!window.confirm("Delete trigger " + id + "? The saved order and its runs will be kept.")) return;
+  showTriggerError("");
+  button.disabled = true;
+  try {
+    await api("/v1/triggers/" + encodeURIComponent(id), { method: "DELETE" });
+    if (editingTriggerId === id) closeTriggerForm();
+  } catch (cause) {
+    showTriggerError("Could not delete the trigger: " + cause.message);
+  } finally {
+    await refresh();
+  }
+}
+
+let refreshing = false;
+let lastStatus = null;
+let lifecycle = "", restartInstance = "", restartDeadline = 0;
+let settingsCache = null, imageSettingsDirty = false, dataSettingsDirty = false, settingsBusy = false;
+let preflightGeneration = 0, preflightBusy = false, repeatBusy = false;
+const repeatAttempts = new Map();
+function invalidatePreflight() {
+  preflightGeneration++;
+  $("preflight-status").textContent = "Readiness not checked for the current draft and settings. Every start runs backend checks.";
+  $("preflight-checks").replaceChildren();
+}
+function renderChecks(holder, checks) {
+  if (!checks.length) return;
+  const list = el("ul");
+  for (const check of checks) list.append(el("li", (check.ok ? "Passed: " : "Failed: ") + check.id + " · " + check.message));
+  holder.append(list);
+}
+async function checkReadiness() {
+  if (preflightBusy || editorBusy) return;
+  const generation = ++preflightGeneration;
+  try {
+    if (settingsBusy || imageSettingsDirty || dataSettingsDirty) throw new Error("Wait for settings to save before checking readiness.");
+    const order = readOrder(); if (!order) return;
+    preflightBusy = true; syncEditorActions();
+    $("preflight-checks").replaceChildren();
+    $("preflight-status").textContent = "Checking local resources and data windows… This may start a reader container.";
+    const result = await api("/v1/preflight", jsonRequest("POST", { order }));
+    if (generation !== preflightGeneration) return;
+    $("preflight-status").textContent = result.ok ? "Readiness checks passed. Starts will check again." : "Readiness checks failed. Resolve the checks below and retry.";
+    renderChecks($("preflight-checks"), result.checks || []);
+  } catch (cause) { if (generation === preflightGeneration) $("preflight-status").textContent = "Readiness check failed: " + cause.message; }
+  finally { preflightBusy = false; syncEditorActions(); }
+}
+function previewImagePriority() {
+  const policy = $("image-source").value, override = $("image-override").value.trim();
+  const sources = override ? [["Custom", override]] : [
+    ...(policy === "mirror" ? [] : [["Official", settingsCache?.image_registry]]),
+    ...(policy === "official" || (!settingsCache?.image_mirror && policy === "auto") ? [] : [["Mirror", settingsCache?.image_mirror]])
+  ];
+  const output = $("image-priority"); output.replaceChildren();
+  for (const [label, address] of sources) {
+    if (output.childElementCount) { const arrow = el("span", "→"); arrow.setAttribute("aria-hidden", "true"); output.append(arrow); }
+    const step = el("span", label); step.className = "source-step"; step.title = address || label; output.append(step);
+  }
+}
+function datasetRow({id, title}, savedRoot, folderState) {
+  const row = $("dataset-row").content.firstElementChild.cloneNode(true);
+  const root = row.elements.root, status = row.querySelector('[role="status"]'), output = row.querySelector("pre");
+  row.querySelector("legend").textContent = title || id;
+  root.value = savedRoot;
+  decorateButtons(row);
+  function update() {
+    const dirty = root.value.trim() !== savedRoot;
+    folderState.textContent = dirty ? "Unsaved" : savedRoot ? "Folder set" : "Not set";
+    folderState.classList.toggle("unsaved", dirty);
+    row.toggleAttribute("data-dirty", dirty);
+    dataSettingsDirty = !!$("dataset-rows").querySelector("[data-dirty]");
+    row.elements.save.disabled = !dirty || !root.value.trim();
+    row.elements.clear.disabled = !savedRoot;
+    row.elements.inspect.disabled = dirty || !savedRoot;
+    output.hidden = true;
+  }
+  row.oninput = event => { update(); status.textContent = row.hasAttribute("data-dirty") ? "Unsaved folder." : ""; if (event.target === root) invalidatePreflight(); };
+  row.onclick = async event => {
+    const action = event.target.closest("button")?.name;
+    if (!["save", "clear", "inspect"].includes(action) || row.disabled) return;
+    row.disabled = true; output.hidden = true;
+    try {
+      if (action === "inspect") {
+        status.textContent = "Inspecting sample…";
+        const result = await api("/v1/datasets/" + encodeURIComponent(id) + "/inspect", {method: "POST"});
+        output.textContent = JSON.stringify(result, null, 2); output.hidden = false; status.textContent = "Inspection complete.";
+      } else {
+        const path = action === "clear" ? "" : root.value.trim();
+        status.textContent = path ? "Saving folder…" : "Clearing folder…";
+        const result = await api("/v1/settings", jsonRequest("PATCH", {data_id: id, data_root: path}));
+        savedRoot = result?.data_roots?.[id] ?? path; root.value = savedRoot;
+        update(); invalidatePreflight(); status.textContent = path ? "Folder saved." : "Folder association cleared.";
+      }
+    } catch (cause) { status.textContent = "Could not " + action + ": " + cause.message; }
+    finally { row.disabled = false; }
+  };
+  update(); return row;
+}
+async function loadSettings() {
+  if (settingsBusy || $("dataset-rows").querySelector("fieldset[disabled]")) return;
+  if ((imageSettingsDirty || dataSettingsDirty) && !window.confirm("Discard unsaved local settings and reload?")) return;
+  settingsBusy = true;
+  $("image-settings-fields").disabled = $("data-settings-fields").disabled = true;
+  try {
+    const config = await api("/v1/settings");
+    const list = $("dataset-list"), panels = $("dataset-rows"), previous = list.querySelector('[aria-pressed="true"]')?.value;
+    list.replaceChildren(); panels.replaceChildren();
+    for (const dataset of config.datasets || []) {
+      const folderState = el("small");
+      const panel = datasetRow(dataset, config.data_roots?.[dataset.id] || "", folderState); panel.id = "folder-" + dataset.id;
+      const button = el("button", dataset.title || dataset.id); button.type = "button"; button.value = dataset.id;
+      button.append(folderState);
+      button.setAttribute("aria-controls", panel.id); button.setAttribute("aria-pressed", "false"); panel.hidden = true;
+      button.onclick = () => {
+        for (const item of list.children) { const selected = item === button; item.setAttribute("aria-pressed", selected); $(item.getAttribute("aria-controls")).hidden = !selected; }
+      };
+      list.append(button); panels.append(panel);
+    }
+    if (list.children.length) ([...list.children].find(item => item.value === previous) || list.firstElementChild).onclick();
+    else panels.append(el("p", "No datasets available."));
+    settingsCache = config; $("image-source").value = config.image_source || "auto";
+    $("image-override").value = config.image_override || ""; previewImagePriority();
+    imageSettingsDirty = dataSettingsDirty = false; invalidatePreflight();
+    $("settings-status").textContent = "Settings loaded from this Handler.";
+  } catch (cause) { $("settings-status").textContent = "Could not load settings: " + cause.message; }
+  finally { settingsBusy = false; $("image-settings-fields").disabled = $("data-settings-fields").disabled = !settingsCache; }
+}
+async function saveImageSettings() {
+  if (settingsBusy) return;
+  settingsBusy = true; $("image-settings-fields").disabled = true;
+  try {
+    await api("/v1/settings", jsonRequest("PATCH", {image_source: $("image-source").value, image_override: $("image-override").value.trim()}));
+    imageSettingsDirty = false; invalidatePreflight(); $("settings-status").textContent = "Image settings saved.";
+  } catch (cause) { $("settings-status").textContent = "Save failed: " + cause.message + " Your edits are retained."; }
+  finally { settingsBusy = false; $("image-settings-fields").disabled = false; }
+}
+async function controlHandler(action) {
+  if (lifecycle || !lastStatus?.instance_id) return;
+  const message = action === "stop" ? "Stop this Handler? Triggers stop and this page stops refreshing. Use the local launcher to start it again. Unsaved drafts remain in this tab." : "Restart this Handler's services? Triggers pause during restart. Saved settings and this tab's drafts are retained.";
+  if (!window.confirm(message)) return;
+  restartInstance = lastStatus.instance_id; restartDeadline = Date.now() + 60000;
+  lifecycle = action === "stop" ? "stopping" : "restarting";
+  $("restart-handler").disabled = $("stop-handler").disabled = true;
+  $("lifecycle-status").textContent = action === "stop" ? "Requesting stop…" : "Requesting restart; waiting for a new instance…";
+  try {
+    await api("/v1/control/" + action, { ...jsonRequest("POST", {}), signal: AbortSignal.timeout(10000) });
+    if (action === "stop") {
+      lifecycle = "stopped"; dockerReady = null;
+      $("handler-health").textContent = $("status-chip-text").textContent = "Handler stop accepted";
+      $("status-chip").className = "runtime-status runtime-status--disconnected";
+      $("docker-health").textContent = "Docker: not checked after stop";
+      $("lifecycle-status").textContent = "Stop accepted. Polling is paused. Use the local launcher to start Handler, then Refresh to reconnect.";
+      invalidatePreflight();
+    }
+  } catch (cause) {
+    if (cause.status) { lifecycle = ""; $("lifecycle-status").textContent = "Request rejected: " + cause.message; await loadStatus(); }
+    else if (action === "stop") { lifecycle = "stopped"; $("lifecycle-status").textContent = "Stop response was lost. Polling is paused; use Refresh to check the Handler before trying again."; }
+    else $("lifecycle-status").textContent = "Restart response was lost. Checking for a new instance…";
+  }
+}
+async function repeatInference() {
+  const id = selectedRunId;
+  if (!id || repeatBusy || !window.confirm("Repeat inference from this run's frozen YAML using the current local data folder and resource settings? This creates a new run.")) return;
+  if (settingsBusy || imageSettingsDirty || dataSettingsDirty) { $("repeat-status").textContent = "Save local settings before repeating inference."; return; }
+  repeatBusy = true; $("repeat-inference").disabled = true;
+  if (!repeatAttempts.has(id)) repeatAttempts.set(id, "local:" + crypto.randomUUID());
+  try {
+    const result = await api("/v1/runs/" + encodeURIComponent(id) + "/rerun", { ...jsonRequest("POST", {}), headers: { "Content-Type": "application/json", "Idempotency-Key": repeatAttempts.get(id) } });
+    repeatAttempts.delete(id);
+    $("repeat-status").textContent = "New inference submitted. Backend readiness checks run automatically.";
+    await loadRuns();
+    if (result.id || result.job?.id) await openRun(result.id || result.job.id);
+  } catch (cause) { $("repeat-status").textContent = "Repeat failed: " + cause.message + " Inspect Runs before retrying: a lost response may still have created a run."; }
+  finally { repeatBusy = false; if (selectedRunId) await loadRunDetail(selectedRunId); }
+}
+let currentPage = "", pendingPage = "";
+async function loadDashboard() {
+  try {
+    const overview = await api("/v1/dashboard", {signal:AbortSignal.timeout(8000)});
+    for (const [id, runs, empty] of [["dash-running", overview.active, "No active tasks."], ["dash-outcomes", overview.recent, "No recent outcomes."]]) {
+      const rows = runs.map(run => {
+        const li = el("li"), link = el("a", run.order_id || run.id); link.href = "#orders";
+        link.onclick = () => openRun(run.id); li.append(link, statusBadge(run.status)); return li;
+      });
+      $(id).replaceChildren(...(rows.length ? rows : [el("li", empty)]));
+    }
+    const hasRuns = overview.active.length > 0 || overview.recent.length > 0;
+    $("dashboard-activity").hidden = !hasRuns; $("first-run").hidden = hasRuns; $("dashboard-error").replaceChildren();
+  } catch (cause) { $("first-run").hidden = true; $("dashboard-error").replaceChildren(noteBlock("Could not refresh activity: " + cause.message)); }
+}
+async function refresh() {
+  if (document.hidden || ["stopped","stopping","restart-unconfirmed"].includes(lifecycle)) return;
+  if (refreshing) { pendingPage = currentPage; return; }
+  refreshing = true;
+  const page = currentPage;
+  try {
+    const tasks = [loadStatus()];
+    if (lifecycle !== "restarting") {
+      if (page === "dashboard") tasks.push(loadDashboard());
+      if (page === "settings" && !settingsCache) tasks.push(loadSettings());
+      if (page === "orders" && !orderOptions) tasks.push(loadOrderOptions());
+      if (page === "orders") { tasks.push(loadOrders(),loadRuns()); if (selectedRunId) tasks.push(loadRunDetail(selectedRunId)); if (openLogId) tasks.push(loadRunLog(openLogId)); }
+      if (page === "triggers") tasks.push(loadOrders(),loadTriggers());
+    }
+    await Promise.allSettled(tasks); updateDockerNotice();
+  } finally { refreshing = false; if (pendingPage) { pendingPage = ""; refresh(); } }
+}
+function route() {
+  const names = {dashboard:"Dashboard", settings:"Settings", orders:"Orders", triggers:"Triggers"};
+  const hash = location.hash.slice(1); currentPage = Object.hasOwn(names,hash) ? hash : "dashboard";
+  document.body.dataset.page = currentPage; $("page-title").textContent = names[currentPage]; document.title = names[currentPage] + " | NiB local console";
+  for (const link of document.querySelectorAll("nav a")) { const active = link.hash === "#" + currentPage; link.classList.toggle("nav-item--active", active); if (active) link.setAttribute("aria-current","page"); else link.removeAttribute("aria-current"); }
+  window.scrollTo(0,0); $("page-title").focus({preventScroll:true}); refresh();
+}
+
+document.getElementById("refresh").addEventListener("click", () => {
+  if (lifecycle === "stopped") lifecycle = "";
+  if (lifecycle === "restart-unconfirmed") { lifecycle = "restarting"; restartDeadline = Date.now() + 60000; }
+  refresh();
+});
+const fileInput = document.getElementById("package-file");
+function chooseImport(file) {
+  importFile = file || null;
+  $("file-name").textContent = file?.name || ""; $("save-order").disabled = !file;
+  $("import-error").replaceChildren();
+}
+fileInput.addEventListener("change", () => chooseImport(fileInput.files[0]));
+$("order-drop").addEventListener("dragover", event => event.preventDefault());
+$("order-drop").addEventListener("drop", event => {
+  event.preventDefault(); if (editorBusy) return;
+  fileInput.value = "";
+  const files = event.dataTransfer.files;
+  chooseImport(files.length === 1 ? files[0] : null);
+  if (files.length !== 1) $("import-error").append(noteBlock("Drop one order file at a time."));
+});
+document.getElementById("save-order").addEventListener("click", () => { saveOrder(); });
+document.getElementById("trigger-form").addEventListener("submit", (event) => { event.preventDefault(); addTrigger(); });
+$("new-trigger").addEventListener("click", () => openTriggerForm(""));
+$("trigger-form").addEventListener("change", syncTriggerForm);
+$("trigger-cancel").addEventListener("click", closeTriggerForm);
+syncTriggerForm();
+$("new-order").addEventListener("click", () => { if (discardDraft()) { showOrder(null); $("order-id").focus(); } });
+$("order-form").addEventListener("input", markOrderDirty);
+$("order-form").addEventListener("change", markOrderDirty);
+$("order-form").addEventListener("submit", event => { event.preventDefault(); submitOrder(false); });
+$("order-data").addEventListener("change", () => { populateDataFields({}); markOrderDirty(); });
+$("order-models").addEventListener("change", syncDiagnosticModels);
+$("validate-order").addEventListener("click", () => submitOrder(true));
+$("export-order").addEventListener("click", exportOrder);
+$("start-selected").addEventListener("click", event => { if (selectedOrder) startOrder(selectedOrder, event.currentTarget); });
+$("order-filter").addEventListener("change", event => filterRuns(event.target.value));
+$("all-runs").addEventListener("click", () => filterRuns(""));
+$("runs-prev").addEventListener("click", () => { runOffset = Math.max(0, runOffset - runPageSize); loadRuns(); });
+$("runs-next").addEventListener("click", () => { runOffset += runPageSize; loadRuns(); });
+$("run-diagnostics-form").addEventListener("submit", event => { event.preventDefault(); submitDiagnostics(); });
+window.addEventListener("beforeunload", event => { if (editorDirty || imageSettingsDirty || dataSettingsDirty) { event.preventDefault(); event.returnValue = ""; } });
+$("preflight-order").addEventListener("click", checkReadiness);
+$("restart-handler").addEventListener("click", () => controlHandler("restart"));
+$("stop-handler").addEventListener("click", () => controlHandler("stop"));
+$("reload-settings").addEventListener("click", loadSettings);
+$("image-settings-form").addEventListener("input", () => { imageSettingsDirty = true; previewImagePriority(); invalidatePreflight(); $("settings-status").textContent = "Unsaved image settings."; });
+$("image-settings-form").addEventListener("submit", event => { event.preventDefault(); saveImageSettings(); });
+$("repeat-inference").addEventListener("click", repeatInference);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+window.addEventListener("hashchange", route);
+document.querySelector(".skip-link").onclick = event => { event.preventDefault(); $("main").focus(); };
+function decorateButtons(root) {
+  const icons = {refresh:"M3 10a9 9 0 0 1 15-5l3 3 M21 3v5h-5 M21 14a9 9 0 0 1-15 5l-3-3 M3 21v-5h5", save:"M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2z M7 3v6h9V3 M7 21v-8h10v8", inspect:"M21 21l-5-5 M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0", add:"M12 5v14 M5 12h14"};
+  for (const button of root.querySelectorAll("[data-icon]")) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"), path = document.createElementNS(svg.namespaceURI,"path");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); svg.setAttribute("class", "action-icon"); path.setAttribute("d", icons[button.dataset.icon]); svg.append(path); button.prepend(svg);
+  }
+}
+decorateButtons(document); route();
+setInterval(() => { if (!document.hidden && (currentPage === "dashboard" || lifecycle === "restarting" || (currentPage === "orders" && selectedRunId))) refresh(); }, 15000);
+</script>
+</body>
+</html>

@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from datetime import datetime, timedelta, timezone
 import re
-import xarray as xr
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+import xarray as xr
 
 from interfaces.data import (
     ChannelSpec,
@@ -18,7 +18,6 @@ from interfaces.data import (
     DataRequest,
     DeclaredDataAdapter,
     SpatialSpec,
-    VariableSpec,
     bundle_from_parts,
     loader_config,
 )
@@ -99,9 +98,7 @@ def find_gk2a_file(data_dir: Path, requested_time: datetime, channel: str) -> Pa
     all_files = sorted(data_dir.rglob("gk2a_ami_le1b_*.nc"))
 
     if not all_files:
-        raise FileNotFoundError(
-            "\nGK2A data files not found\n" f"data_dir = {data_dir}"
-        )
+        raise FileNotFoundError(f"\nGK2A data files not found\ndata_dir = {data_dir}")
 
     # First check whether the requested time exists at all.
     time_matches = [p for p in all_files if _extract_time_tag(p.name) == time_tag]
@@ -293,6 +290,13 @@ def close_results(results: dict):
 
 
 class Source(DeclaredDataAdapter):
+    def inspect_sample(self, root: Path) -> dict:
+        from utils.hdf_sample import inspect_hdf
+        from utils.sample_files import first_file
+
+        path = first_file(root, lambda p: p.match("gk2a_ami_le1b_*.nc"))
+        return inspect_hdf(root, path, ("image_pixel_values",))
+
     CAPABILITIES = DataCapabilities(
         id=ID,
         version=VERSION,

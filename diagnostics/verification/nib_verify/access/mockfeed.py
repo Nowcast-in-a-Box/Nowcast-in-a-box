@@ -31,7 +31,6 @@ and point a verifier at it with::
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any
 
 from . import wire
 from .base import FieldAccess, FieldUnavailable
@@ -39,6 +38,7 @@ from .base import FieldAccess, FieldUnavailable
 try:  # pragma: no cover - exercised by whichever branch the environment takes
     from fastapi import FastAPI, Query, Request
     from fastapi.responses import JSONResponse
+
     HAS_FASTAPI = True
 except ModuleNotFoundError:  # pragma: no cover
     FastAPI = Query = Request = None
@@ -46,7 +46,9 @@ except ModuleNotFoundError:  # pragma: no cover
     HAS_FASTAPI = False
 
 
-def create_data_app(access: FieldAccess, *, title: str = "NiB field access") -> "FastAPI":
+def create_data_app(
+    access: FieldAccess, *, title: str = "NiB field access"
+) -> "FastAPI":
     """Serve ``access`` at the contract's addresses.
 
     The provider is captured as given. If the caller wants to see what was asked
@@ -197,8 +199,13 @@ def run(access: FieldAccess, *, host: str, port: int, log_level: str = "info") -
 
 
 @contextmanager
-def serve_in_thread(access: FieldAccess, *, host: str = "127.0.0.1", port: int = 0,
-                    log_level: str = "warning"):
+def serve_in_thread(
+    access: FieldAccess,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 0,
+    log_level: str = "warning",
+):
     """Serve ``access`` on a background thread and yield its base URL.
 
     For demonstrations and for tests: the service is on a real socket, so a
@@ -214,9 +221,14 @@ def serve_in_thread(access: FieldAccess, *, host: str = "127.0.0.1", port: int =
 
     import uvicorn
 
-    server = uvicorn.Server(uvicorn.Config(
-        create_data_app(access), host=host, port=port, log_level=log_level,
-    ))
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_data_app(access),
+            host=host,
+            port=port,
+            log_level=log_level,
+        )
+    )
     thread = threading.Thread(target=server.run, daemon=True, name="nib-datafeed")
     thread.start()
 

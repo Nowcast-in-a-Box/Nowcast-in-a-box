@@ -1,4 +1,4 @@
-"""CMA demo contract: July-only windows, honest masks and a metric grid."""
+"""CMA runtime contract: complete windows, honest masks and a metric grid."""
 
 import datetime as dt
 import json
@@ -7,14 +7,15 @@ import numpy as np
 import pytest
 import xarray as xr
 
+from adapters.cma_radar import source as cma
 from adapters.cma_radar.nowcastnet.adapter import ADAPTER
-from ingestion import cma_radar as cma
 from interfaces.errors import ConstraintError
-from tests.field_fixtures import forecast as physical_forecast, observations, mock_onnx
+from tests.field_fixtures import forecast as physical_forecast
+from tests.field_fixtures import mock_onnx, observations
 from utils.stored_fields import StoredFields, create_run, sha256
 
 
-def test_july_index_latest_generation_and_nested_files(tmp_path):
+def test_index_latest_generation_and_nested_files(tmp_path):
     nested = tmp_path / "20260701" / "CREF"
     nested.mkdir(parents=True)
     for generation, date in [
@@ -25,49 +26,50 @@ def test_july_index_latest_generation_and_nested_files(tmp_path):
         (
             nested / f"Z_RADA_C_BABJ_{generation}_P_DOR_ACHN_CREF_{date}_000000.bin"
         ).touch()
-    index = cma.file_index(tmp_path)
-    assert len(index) == 1
+    index = cma._window_file_index(tmp_path)
+    assert len(index) == 2
     assert next(iter(index.values())).generation_time.minute == 10
 
 
 def test_samples_expose_days_and_filter_by_day(monkeypatch):
     starts = [
-        dt.datetime(2026, 7, 1, 0, 0, tzinfo=dt.timezone.utc),
-        dt.datetime(2026, 7, 2, 0, 0, tzinfo=dt.timezone.utc),
-        dt.datetime(2026, 7, 3, 0, 0, tzinfo=dt.timezone.utc),
+        dt.datetime(2026, 7, 31, 23, 30),
+        dt.datetime(2026, 8, 2),
+        dt.datetime(2026, 8, 3),
     ]
     index = {}
     for start in starts:
-        for step in range(cma.CONTEXT + cma.TARGET):
-            index[start + dt.timedelta(minutes=cma.CADENCE * step)] = object()
-    monkeypatch.setattr(cma, "file_index", lambda _path: index)
+        for time in cma._window_times(start):
+            index[time] = object()
+    monkeypatch.setattr(cma, "_window_file_index", lambda _path: index)
 
-    all_days = cma.list_samples("data", limit=1)
-    assert all_days["days"] == ["20260701", "20260702", "20260703"]
+    all_days = cma.ADAPTER.list_samples("data", limit=1)
+    assert all_days["days"] == ["20260731", "20260802", "20260803"]
+    assert cma.ADAPTER.check_window("data", "20260731", "2026-07-31T23:30:00Z")["ready"]
     assert all_days["total"] == 3
 
-    second_day = cma.list_samples("data", day="20260702", limit=10)
-    assert second_day["day"] == "20260702"
+    second_day = cma.ADAPTER.list_samples("data", day="20260802", limit=10)
+    assert second_day["day"] == "20260802"
     assert second_day["total"] == 1
-    assert second_day["samples"][0]["event_id"] == "20260702"
+    assert second_day["samples"][0]["event_id"] == "20260802"
 
 
 def test_grid_is_128_square_at_three_km():
-    grid = cma.grid_for(118, 32)
+    grid = cma._regional_grid(118, 32)
     assert len(grid["x"]) == len(grid["y"]) == 128
     assert np.all(np.diff(grid["x"]) == 3000)
     assert grid["axis_units"] == "m"
     assert grid["x"][-1] - grid["x"][0] + 3000 == 384000
     with pytest.raises(ValueError):
-        cma.grid_for(200, 32)
+        cma._regional_grid(200, 32)
 
 
 def test_missing_window_is_not_padded():
     start = "2026-07-31T23:30:00Z"
-    times = cma.window_times(start)
+    times = cma._window_times(cma._parse_utc(start))
     index = {t.replace(tzinfo=None): object() for t in times if t.month == 7}
-    with pytest.raises(FileNotFoundError, match="missing July"):
-        cma._check(index, "20260731", start)
+    with pytest.raises(FileNotFoundError, match="missing frames"):
+        cma._check_window_times(index, "20260731", start)
 
 
 def test_no_echo_and_no_coverage_are_distinct(monkeypatch):
@@ -75,14 +77,16 @@ def test_no_echo_and_no_coverage_are_distinct(monkeypatch):
         def transform(self, x, y):
             return x, y
 
-    monkeypatch.setattr(cma.Transformer, "from_crs", lambda *a, **kw: Identity())
+    from pyproj import Transformer
+
+    monkeypatch.setattr(Transformer, "from_crs", lambda *a, **kw: Identity())
     values = np.array([[0, -128], [-3276.8, -5]], dtype=np.float32)
     data = xr.DataArray(
         values,
         dims=("latitude", "longitude"),
         coords={"longitude": [0, 1], "latitude": [0, 1]},
     )
-    out = cma.regrid(data, {"x": [0, 1], "y": [0, 1], "crs": "unused"})
+    out = cma._regrid(data, {"x": [0, 1], "y": [0, 1], "crs": "unused"})
     assert out[0, 1] == 0
     assert np.isnan(out[1, 0])
     assert out[1, 1] == 0
@@ -124,7 +128,7 @@ def test_nonfinite_model_output_is_not_hidden_by_clipping(monkeypatch, tmp_path)
 
 
 def test_stored_cma_roundtrip(tmp_path):
-    times = [cma.stamp(t) for t in cma.window_times("2026-07-01T00:00:00Z")]
+    times = [cma._iso_utc(t) for t in cma._window_times(dt.datetime(2026, 7, 1))]
     window = {
         "data_id": "cma_radar",
         "variable": "CREF",
@@ -142,7 +146,7 @@ def test_stored_cma_roundtrip(tmp_path):
     }
     window["provenance"] = {"notice": "Cross-domain demo; skill unvalidated"}
     directory = create_run(
-        tmp_path, "cma", window, cma.grid_for(), atlas_revision="dev"
+        tmp_path, "cma", window, cma._regional_grid(118, 32), atlas_revision="dev"
     )
     source = StoredFields(directory)
     assert source.capabilities()["cadence_minutes"] == 6
@@ -163,7 +167,7 @@ def test_stored_cma_roundtrip(tmp_path):
         "a" * 64,
         physical_forecast(
             forecast,
-            grid=cma.grid_for(),
+            grid=cma._regional_grid(118, 32),
             init_time=window["init_time"],
             leads=tuple(range(6, 121, 6)),
             variable="CREF",

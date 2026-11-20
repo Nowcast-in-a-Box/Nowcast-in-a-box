@@ -162,11 +162,17 @@ da.attrs["source_name"]  # 对应请求的读取身份
 
 原接口草稿中的 `/run/products/diagnostics.sqlite` 是消费者希望使用的输出路径，不是本数据接口的副作用。本批不迁移当前按 attempt 保留的 `diagnostics/verification/<attempt>/verify.sqlite`；消费者接入时应单独对齐输出登记，不能覆盖历史报告。
 
-完整可运行示例见 `diagnostics/examples/run_source_example.py`，通过模块运行：
+在诊断环境中，使用一个已保存的 run 和平台提供的指标组 JSON：
 
-```sh
-python -m diagnostics.examples.run_source_example --run /run \
-  --metrics /run/metrics-for-handoff.json --version 1
+```python
+import json
+from pathlib import Path
+
+from diagnostics.run_source import RunSource
+
+metrics = json.loads(Path("/run/metrics-for-handoff.json").read_text())
+source = RunSource("/run", metrics=metrics, version=1)
+group = source.get_group(source.list_groups()[0])
 ```
 
-示例配置文件由平台准备，是一个指标组 JSON 列表；不要求它位于 run 内，也不由提供对象修改 run。
+指标组配置不必位于 run 内；`RunSource` 不会修改 run。

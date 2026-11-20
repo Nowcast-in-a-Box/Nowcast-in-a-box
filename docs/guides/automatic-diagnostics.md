@@ -11,7 +11,7 @@ An initial automatic diagnostic and an explicit retry use the same Compose
 preparation/execution path. Each operation has its own ID, request, status,
 container log, and exact result report. All selected verification and visualization
 models come from the frozen bindings. Retry consumes saved Forecasts and does
-not call ingestion or inference.
+not rerun the data adapter or inference.
 
 `job.json` names the initial `diagnostic_operation_id` and `report_entry`.
 `GET /v1/runs/{id}` additionally exposes `operation`, the latest explicit/automatic

@@ -115,7 +115,9 @@ class ConfigLibrary:
         self._write(path, cfg)
         return cfg
 
-    def create(self, cfg: VerificationConfig, *, overwrite: bool = False) -> VerificationConfig:
+    def create(
+        self, cfg: VerificationConfig, *, overwrite: bool = False
+    ) -> VerificationConfig:
         """Write a config that does not exist yet.
 
         With ``overwrite`` and a file already there, this delegates to
@@ -139,7 +141,9 @@ class ConfigLibrary:
         return path
 
     # -- the edits the RFC allows ---------------------------------------
-    def set_member(self, group_id: str, member: Member, *, retire_on: date | None = None):
+    def set_member(
+        self, group_id: str, member: Member, *, retire_on: date | None = None
+    ):
         """Add a member, or change one already on the roster."""
         current = self.get(group_id)
         return self.save(current.with_member(member, retire_on=retire_on))

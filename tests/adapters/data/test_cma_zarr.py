@@ -17,7 +17,10 @@ import xarray as xr
 def fmt_time(value) -> str:
     """Format numpy/xarray datetime as readable UTC-like text."""
     try:
-        return np.datetime_as_string(np.asarray(value).astype("datetime64[s]"), unit="s") + "Z"
+        return (
+            np.datetime_as_string(np.asarray(value).astype("datetime64[s]"), unit="s")
+            + "Z"
+        )
     except Exception:
         return str(value)
 
@@ -36,7 +39,7 @@ def inspect(path: str | Path) -> None:
     print("=" * 58)
 
     print(f"Path              : {path}")
-    print(f"Variable          : reflectivity")
+    print("Variable          : reflectivity")
     print(f"Shape             : {tuple(da.shape)}")
     print(f"Dimensions        : {da.dims}")
     print(f"Data type         : {da.dtype}")
@@ -58,7 +61,9 @@ def inspect(path: str | Path) -> None:
         f"{float(lat.max().values):g}"
     )
 
-    print(f"Resolution        : {ds.attrs.get('native_resolution_deg', '(not set)')} degree")
+    print(
+        f"Resolution        : {ds.attrs.get('native_resolution_deg', '(not set)')} degree"
+    )
     print(f"Source            : {ds.attrs.get('source', '(not set)')}")
     print(f"Product           : {ds.attrs.get('product', '(not set)')}")
     print(f"Requested bbox    : {ds.attrs.get('requested_bbox', '(not set)')}")

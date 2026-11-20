@@ -88,8 +88,12 @@ def probe_arrivals(
     if start >= stop:
         start = stop - timedelta(minutes=step)
 
-    stats = ProbeStats(dataset=name, checked_at=_stamp(checked),
-                       window_from=_stamp(start), window_to=_stamp(stop))
+    stats = ProbeStats(
+        dataset=name,
+        checked_at=_stamp(checked),
+        window_from=_stamp(start),
+        window_to=_stamp(stop),
+    )
 
     expected: list[datetime] = []
     moment = start
@@ -100,15 +104,20 @@ def probe_arrivals(
 
     try:
         present = set(access.list_observations(name, start, stop))
-    except Exception as problem:                     # a source that is down is a
+    except Exception as problem:  # a source that is down is a
         stats.messages.append(f"{type(problem).__name__}: {problem}")
-        return stats                                 # finding, not a crash
+        return stats  # finding, not a crash
 
     for moment in expected:
         here = any(abs((moment - seen).total_seconds()) < 1 for seen in present)
         state = "arrived" if here else "missing"
-        store.mark_arrival(valid_time=_stamp(moment), dataset=name, kind="obs",
-                           state=state, checked_at=stats.checked_at)
+        store.mark_arrival(
+            valid_time=_stamp(moment),
+            dataset=name,
+            kind="obs",
+            state=state,
+            checked_at=stats.checked_at,
+        )
         stats.written += 1
         if here:
             stats.arrived += 1
@@ -118,5 +127,6 @@ def probe_arrivals(
 
     if stats.missing:
         stats.messages.append(
-            f"{stats.missing} of {stats.expected} frames are not in the source")
+            f"{stats.missing} of {stats.expected} frames are not in the source"
+        )
     return stats

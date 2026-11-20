@@ -41,14 +41,24 @@ def reflectivity_colormap(path: Path) -> ListedColormap:
         raise ValueError("CMA demo requires the supplied uniform REF bins from 10 to 75 dBZ")
     first = int(np.flatnonzero(all_levels == 10)[0])
     return ListedColormap(
-        record["colors"][first:first + len(levels) - 1], name="CMA_REF_10_75"
+        record["colors"][first : first + len(levels) - 1], name="CMA_REF_10_75"
     ).with_extremes(over=record["colors"][-1])
 
 
 def run_cma_mock(
-    *, input_dir: Path, output_dir: Path, basemap_path: Path, source_record: Path,
-    acquisition_record: Path, terrain_path: Path, terrain_record: Path,
-    crop_record: Path, color_file: Path, display_width: int, fps: float, command: list[str],
+    *,
+    input_dir: Path,
+    output_dir: Path,
+    basemap_path: Path,
+    source_record: Path,
+    acquisition_record: Path,
+    terrain_path: Path,
+    terrain_record: Path,
+    crop_record: Path,
+    color_file: Path,
+    display_width: int,
+    fps: float,
+    command: list[str],
 ) -> dict:
     """Render every supplied observation time, without a fixed frame limit."""
     if not math.isfinite(fps) or not 0 < fps <= 100:
@@ -60,28 +70,45 @@ def run_cma_mock(
         terrain_path, terrain_record, expected_sha256=cache_record["crop"]["sha256"]
     )
     terrain.metadata["cache_record"] = {
-        "path": str(crop_record.resolve()), "sha256": sha256_file(crop_record),
+        "path": str(crop_record.resolve()),
+        "sha256": sha256_file(crop_record),
     }
     cmap = reflectivity_colormap(color_file)
     print(f"Reading all CMA observation times from {input_dir} ...", flush=True)
     field = read_cma_mock(input_dir, crs="EPSG:4326", display_width=display_width)
-    field = replace(field, provenance={
-        **field.provenance,
-        "color_file": {"path": str(color_file.resolve()), "sha256": sha256_file(color_file)},
-    })
+    field = replace(
+        field,
+        provenance={
+            **field.provenance,
+            "color_file": {"path": str(color_file.resolve()), "sha256": sha256_file(color_file)},
+        },
+    )
     n_leads = int(field.values.sizes["lead_time"])
-    print(f"Rendering {n_leads} frames through Core; display grid {field.values.shape[1:]} ...",
-          flush=True)
+    print(
+        f"Rendering {n_leads} frames through Core; display grid {field.values.shape[1:]} ...",
+        flush=True,
+    )
     basemap = CompositeBasemap(vector, terrain)
-    scene = prepare_scene(field, RenderConfig(
-        cmap=cmap, vmin=10, vmax=75, buffer_fraction=0, figsize=(12, 9),
-        field_alpha=0.96, display_min=10, colorbar_extend="max",
-        notice="MOCK FORECAST — observed radar sequence, not a forecast",
-    ), basemap)
+    scene = prepare_scene(
+        field,
+        RenderConfig(
+            cmap=cmap,
+            vmin=10,
+            vmax=75,
+            buffer_fraction=0,
+            figsize=(12, 9),
+            field_alpha=0.96,
+            display_min=10,
+            colorbar_extend="max",
+            notice="MOCK FORECAST — observed radar sequence, not a forecast",
+        ),
+        basemap,
+    )
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         outputs = {
-            "map": output_dir / "map.png", "animation": output_dir / "animation.gif",
+            "map": output_dir / "map.png",
+            "animation": output_dir / "animation.gif",
             "manifest": output_dir / "manifest.json",
         }
         render_frame(scene, field, 0).savefig(outputs["map"], dpi=scene.config.dpi)
@@ -89,13 +116,23 @@ def run_cma_mock(
         write_animation(scene, field, outputs["animation"], fps=fps)
         # GIF stores centiseconds, truncating any fractional 10 ms interval.
         checks = inspect_outputs(
-            outputs["map"], outputs["animation"], n_leads,
-            expected_duration_ms=int(1000 / fps) // 10 * 10, colorbar_box=bar_box,
+            outputs["map"],
+            outputs["animation"],
+            n_leads,
+            expected_duration_ms=int(1000 / fps) // 10 * 10,
+            colorbar_box=bar_box,
         )
         return write_manifest(
-            field, scene, provider="wmo", basemap=basemap,
-            source_record_path=source_record, acquisition_record_path=acquisition_record,
-            outputs=outputs, command=command, fps=fps, checks=checks,
+            field,
+            scene,
+            provider="wmo",
+            basemap=basemap,
+            source_record_path=source_record,
+            acquisition_record_path=acquisition_record,
+            outputs=outputs,
+            command=command,
+            fps=fps,
+            checks=checks,
         )
     finally:
         plt.close(scene.figure)

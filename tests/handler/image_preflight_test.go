@@ -49,7 +49,7 @@ func TestSelectionPreflightPullsEverySelectedImage(t *testing.T) {
 	joined := strings.Join(runner.calls, "\n")
 	for _, want := range []string{
 		"pull ghcr.io/example/" + server.Resources.Diagnostics.Container.Image,
-		"pull ghcr.io/example/nib-ingestion:cma-demo",
+		"pull ghcr.io/example/nib-reader-cma-radar:local-v1",
 		"pull ghcr.io/example/nib-nowcastnet:cma-demo",
 	} {
 		if !strings.Contains(joined, want) {

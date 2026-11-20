@@ -36,6 +36,9 @@ func TestRecoveryRefusesPriorContainerBeforeNewDiagnosticAdmission(t *testing.T)
 		t.Fatal(err)
 	}
 	raw := []byte(`{"schema":"nib.run.v2","id":"saved-run","data":{"id":"sevir"},"forecasts":{"wadepre":{}},"diagnostics":[]}`)
+	if err := os.WriteFile(filepath.Join(directory, "order.yaml"), []byte(orderYAML(t, orderFixture())), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(directory, "manifest.json"), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}

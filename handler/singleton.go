@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/platform"
+
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,7 +26,7 @@ func singletonLock(name string) (func(), error) {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return nil, err
 	}
-	return lockFile(filepath.Join(root, name+".lock"))
+	return platform.LockFile(filepath.Join(root, name+".lock"), singletonWait)
 }
 
 func executableDigest() (string, error) {

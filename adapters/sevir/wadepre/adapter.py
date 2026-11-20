@@ -14,7 +14,8 @@ from utils.weights import file_sha256
 
 class WADEPreAdapter(DeclaredModelAdapter):
     declaration_path = (
-        Path(__file__).resolve().parents[3] / "contracts/models/sevir/wadepre.json"
+        Path(__file__).resolve().parents[3]
+        / "atlas/contracts/models/sevir/wadepre.json"
     )
 
     def prepare(self, observations):

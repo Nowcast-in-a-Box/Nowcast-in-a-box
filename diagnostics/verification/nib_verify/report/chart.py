@@ -65,8 +65,14 @@ def axis_label(dimension: str) -> str:
 
 #: Enough for the series anyone plots on one chart, and distinguishable in print.
 PALETTE = (
-    "#1f6feb", "#d1495b", "#2e8b57", "#8b5cf6",
-    "#d97706", "#0891b2", "#be185d", "#4b5563",
+    "#1f6feb",
+    "#d1495b",
+    "#2e8b57",
+    "#8b5cf6",
+    "#d97706",
+    "#0891b2",
+    "#be185d",
+    "#4b5563",
 )
 
 #: Past this many distinct x values, tick at round numbers instead of at every
@@ -148,7 +154,7 @@ def failure_svg(message: str, *, width: int = 760) -> str:
     error body: a failed request is a broken-image icon and a blank space, which
     reads as "there is no data here" rather than "this query did not work".
     """
-    lines = [message[i:i + 96] for i in range(0, min(len(message), 288), 96)] or [""]
+    lines = [message[i : i + 96] for i in range(0, min(len(message), 288), 96)] or [""]
     h = 66 + 18 * len(lines)
     body = "".join(
         f'<text x="16" y="{56 + 18 * index}" font-family="{FONT}" '
@@ -163,7 +169,7 @@ def failure_svg(message: str, *, width: int = 760) -> str:
         f'stroke="#e5c1c1"/>'
         f'<text x="16" y="28" font-family="{FONT}" font-size="{fs(13)}" '
         f'font-weight="600" fill="#b3261e">this chart could not be drawn</text>'
-        f'{body}</svg>'
+        f"{body}</svg>"
     )
 
 
@@ -208,8 +214,9 @@ def from_query(
         positions = {value: float(index) for index, value in enumerate(raw)}
         labels = tuple(_short_time(str(value)) for value in raw)
 
-    x_values = sorted(set(positions.values()) |
-                      ({float(v) for v in domain} if not labels else set()))
+    x_values = sorted(
+        set(positions.values()) | ({float(v) for v in domain} if not labels else set())
+    )
     tables: dict[tuple, dict[float, float | None]] = {}
     for record in records:
         if record.get(x) is None:
@@ -224,10 +231,12 @@ def from_query(
     built = []
     for key in walking:
         table = tables[key]
-        built.append(Series(
-            label=" / ".join(part for part in key if part),
-            points=tuple((xv, table.get(xv)) for xv in x_values),
-        ))
+        built.append(
+            Series(
+                label=" / ".join(part for part in key if part),
+                points=tuple((xv, table.get(xv)) for xv in x_values),
+            )
+        )
 
     meta = result.get("meta") or {}
     metric = meta.get("label") or meta.get("method") or "value"
@@ -435,6 +444,7 @@ def line_chart(
 
 FONT = "Helvetica, Arial, sans-serif"
 
+
 def _bars(chart: Chart, plot: _Box, sx, sy, x_lo: float, x_hi: float) -> list[str]:
     """One bar per (series, x), grouped inside the x slot.
 
@@ -569,8 +579,9 @@ def _x_step(values: Sequence[float]) -> float:
     return min(b - a for a, b in zip(distinct, distinct[1:]))
 
 
-def _x_ticks(lo: float, hi: float, values: Sequence[float],
-             budget: int = MAX_ORDINAL_TICKS) -> list[float]:
+def _x_ticks(
+    lo: float, hi: float, values: Sequence[float], budget: int = MAX_ORDINAL_TICKS
+) -> list[float]:
     """Ticks along x, with both ends of the *data* among them.
 
     Snapping to round numbers alone left an axis running 10 to 180 labelled 50,

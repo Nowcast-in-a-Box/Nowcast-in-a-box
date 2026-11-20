@@ -94,7 +94,9 @@ def verification(directory, metrics, *, attempt_id=None, models=None):
             "status": (
                 "failed"
                 if stats.failed
-                else "partial" if stats.unavailable else "succeeded"
+                else "partial"
+                if stats.unavailable
+                else "succeeded"
             ),
             **stats.as_dict(),
             "scores": {},
@@ -238,7 +240,9 @@ def verification_batch(directory, samples, metrics, *, attempt_id=None, models=N
             "status": (
                 "failed"
                 if totals["failed"]
-                else "partial" if totals["unavailable"] else "succeeded"
+                else "partial"
+                if totals["unavailable"]
+                else "succeeded"
             ),
             **totals,
             "scores": {},

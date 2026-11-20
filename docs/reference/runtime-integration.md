@@ -4,9 +4,9 @@ The runtime writes stored-run contract `nib.run.v2` and retains `nib.run.v1`
 read compatibility. New forecasts require a v2 run; legacy runs cannot accept
 forecast appends. Forecasts store their own physical metadata. See the
 [model contract](models.md) for the declaration and validation lifecycle.
-Users run a prebuilt Go handler; Python stays in Docker. The Hub is a
-remote provisioning site, and its browser talks directly to the user's loopback
-handler. The Hub server never proxies the user's localhost.
+Users run a prebuilt Go handler; Python stays in Docker. Hub exports order
+configuration. The local Handler console owns detailed selection, resource
+preparation, execution and history.
 
 ## Prepare resources
 
@@ -14,7 +14,7 @@ Initialize the atlas submodule and build images from the repository root:
 
 ```sh
 git submodule update --init --recursive
-docker build -f adapters/sevir/Dockerfile -t nib-ingestion:dev .
+docker build -f adapters/sevir/Dockerfile -t nib-reader-sevir:local-v1 .
 docker build -f adapters/sevir/wadepre/Dockerfile -t nib-wadepre:dev .
 docker build -f adapters/sevir/nowcastnet/Dockerfile -t nib-nowcastnet:dev .
 docker build -f adapters/sevir/exprecast/Dockerfile -t nib-exprecast:dev .
@@ -57,24 +57,27 @@ download basemaps or weights. Scientific VIL units are `raw`, not dBZ or rain ra
 
 `config.yaml` controls loopback addresses, paths (including the runtime resources
 root), optional Docker context, and explicitly allowed Hub origins. Images and
-data/model mounts come from the runtime manifests. Register/start the platform launcher once,
-then use Hub's connection button and confirm its browser `nib://` application
-prompt if needed. The token is transferred over trusted loopback HTTP, remains
-in browser memory, and is never printed or manually copied. Browsers may also
-require local-network permission when a remote site accesses loopback.
+data/model mounts come from the runtime manifests. Start the platform launcher
+and open the local console. Its token stays in browser memory and is never
+printed or manually copied. Hub supplies portable YAML configuration; local
+resource preparation, execution and detailed settings belong to the Handler.
 See [lifecycle and connection](../guides/handler-lifecycle.md) for background startup,
 stop/restart, configuration ownership, trusted deployments and limitations.
 
 A successful CORS preflight is not evidence that permission was granted.
 
-Choose a data product and an explicit event/window, then models and optional
-evaluation or visualization in the existing Hub catalog/Checkout. Run locally from Checkout (or an existing frozen order): the browser uploads the
-actual ZIP and package checksum once, then observes the job in Runs. Handler
-executes the selected diagnostics automatically after inference, independently
-of the browser. See [automatic diagnostics](../guides/automatic-diagnostics.md) for exact
-operation/report identity, partial results and crash recovery. The handler
-checks bounded ZIP entries, paths, checksums, supported product versions and
-frozen data/model/diagnostic bindings. Template bytes are never executed.
+Hub exports a `nib.order.v1` YAML order. Open the local Handler console to import
+it, select data windows and models, edit diagnostics defaults and start runs.
+The Handler validates data/model pairings, UTC sample windows, supported region
+coordinates and metric parameters before admission. Host paths and container
+commands come only from trusted local settings and packaged resources.
+
+Each run freezes its effective configuration as `order.yaml`. Automatic
+diagnostics execute after inference, independently of the browser. Subsequent
+order edits affect future runs; diagnostics retries create separate attempts
+from saved Forecasts. See [automatic diagnostics](../guides/automatic-diagnostics.md) for
+operation/report identity, partial results and recovery. Old ZIP runs remain
+readable, but ZIP import and startup are no longer supported.
 
 The handler writes controlled Compose definitions. Each stage is offline, has a
 read-only root, tmpfs `/tmp`, read-only input/weight mounts, and runs as the host
@@ -91,8 +94,9 @@ uses the parent job's slot. A separate diagnostic retry uses its own slot.
 Jobs record queued/running/succeeded/failed/partial states with a stage, request
 identity and logs. A repeated idempotency key returns the same run, including
 after restart. A new explicit submission allocates a separate run ID and
-directory, even for the same Order, package, samples and models. Only one writer
-may execute against a given run at a time, including diagnostic retries.
+directory, even for the same order, samples and models. Those runs may execute
+concurrently; there is no global execution lock. Only one writer may execute
+against a given run at a time, including diagnostic retries.
 Restarted unfinished jobs are marked interrupted, not silently resumed.
 Successful Forecasts survive diagnostic failure.
 

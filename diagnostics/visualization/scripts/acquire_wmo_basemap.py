@@ -48,9 +48,20 @@ def sha256_file(path: Path) -> str:
 def fetch_bytes(url: str) -> bytes:
     result = subprocess.run(
         [
-            "curl", "--fail-with-body", "--silent", "--show-error", "--location",
-            "--max-time", "60", "--retry", "2", "--retry-delay", "1",
-            "--user-agent", USER_AGENT, url,
+            "curl",
+            "--fail-with-body",
+            "--silent",
+            "--show-error",
+            "--location",
+            "--max-time",
+            "60",
+            "--retry",
+            "2",
+            "--retry-delay",
+            "1",
+            "--user-agent",
+            USER_AGENT,
+            url,
         ],
         capture_output=True,
         check=False,
@@ -103,8 +114,10 @@ def available_tiles(payload: dict, level: int) -> list[tuple[int, int, int]]:
     """Decode an ArcGIS tilemap block into (level, row, col) coordinates."""
     if "error" in payload:
         error = payload["error"]
-        if (error.get("code") == 422 and
-                error.get("message") == "No tile available for the specified boundary."):
+        if (
+            error.get("code") == 422
+            and error.get("message") == "No tile available for the specified boundary."
+        ):
             return []
         raise AcquisitionError(f"tilemap error at LOD {level}: {error}")
     location = payload["location"]
@@ -135,19 +148,23 @@ def list_official_tiles(service: dict, max_lod: int) -> list[tuple[int, int, int
             tile_info["cols"],
         )
         level_tiles = []
-        for top in range((row_min // TILEMAP_BLOCK_SIZE) * TILEMAP_BLOCK_SIZE,
-                         row_max + 1, TILEMAP_BLOCK_SIZE):
-            for left in range((col_min // TILEMAP_BLOCK_SIZE) * TILEMAP_BLOCK_SIZE,
-                              col_max + 1, TILEMAP_BLOCK_SIZE):
+        for top in range(
+            (row_min // TILEMAP_BLOCK_SIZE) * TILEMAP_BLOCK_SIZE, row_max + 1, TILEMAP_BLOCK_SIZE
+        ):
+            for left in range(
+                (col_min // TILEMAP_BLOCK_SIZE) * TILEMAP_BLOCK_SIZE,
+                col_max + 1,
+                TILEMAP_BLOCK_SIZE,
+            ):
                 width = min(TILEMAP_BLOCK_SIZE, col_max - left + 1)
                 height = min(TILEMAP_BLOCK_SIZE, row_max - top + 1)
                 tilemap_url = (
-                    f"{VECTOR_SERVICE_URL}/tilemap/{level}/{top}/{left}/"
-                    f"{width}/{height}?f=json"
+                    f"{VECTOR_SERVICE_URL}/tilemap/{level}/{top}/{left}/{width}/{height}?f=json"
                 )
                 block = json.loads(fetch_bytes(tilemap_url))
                 level_tiles.extend(
-                    tile for tile in available_tiles(block, level)
+                    tile
+                    for tile in available_tiles(block, level)
                     if row_min <= tile[1] <= row_max and col_min <= tile[2] <= col_max
                 )
         print(f"LOD {level}: {len(level_tiles)} non-empty tiles")
@@ -194,8 +211,7 @@ def main() -> int:
         ),
     }
     metadata_paths = [
-        download_resource(url, root / name, force=True)
-        for name, url in metadata_urls.items()
+        download_resource(url, root / name, force=True) for name, url in metadata_urls.items()
     ]
     webmap_item = json.loads((root / "webmap-item.json").read_text())
     webmap_data = json.loads((root / "webmap-data.json").read_text())
@@ -215,21 +231,19 @@ def main() -> int:
     resource_paths = []
     for name in SPRITE_NAMES:
         url = f"{VECTOR_SERVICE_URL}/resources/sprites/{name}"
-        resource_paths.append(download_resource(
-            url, root / "VectorTileServer/resources/sprites" / name
-        ))
+        resource_paths.append(
+            download_resource(url, root / "VectorTileServer/resources/sprites" / name)
+        )
     for font_name in FONT_NAMES:
         encoded_font = urllib.parse.quote(font_name)
         for glyph_range in FONT_RANGES:
-            url = (
-                f"{VECTOR_SERVICE_URL}/resources/fonts/"
-                f"{encoded_font}/{glyph_range}.pbf"
+            url = f"{VECTOR_SERVICE_URL}/resources/fonts/{encoded_font}/{glyph_range}.pbf"
+            resource_paths.append(
+                download_resource(
+                    url,
+                    root / "VectorTileServer/resources/fonts" / font_name / f"{glyph_range}.pbf",
+                )
             )
-            resource_paths.append(download_resource(
-                url,
-                root / "VectorTileServer/resources/fonts" / font_name /
-                f"{glyph_range}.pbf",
-            ))
 
     tiles = list_official_tiles(service, max_lod)
     tile_paths = []
@@ -259,8 +273,7 @@ def main() -> int:
         "full_extent": service["fullExtent"],
         "tile_count": len(tiles),
         "tile_counts_by_lod": {
-            str(level): sum(tile[0] == level for tile in tiles)
-            for level in range(max_lod + 1)
+            str(level): sum(tile[0] == level for tile in tiles) for level in range(max_lod + 1)
         },
         "resource_count": len(metadata_paths) + len(resource_paths),
         "checksum_manifest": "SHA256SUMS.txt",

@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/platform"
+
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,17 +21,19 @@ import (
 )
 
 type Job struct {
-	ID                    string         `json:"id"`
-	Status                string         `json:"status"`
-	Stage                 string         `json:"stage"`
-	Error                 string         `json:"error,omitempty"`
-	DiagnosticOperationID string         `json:"diagnostic_operation_id,omitempty"`
-	ReportEntry           string         `json:"report_entry,omitempty"`
-	Request               RuntimeRequest `json:"request"`
-	CreatedAt             time.Time      `json:"created_at"`
-	IdempotencyKey        string         `json:"idempotency_key,omitempty"`
-	TriggerID             string         `json:"trigger_id,omitempty"`
-	UpdatedAt             time.Time      `json:"updated_at"`
+	ID                    string            `json:"id"`
+	Status                string            `json:"status"`
+	Stage                 string            `json:"stage"`
+	Error                 string            `json:"error,omitempty"`
+	DiagnosticOperationID string            `json:"diagnostic_operation_id,omitempty"`
+	ReportEntry           string            `json:"report_entry,omitempty"`
+	Request               RuntimeRequest    `json:"request"`
+	CreatedAt             time.Time         `json:"created_at"`
+	IdempotencyKey        string            `json:"idempotency_key,omitempty"`
+	TriggerID             string            `json:"trigger_id,omitempty"`
+	UpdatedAt             time.Time         `json:"updated_at"`
+	Preflight             []Check           `json:"preflight,omitempty"`
+	ExecutionContext      *ExecutionContext `json:"execution_context,omitempty"`
 }
 
 func (s *Server) runtimeRoutes(mux *http.ServeMux) {
@@ -38,6 +43,7 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /v1/settings", s.authorize(s.handleSettings))
 	mux.HandleFunc("POST /v1/settings/pick", s.authorize(s.handlePickDataRoot))
 	mux.HandleFunc("POST /v1/runs/{id}/diagnostics", s.authorize(s.handleRetryDiagnostics))
+	mux.HandleFunc("POST /v1/runs/{id}/rerun", s.authorize(s.handleRunAgain))
 	mux.HandleFunc("GET /v1/capabilities", s.authorize(s.handleCapabilities))
 	mux.HandleFunc("POST /v1/preflight", s.authorize(s.handlePreflight))
 	mux.HandleFunc("GET /v1/resources", s.authorize(s.handleResources))
@@ -46,6 +52,11 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	s.triggerRoutes(mux)
 	mux.HandleFunc("GET /v1/orders", s.authorize(s.handleOrdersList))
 	mux.HandleFunc("POST /v1/orders", s.authorize(s.handleOrderSave))
+	mux.HandleFunc("GET /v1/order-options", s.authorize(s.handleOrderOptions))
+	mux.HandleFunc("POST /v1/orders/validate", s.authorize(s.handleOrderValidate))
+	mux.HandleFunc("POST /v1/orders/import-selection", s.authorize(s.importSelection))
+	mux.HandleFunc("GET /v1/orders/{package_id}", s.authorize(s.handleOrder))
+	mux.HandleFunc("PATCH /v1/orders/{package_id}", s.authorize(s.handleOrderSave))
 	mux.HandleFunc("POST /v1/orders/{package_id}/runs", s.authorize(s.handleOrderRun))
 	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))
 	mux.HandleFunc("GET /v1/jobs/{id}", s.authorize(s.handleJob))
@@ -62,8 +73,8 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) docker(ctx context.Context, args ...string) (int, []byte, error) {
-	if s.Config.Runtime.DockerContext != "" {
-		args = append([]string{"--context", s.Config.Runtime.DockerContext}, args...)
+	if dockerContext := s.currentConfig().Runtime.DockerContext; dockerContext != "" {
+		args = append([]string{"--context", dockerContext}, args...)
 	}
 	return s.Runner.Run(ctx, args...)
 }
@@ -186,7 +197,7 @@ func (s *Server) listSamples(ctx context.Context, dataID string, offset, limit i
 	if day != "" {
 		extra = append(extra, "--day", day)
 	}
-	args, err := s.dataCommandArgs(dataID, data, catalog, extra...)
+	args, err := s.readerCommandArgs(dataID, data, catalog, extra...)
 	if err != nil {
 		return nil, err
 	}
@@ -220,26 +231,12 @@ func pagination(r *http.Request) (int, int, error) {
 }
 
 func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
-	var upload struct {
-		Package []byte `json:"package"`
-		SHA256  string `json:"sha256"`
-	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 12<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&upload); err != nil {
-		runtimeError(w, 400, err)
+	order, request, _, err := s.readOrderInput(w, r)
+	if err != nil {
+		runtimeError(w, 422, err)
 		return
 	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
-		runtimeError(w, 400, fmt.Errorf("one request object required"))
-		return
-	}
-	key := r.Header.Get("Idempotency-Key")
-	if len(key) > 128 {
-		runtimeError(w, 400, fmt.Errorf("idempotency key is too long"))
-		return
-	}
-	job, status, err := s.createJobFromPackage(upload.Package, upload.SHA256, key)
+	job, status, err := s.admitOrder(order, request.OrderRevision, r.Header.Get("Idempotency-Key"), "")
 	if err != nil {
 		runtimeError(w, status, err)
 		return
@@ -247,20 +244,27 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, *job)
 }
 
-// createJobFromPackage admits a verified package ZIP as a new run, or returns
-// the existing job when the idempotency key repeats. It is shared by the Hub
-// upload path and the local console's saved-order start.
-func (s *Server) createJobFromPackage(pkg []byte, expected, key string) (*Job, int, error) {
-	request, err := ParseRuntimePackage(pkg, expected, s.Resources)
+func (s *Server) admitOrder(order Order, revision, key, triggerID string) (*Job, int, error) {
+	if len(key) > 128 {
+		return nil, 400, fmt.Errorf("idempotency key is too long")
+	}
+	order, request, err := orders.Normalize(order, s.Resources, s.Config.Runtime.MaxBatchSamples)
 	if err != nil {
 		return nil, 422, err
 	}
-	return s.admitJob(request, pkg, key, "")
+	// Keep the source revision while the effective digest includes trigger windows.
+	if revision != "" {
+		request.OrderRevision = revision
+	}
+	snapshot, err := yaml.Marshal(order)
+	if err != nil {
+		return nil, 422, err
+	}
+	return s.admitJob(request, snapshot, key, triggerID)
 }
 
-// admitJob validates one request and starts it. A trigger calls it after
-// replacing the start window in a parsed package; triggerID is empty for the
-// Hub upload and saved-order paths.
+// admitJob starts a validated request and persists its effective YAML snapshot.
+// triggerID attributes scheduled submissions; manual submissions leave it empty.
 func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID string) (*Job, int, error) {
 	if s.Config.Runtime.MaxConcurrentJobs < 0 {
 		return nil, 422, fmt.Errorf("runtime.max_concurrent_jobs must be positive")
@@ -356,7 +360,7 @@ func (s *Server) admitJob(request RuntimeRequest, pkg []byte, key, triggerID str
 	if err := writeJob(directory, job); err != nil {
 		return nil, 500, err
 	}
-	if err := os.WriteFile(filepath.Join(directory, "package.zip"), pkg, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "order.yaml"), pkg, 0o600); err != nil {
 		return nil, 500, err
 	}
 	s.jobs[id] = job
@@ -431,13 +435,33 @@ func (s *Server) executeJob(id string) {
 	s.jobsMu.Lock()
 	request := s.jobs[id].Request
 	s.jobsMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
 	directory := filepath.Join(s.Config.Paths.Runs, id)
+	checks, executionContext, preflightErr := s.executionPreflight(ctx, request, func(stage string, checks []Check) {
+		s.jobsMu.Lock()
+		job := s.jobs[id]
+		job.Status = "running"
+		job.Stage = "preflight:" + stage
+		job.Preflight = append([]Check(nil), checks...)
+		job.UpdatedAt = time.Now().UTC()
+		_ = writeJob(directory, job)
+		s.jobsMu.Unlock()
+	})
+	s.jobsMu.Lock()
+	s.jobs[id].Preflight = checks
+	if executionContext.DataPath != "" {
+		s.jobs[id].ExecutionContext = &executionContext
+	}
+	s.jobsMu.Unlock()
+	if preflightErr != nil {
+		s.updateJob(id, "failed", "preflight", preflightErr)
+		return
+	}
 	if len(request.SampleStarts) > 1 {
 		s.executeBatchJob(id, request, directory)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
 	run := func(stage string, args ...string) error {
 		s.updateJob(id, "running", stage, nil)
 		name := "nib-" + strings.ToLower(id) + "-" + stage
@@ -450,7 +474,7 @@ func (s *Server) executeJob(id string) {
 			return fmt.Errorf("missing configured image")
 		}
 		service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
-		if user := containerUser(); user != "" {
+		if user := platform.ContainerUser(); user != "" {
 			service["user"] = user
 		}
 		composition := map[string]any{"services": map[string]any{"task": service}}
@@ -491,8 +515,8 @@ func (s *Server) executeJob(id string) {
 		s.updateJob(id, "failed", "preflight", err)
 		return
 	}
-	// Ingestion creates a child run inside the job workspace, then publishes its contents.
-	args, err := s.dataCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+	// The data adapter creates a child run inside the job workspace, then publishes its contents.
+	args, err := s.readerCommandArgs(request.DataID, data, catalog, "--event", request.EventID, "--start", request.StartTime, "--runs", "/workspace", "--id", id, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 	if err != nil {
 		s.updateJob(id, "failed", "preflight", err)
 		return
@@ -501,7 +525,7 @@ func (s *Server) executeJob(id string) {
 		args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 	}
 	args = append([]string{"-v", volumeSpec(directory, "/workspace", false)}, args...)
-	err = run("ingestion", args...)
+	err = run("read-inputs", args...)
 	if err == nil {
 		child := filepath.Join(directory, id)
 		entries, readErr := os.ReadDir(child)
@@ -524,7 +548,7 @@ func (s *Server) executeJob(id string) {
 		}
 	}
 	if err != nil {
-		s.updateJob(id, "failed", "ingestion", err)
+		s.updateJob(id, "failed", "read-inputs", err)
 		return
 	}
 	if len(request.ModelNames) > 0 {
@@ -534,7 +558,7 @@ func (s *Server) executeJob(id string) {
 			readErr = json.Unmarshal(rawManifest, &manifest)
 		}
 		if readErr != nil {
-			s.updateJob(id, "failed", "ingestion", readErr)
+			s.updateJob(id, "failed", "read-inputs", readErr)
 			return
 		}
 		names, _ := manifest["model_names"].(map[string]any)
@@ -547,11 +571,11 @@ func (s *Server) executeJob(id string) {
 		manifest["model_names"] = names
 		raw, marshalErr := json.MarshalIndent(manifest, "", "  ")
 		if marshalErr != nil {
-			s.updateJob(id, "failed", "ingestion", marshalErr)
+			s.updateJob(id, "failed", "read-inputs", marshalErr)
 			return
 		}
 		if writeErr := os.WriteFile(filepath.Join(directory, "manifest.json"), raw, 0o644); writeErr != nil {
-			s.updateJob(id, "failed", "ingestion", writeErr)
+			s.updateJob(id, "failed", "read-inputs", writeErr)
 			return
 		}
 	}
@@ -620,7 +644,7 @@ func (s *Server) runStage(ctx context.Context, directory, id, stage string, args
 		return fmt.Errorf("missing configured image")
 	}
 	service := map[string]any{"image": args[0], "command": args[1:], "volumes": volumes, "network_mode": "none", "read_only": true, "tmpfs": []string{"/tmp"}, "pull_policy": "never"}
-	if user := containerUser(); user != "" {
+	if user := platform.ContainerUser(); user != "" {
 		service["user"] = user
 	}
 	composition := map[string]any{"services": map[string]any{"task": service}}
@@ -675,7 +699,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 	}
 	samplesRoot := filepath.Join(directory, "samples")
 	if err := os.MkdirAll(samplesRoot, 0o755); err != nil {
-		s.updateJob(id, "failed", "ingestion", err)
+		s.updateJob(id, "failed", "read-inputs", err)
 		return
 	}
 	starts := request.SampleStarts
@@ -697,7 +721,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 			eventID = strings.ReplaceAll(start[:10], "-", "")
 		}
 		s.updateJob(id, "running", fmt.Sprintf("sample %d/%d", index+1, len(starts)), nil)
-		args, argErr := s.dataCommandArgs(request.DataID, data, catalog, "--event", eventID, "--start", start, "--runs", "/workspace", "--id", childID, "--atlas-revision", s.Config.Runtime.AtlasRevision)
+		args, argErr := s.readerCommandArgs(request.DataID, data, catalog, "--event", eventID, "--start", start, "--runs", "/workspace", "--id", childID, "--atlas-revision", s.Config.Runtime.AtlasRevision)
 		if argErr != nil {
 			failures = append(failures, childID+": "+argErr.Error())
 			continue
@@ -706,8 +730,8 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 			args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 		}
 		args = append([]string{"-v", volumeSpec(samplesRoot, "/workspace", false)}, args...)
-		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-ingestion", args...); err != nil {
-			failures = append(failures, childID+": ingestion: "+err.Error())
+		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-read-inputs", args...); err != nil {
+			failures = append(failures, childID+": read-inputs: "+err.Error())
 			continue
 		}
 		for _, model := range request.Models {
@@ -754,7 +778,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 		samples = append(samples, sample)
 	}
 	if firstManifest == nil {
-		s.updateJob(id, "failed", "ingestion", fmt.Errorf("no sample window completed: %s", strings.Join(failures, "; ")))
+		s.updateJob(id, "failed", "read-inputs", fmt.Errorf("no sample window completed: %s", strings.Join(failures, "; ")))
 		return
 	}
 	batchManifest := map[string]any{
@@ -771,7 +795,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 		batchManifest["failed_samples"] = failures
 	}
 	if err := s.writeManifestJSON(directory, batchManifest); err != nil {
-		s.updateJob(id, "failed", "ingestion", err)
+		s.updateJob(id, "failed", "read-inputs", err)
 		return
 	}
 	if len(request.Metrics) == 0 && !request.Visualization {
@@ -891,6 +915,40 @@ func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
 		text = "[earlier output truncated]\n" + text[start:]
 	}
 	writeJSON(w, 200, map[string]string{"path": filepath.Join(filepath.Dir(s.Config.Source), "logs", "handler.log"), "tail": text})
+}
+
+func (s *Server) handleRunAgain(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idPattern.MatchString(id) {
+		runtimeError(w, 400, fmt.Errorf("invalid run ID"))
+		return
+	}
+	if _, err := s.runManifest(id); err != nil {
+		runtimeError(w, 404, err)
+		return
+	}
+	path := filepath.Join(s.Config.Paths.Runs, id, "order.yaml")
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > orders.MaxBytes {
+		runtimeError(w, 409, fmt.Errorf("run has no regular frozen YAML order and cannot be repeated"))
+		return
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		runtimeError(w, 409, err)
+		return
+	}
+	order, _, err := ParseOrder(raw, s.Resources, s.Config.Runtime.MaxBatchSamples)
+	if err != nil {
+		runtimeError(w, 409, fmt.Errorf("frozen run order is invalid: %w", err))
+		return
+	}
+	job, status, err := s.admitOrder(order, "", r.Header.Get("Idempotency-Key"), "")
+	if err != nil {
+		runtimeError(w, status, err)
+		return
+	}
+	writeJSON(w, status, job)
 }
 
 func runtimeError(w http.ResponseWriter, status int, err error) {

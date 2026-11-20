@@ -31,7 +31,9 @@ func automaticServer(t *testing.T) (*handler.Server, handler.Config) {
 	cfg.Runtime.Token = "token"
 	cfg.Runtime.AtlasRevision = strings.Repeat("a", 40)
 	writeSevirData(t, &cfg)
-	return handler.NewServer(cfg), cfg
+	server := handler.NewServer(cfg)
+	writeExecutionWeights(t, server)
+	return server, cfg
 }
 
 func TestAutomaticDiagnosticsFailureKeepsModelStageAndExactFailedOperation(t *testing.T) {

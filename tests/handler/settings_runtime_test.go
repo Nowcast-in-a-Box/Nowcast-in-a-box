@@ -256,6 +256,9 @@ func TestDiagnosticRetryRefusesMissingForecastAndNoProducts(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := `{"schema":"nib.run.v1","id":"run-one","forecasts":{"wadepre":{}},"diagnostics":[]}`
+	if err := os.WriteFile(filepath.Join(directory, "order.yaml"), []byte(orderYAML(t, orderFixture())), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(directory, "manifest.json"), []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
 	}

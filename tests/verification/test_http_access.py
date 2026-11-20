@@ -20,12 +20,10 @@ from datetime import timedelta
 
 import numpy as np
 import pytest
-
 from nib_verify.access import (
     FieldUnavailable,
     HttpAccess,
     HttpAccessError,
-    SyntheticAccess,
     wire,
 )
 
@@ -195,7 +193,8 @@ def test_a_body_that_is_not_json_is_an_error():
 def test_a_server_error_is_an_error_not_an_unavailable_field():
     with serve_data(make_access()) as url, HttpAccess(url) as access:
         access._connection = _Stub(
-            status=500, body=json.dumps({"error": "internal", "detail": "boom"}).encode()
+            status=500,
+            body=json.dumps({"error": "internal", "detail": "boom"}).encode(),
         )
         with pytest.raises(HttpAccessError, match="500"):
             access.capabilities()
@@ -204,7 +203,8 @@ def test_a_server_error_is_an_error_not_an_unavailable_field():
 def test_a_bad_request_is_an_error_not_an_unavailable_field():
     with serve_data(make_access()) as url, HttpAccess(url) as access:
         access._connection = _Stub(
-            status=400, body=json.dumps({"error": "bad-request", "detail": "nope"}).encode()
+            status=400,
+            body=json.dumps({"error": "bad-request", "detail": "nope"}).encode(),
         )
         with pytest.raises(HttpAccessError, match="bad-request"):
             access.capabilities()
@@ -217,13 +217,17 @@ def test_a_payload_that_does_not_hold_together_is_an_error(data_service):
     with HttpAccess(url) as access:
         access._connection = _Stub(
             status=200,
-            body=json.dumps({
-                "name": "x", "variable": "v", "unit": "dBZ",
-                "valid_time": "2026-01-01T00:00:00Z",
-                "lon": wire.encode_array(np.zeros(2)),
-                "lat": wire.encode_array(np.zeros(2)),
-                "values": wire.encode_array(np.zeros((3, 3))),
-            }).encode(),
+            body=json.dumps(
+                {
+                    "name": "x",
+                    "variable": "v",
+                    "unit": "dBZ",
+                    "valid_time": "2026-01-01T00:00:00Z",
+                    "lon": wire.encode_array(np.zeros(2)),
+                    "lat": wire.encode_array(np.zeros(2)),
+                    "values": wire.encode_array(np.zeros((3, 3))),
+                }
+            ).encode(),
         )
         with pytest.raises(HttpAccessError, match="unusable field"):
             access.get_observation("radar-composite", T0)
@@ -242,7 +246,7 @@ class _Stub:
         return None
 
     def getresponse(self):
-        status, body = self._status, self._body
+        body = self._body
 
         class _Response:
             def read(self_inner) -> bytes:
@@ -297,6 +301,7 @@ def test_a_connection_that_keeps_failing_gives_up_after_two_attempts(monkeypatch
             return None
 
     with serve_data(make_access()) as url, HttpAccess(url) as access:
+
         def connect():
             attempts.append(1)
             return Dead()
@@ -346,7 +351,10 @@ def test_an_address_that_is_not_an_address_is_refused(bad):
 
 def test_the_scheme_and_port_are_understood():
     assert (HttpAccess("http://a").scheme, HttpAccess("http://a").port) == ("http", 80)
-    assert (HttpAccess("https://a").port, HttpAccess("https://a:8443").port) == (443, 8443)
+    assert (HttpAccess("https://a").port, HttpAccess("https://a:8443").port) == (
+        443,
+        8443,
+    )
 
 
 def test_an_unknown_encoding_is_refused_at_construction(data_service):
@@ -369,8 +377,10 @@ def test_describe_says_where_and_whether_anything_was_odd(data_service):
 def test_a_field_can_be_asked_for_as_readable_json(data_service):
     """``?encoding=list`` exists so a person can read a response with curl."""
     url, _ = data_service
-    target = (f"{url}/observation?name=radar-composite"
-              f"&valid_time=2026-01-01T00%3A00%3A00Z&encoding=list")
+    target = (
+        f"{url}/observation?name=radar-composite"
+        f"&valid_time=2026-01-01T00%3A00%3A00Z&encoding=list"
+    )
     with urllib.request.urlopen(target, timeout=10) as response:
         payload = json.loads(response.read())
     assert payload["values"]["encoding"] == "list"

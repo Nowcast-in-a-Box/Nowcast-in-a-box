@@ -16,7 +16,6 @@ from datetime import timedelta
 
 import numpy as np
 import pytest
-
 from nib_verify.access import (
     Capabilities,
     Field,
@@ -64,11 +63,11 @@ def test_a_provider_that_has_holes_conforms_and_proves_it():
 def test_a_finite_check_with_nothing_to_check_is_a_skip_not_a_pass():
     """The whole point of the report is not to say "conforms" about something
     that never ran."""
-    report = check_provider(make_access())          # no missing points
+    report = check_provider(make_access())  # no missing points
     check = named(report, "missing points come back as NaN, never as zero")
     assert check.skipped
     assert check.ok
-    assert report.ok                                # a skip is not a failure
+    assert report.ok  # a skip is not a failure
 
 
 def test_a_conforming_report_says_what_it_sampled():
@@ -110,8 +109,15 @@ class WrongUnit(SyntheticAccess):
 
     def get_observation(self, name, valid_time):
         field = super().get_observation(name, valid_time)
-        return Field(data=field.data, coords=field.coords, valid_time=field.valid_time,
-                     unit="mm/h", variable=field.variable, name=field.name, mask=field.mask)
+        return Field(
+            data=field.data,
+            coords=field.coords,
+            valid_time=field.valid_time,
+            unit="mm/h",
+            variable=field.variable,
+            name=field.name,
+            mask=field.mask,
+        )
 
 
 class LyingLeads(SyntheticAccess):
@@ -136,15 +142,22 @@ class OffCadenceTimes(SyntheticAccess):
     """Serves times five minutes apart while declaring a ten-minute cadence."""
 
     def list_observations(self, name, t0, t1):
-        return [t + timedelta(minutes=5 * i)
-                for i, t in enumerate(super().list_observations(name, t0, t1))]
+        return [
+            t + timedelta(minutes=5 * i)
+            for i, t in enumerate(super().list_observations(name, t0, t1))
+        ]
 
 
 class NoUnits(SyntheticAccess):
     def capabilities(self):
         caps = super().capabilities()
-        return Capabilities(caps.cadence_minutes, caps.observation_names,
-                            caps.model_ids, caps.retrospective, {})
+        return Capabilities(
+            caps.cadence_minutes,
+            caps.observation_names,
+            caps.model_ids,
+            caps.retrospective,
+            {},
+        )
 
 
 class Broken(SyntheticAccess):
@@ -159,20 +172,26 @@ class GrumpyListing(SyntheticAccess):
 
 def test_a_property_checked_on_several_fields_is_one_line():
     report = check_provider(make_access(missing_points=50))
-    matches = [c for c in report.checks
-               if c.name == "missing points come back as NaN, never as zero"]
+    matches = [
+        c
+        for c in report.checks
+        if c.name == "missing points come back as NaN, never as zero"
+    ]
     assert len(matches) == 1
-    assert matches[0].subjects == 4          # one observation and three leads
+    assert matches[0].subjects == 4  # one observation and three leads
     assert "4 field(s)" in matches[0].full_detail
 
 
-@pytest.mark.parametrize("provider,name", [
-    (Interpolating, "an off-cadence time raises rather than interpolating"),
-    (WrongUnit, "the observation unit is the one capabilities declares"),
-    (LyingLeads, "every listed lead can be fetched"),
-    (OffCadenceTimes, "every served time is on the cadence"),
-    (NoUnits, "every name declares a unit"),
-])
+@pytest.mark.parametrize(
+    "provider,name",
+    [
+        (Interpolating, "an off-cadence time raises rather than interpolating"),
+        (WrongUnit, "the observation unit is the one capabilities declares"),
+        (LyingLeads, "every listed lead can be fetched"),
+        (OffCadenceTimes, "every served time is on the cadence"),
+        (NoUnits, "every name declares a unit"),
+    ],
+)
 def test_a_broken_guarantee_is_caught_by_name(provider, name):
     report = check_provider(provider())
     assert not report.ok, report.render()
@@ -220,10 +239,16 @@ def test_a_service_that_does_not_declare_its_holes_is_caught():
         def get_observation(self, name, valid_time):
             field = super().get_observation(name, valid_time)
             data = field.data.copy()
-            data[0, :3] = np.nan            # a hole, with no mask to say so
-            return Field(data=data, coords=field.coords, valid_time=field.valid_time,
-                         unit=field.unit, variable=field.variable, name=field.name,
-                         mask=None)
+            data[0, :3] = np.nan  # a hole, with no mask to say so
+            return Field(
+                data=data,
+                coords=field.coords,
+                valid_time=field.valid_time,
+                unit=field.unit,
+                variable=field.variable,
+                name=field.name,
+                mask=None,
+            )
 
     with serve_data(Undeclared()) as url, HttpAccess(url) as access:
         report = check_provider(access)
@@ -266,16 +291,19 @@ def test_the_checklist_only_uses_the_five_methods():
             self.inner, self.seen = inner, set()
 
         def __getattr__(self, name):
-            value = getattr(self.inner, name)   # raises if the inner has none,
-            self.seen.add(name)                 # so probing for extras is not
-            return value                        # mistaken for using them
+            value = getattr(self.inner, name)  # raises if the inner has none,
+            self.seen.add(name)  # so probing for extras is not
+            return value  # mistaken for using them
 
     recorder = Recorder(make_access(missing_points=50))
     check_provider(recorder)
 
     assert recorder.seen <= {
-        "capabilities", "list_observations", "get_observation",
-        "list_predictions", "get_prediction",
+        "capabilities",
+        "list_observations",
+        "get_observation",
+        "list_predictions",
+        "get_prediction",
     }, recorder.seen
 
 
@@ -285,7 +313,9 @@ def test_the_candidate_days_are_not_a_guess_that_hides_a_provider():
     report = check_provider(make_access(), days=())
     assert report.ok
     assert named(report, "list_observations finds something").skipped
-    assert "0 candidate window" in report.render() or "candidate window" in report.render()
+    assert (
+        "0 candidate window" in report.render() or "candidate window" in report.render()
+    )
 
 
 def test_the_default_candidate_days_span_more_than_one_year():

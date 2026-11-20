@@ -9,9 +9,8 @@ from pathlib import Path
 import netCDF4
 import numpy as np
 import pytest
-from pyproj import CRS
-
 from nib_visualization.viewer_basemap import cache_relative, prepare_basemap_bundle
+from pyproj import CRS
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "diagnostics" / "visualization" / "scripts" / "prepare_map_viewer.py"

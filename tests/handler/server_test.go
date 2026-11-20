@@ -51,6 +51,9 @@ func TestStatusIncludesDockerCheck(t *testing.T) {
 	if body.Service != "nib-handler" {
 		t.Fatalf("service=%q", body.Service)
 	}
+	if body.Version == "" || body.Version != handler.Version {
+		t.Fatalf("status version=%q, build version=%q", body.Version, handler.Version)
+	}
 	if body.Port != "8765" {
 		t.Fatalf("port=%q", body.Port)
 	}

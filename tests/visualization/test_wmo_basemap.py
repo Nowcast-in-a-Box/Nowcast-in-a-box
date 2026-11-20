@@ -8,9 +8,6 @@ import socket
 from pathlib import Path
 
 import pytest
-from PIL import Image
-from shapely.geometry import Point
-
 from nib_visualization.basemap import crop_basemap
 from nib_visualization.cli import main
 from nib_visualization.wmo_basemap import (
@@ -21,6 +18,8 @@ from nib_visualization.wmo_basemap import (
     load_wmo_basemap,
     resolve_tile,
 )
+from PIL import Image
+from shapely.geometry import Point
 
 ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 SOURCE = ROOT / "basemap_sources" / "wmo-source.json"
@@ -41,9 +40,9 @@ def test_buffered_multipart_mvt_is_clipped_to_the_geographic_tile(tmp_path):
     land = frame.geometry.union_all()
     assert land.covers(Point(13.95, 20.05))
     assert land.covers(Point(13.5, 22))
-    assert not land.covers(
-        Point(14.05, 22)
-    ), "tile buffer must not leak into its neighbour"
+    assert not land.covers(Point(14.05, 22)), (
+        "tile buffer must not leak into its neighbour"
+    )
     assert land.geom_type == "MultiPolygon" and len(land.geoms) == 2
     assert land.bounds == pytest.approx((12.9296875, 20, 14, 23.0234375))
     assert frame.crs.to_epsg() == 4326
@@ -60,9 +59,9 @@ def test_real_multipart_land_survives_tile_edge_clipping():
     bounds = _tile_bounds(basemap, 7, 19, 91)
     frame = _decode_layer(tile, "WMO BNDA", bounds)
     land = frame.geometry.union_all()
-    assert land.covers(
-        Point(78.425, 35.175)
-    ), "valid inland terrain must not become ocean"
+    assert land.covers(Point(78.425, 35.175)), (
+        "valid inland terrain must not become ocean"
+    )
     west, south, east, north = frame.total_bounds
     assert bounds[0] <= west <= east <= bounds[2]
     assert bounds[1] <= south <= north <= bounds[3]

@@ -13,7 +13,6 @@ import re
 import xml.etree.ElementTree as ET
 
 import pytest
-
 from nib_verify.report.mesh import (
     BETTER_HIGH,
     BETTER_LOW,
@@ -73,14 +72,18 @@ def test_the_mesh_is_well_formed_xml():
 def test_a_label_with_xml_in_it_does_not_break_the_document():
     """Member names come from a package manifest, and a manifest is a file
     somebody else wrote."""
-    svg = mesh_svg(mesh(panels=(
-        Panel("a & b <c>", {(0, 0): 0.5}),
-        Panel('quote " and \' apostrophe', {(0, 0): 0.5}),
-    )))
+    svg = mesh_svg(
+        mesh(
+            panels=(
+                Panel("a & b <c>", {(0, 0): 0.5}),
+                Panel("quote \" and ' apostrophe", {(0, 0): 0.5}),
+            )
+        )
+    )
     root = ET.fromstring(svg)
     drawn = ["".join(t.itertext()) for t in root.iter(f"{SVG}text")]
     assert "a & b <c>" in drawn
-    assert 'quote " and \' apostrophe' in drawn
+    assert "quote \" and ' apostrophe" in drawn
 
 
 @pytest.mark.parametrize("method", sorted(BETTER_HIGH | BETTER_LOW | {"bias"}))
@@ -111,9 +114,12 @@ def test_a_column_the_plan_asked_for_and_never_answered_is_still_a_column():
     Without this the cell would simply not be drawn, and a reader comparing two
     panels would see both of them whole.
     """
-    whole = mesh(x_values=("t0", "t1"), y_values=(10.0, 20.0), complete=True,
-                 panels=(Panel("alpha", {(0, 0): 0.5, (0, 1): 0.5,
-                                         (1, 0): 0.5, (1, 1): 0.5}),))
+    whole = mesh(
+        x_values=("t0", "t1"),
+        y_values=(10.0, 20.0),
+        complete=True,
+        panels=(Panel("alpha", {(0, 0): 0.5, (0, 1): 0.5, (1, 0): 0.5, (1, 1): 0.5}),),
+    )
     holed = mesh()
     assert len(whole.panels[0].cells) == 4
     assert len(holed.panels[0].cells) < 4
@@ -125,8 +131,14 @@ def test_the_caption_says_what_the_grey_means():
 
 
 def test_a_complete_mesh_does_not_talk_about_gaps():
-    svg = mesh_svg(mesh(complete=True, panels=(
-        Panel("alpha", {(0, 0): 0.5, (0, 1): 0.5, (1, 0): 0.5, (1, 1): 0.5}),)))
+    svg = mesh_svg(
+        mesh(
+            complete=True,
+            panels=(
+                Panel("alpha", {(0, 0): 0.5, (0, 1): 0.5, (1, 0): 0.5, (1, 1): 0.5}),
+            ),
+        )
+    )
     assert "a gap, not a zero" not in " ".join(labels(svg))
 
 
@@ -140,8 +152,9 @@ def test_the_models_are_panels_and_not_colours():
     drawn = labels(svg)
     assert "alpha" in drawn and "beta" in drawn
     # the colour ramp is still doing the score: more than two fills in it
-    ramp = {f for f in fills(svg) if f and f != GAP_FILL and f != "none"
-            and f != "white"}
+    ramp = {
+        f for f in fills(svg) if f and f != GAP_FILL and f != "none" and f != "white"
+    }
     assert len(ramp) > 2, ramp
 
 
@@ -180,8 +193,13 @@ def test_init_times_are_shortened_but_not_invented():
 
 def test_a_single_valued_ramp_does_not_divide_by_zero():
     """One distinct value is a real answer -- every lead scored the same."""
-    svg = mesh_svg(mesh(panels=(Panel("alpha", {(0, 0): 0.5, (0, 1): 0.5,
-                                               (1, 0): 0.5, (1, 1): 0.5}),)))
+    svg = mesh_svg(
+        mesh(
+            panels=(
+                Panel("alpha", {(0, 0): 0.5, (0, 1): 0.5, (1, 0): 0.5, (1, 1): 0.5}),
+            )
+        )
+    )
     ET.fromstring(svg)
     assert "nan" not in svg.lower()
 
@@ -198,21 +216,35 @@ def test_the_axes_come_from_what_was_asked_for_not_from_what_came_back(tmp_path)
     what somebody opening this chart is looking for.
     """
     with Store(tmp_path / "v.sqlite") as store:
-        for init in ("2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z",
-                     "2026-01-01T02:00:00Z"):
+        for init in (
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T01:00:00Z",
+            "2026-01-01T02:00:00Z",
+        ):
             for lead in (10, 20):
                 store.set_task_state("g", "m", init, lead, "unavailable")
         # and only two of the three produced anything
         for init in ("2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"):
-            store.upsert("yes_or_no",
-                         {"group_id": "g", "member": "m", "init_time": init,
-                          "valid_time": init, "lead_minutes": 10, "level": 35.0},
-                         {"H": 1, "F": 0, "M": 0, "C": 0})
+            store.upsert(
+                "yes_or_no",
+                {
+                    "group_id": "g",
+                    "member": "m",
+                    "init_time": init,
+                    "valid_time": init,
+                    "lead_minutes": 10,
+                    "level": 35.0,
+                },
+                {"H": 1, "F": 0, "M": 0, "C": 0},
+            )
         store.commit()
 
         times, leads = store.task_axes("g")
-        assert times == ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z",
-                         "2026-01-01T02:00:00Z"]
+        assert times == [
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T01:00:00Z",
+            "2026-01-01T02:00:00Z",
+        ]
         assert leads == [10, 20]
         # the third one is in the axes and has nothing under it
         assert store.count_rows("yes_or_no", filters={"group_id": "g"}) == 2
@@ -233,10 +265,19 @@ def test_the_cells_shrink_so_the_canvas_holds_them_all():
     """Seventy-two hours laid out at a fixed cell size is wider than the picture,
     and the right-hand hours are cut off by it -- the same hours, and the same
     silent loss, as an axis taken from the results."""
-    wide = mesh_svg(mesh(x_values=tuple(
-        f"2026-01-0{1 + h // 24}T{h % 24:02d}:00:00Z" for h in range(72))), width=800)
-    cells = re.findall(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" '
-                       r'fill="#', wide)
+    wide = mesh_svg(
+        mesh(
+            x_values=tuple(
+                f"2026-01-0{1 + h // 24}T{h % 24:02d}:00:00Z" for h in range(72)
+            )
+        ),
+        width=800,
+    )
+    cells = re.findall(
+        r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" '
+        r'fill="#',
+        wide,
+    )
     assert cells, "cells"
     size = float(cells[0][2])
     right = max(float(x) + float(w) for x, _, w, _ in cells)
@@ -253,9 +294,11 @@ def test_one_outlier_does_not_take_the_whole_ramp():
     which is what a mesh of mostly pale cells next to grey gaps was.
     """
     values = {(col, 0): 1.0 + 0.01 * col for col in range(30)}
-    values[(29, 0)] = 9.9                     # the one that used to win
-    wide = mesh(panels=(Panel("alpha", values),),
-                x_values=tuple(f"2026-01-01T{col:02d}:00:00Z" for col in range(30)))
+    values[(29, 0)] = 9.9  # the one that used to win
+    wide = mesh(
+        panels=(Panel("alpha", values),),
+        x_values=tuple(f"2026-01-01T{col:02d}:00:00Z" for col in range(30)),
+    )
     svg = mesh_svg(wide, cell=12)
     drawn = [t for t in labels(svg)]
     numbers = sorted(float(t) for t in drawn if re.fullmatch(r"\d\.\d+", t))
@@ -265,5 +308,8 @@ def test_one_outlier_does_not_take_the_whole_ramp():
 
 
 def _cell_fills(svg: str) -> list[str]:
-    return [r.get("fill") for r in ET.fromstring(svg).iter(f"{SVG}rect")
-            if r.get("width") == r.get("height") and r.get("fill") not in (None, "none")]
+    return [
+        r.get("fill")
+        for r in ET.fromstring(svg).iter(f"{SVG}rect")
+        if r.get("width") == r.get("height") and r.get("fill") not in (None, "none")
+    ]

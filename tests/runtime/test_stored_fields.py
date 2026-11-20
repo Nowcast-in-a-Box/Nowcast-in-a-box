@@ -1,18 +1,17 @@
+import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-import hashlib
-import json
 
 import numpy as np
 import pytest
 
-from ingestion.sevir import read_grid, read_window
+from adapters.sevir.source import ADAPTER, _read_grid
 from tests.field_fixtures import forecast
 from utils.stored_fields import (
-    StoredFields,
     FieldUnavailable,
-    create_run,
+    StoredFields,
     add_forecast,
+    create_run,
 )
 
 UTC = timezone.utc
@@ -161,17 +160,25 @@ def test_ambiguous_sevir_and_exact_event(tmp_path):
             "targets": np.ones((2, 20, 128, 128)),
         }.items():
             handle.create_dataset(key, data=values)
-    with pytest.raises(ValueError, match="ambiguous"):
-        read_window(path, "2017-06-27T00:35:00Z")
-    result = read_window(path, "2017-06-27T00:35:00Z", "two")
+    with pytest.raises(ValueError, match="explicit event_id"):
+        ADAPTER.read_window(path, "", "2017-06-27T00:35:00Z")
+    catalog = write_catalog(tmp_path, "two")
+    result, grid = ADAPTER.read_window(
+        path, "two", "2017-06-27T00:35:00Z", catalog=catalog
+    )
+    assert grid["x"].shape == (128,)
+    assert ADAPTER.check_window(path, "two", "2017-06-27T00:35:00Z", catalog=catalog)[
+        "ready"
+    ]
     assert result["event_id"] == "two"
     assert result["init_time"] == "2017-06-27T01:00:00Z"
     assert result["target_times"][0] == "2017-06-27T01:05:00Z"
     assert result["lead_minutes"] == list(range(5, 101, 5))
 
 
-def test_catalog_grid_and_missing_rejection(tmp_path):
+def write_catalog(tmp_path, event, missing=0):
     import csv
+
     from pyproj import Transformer
 
     crs = "+proj=laea +lat_0=38 +lon_0=-98 +units=m +a=6370997 +ellps=sphere"
@@ -179,9 +186,9 @@ def test_catalog_grid_and_missing_rejection(tmp_path):
     lon0, lat0 = transform.transform(-684000, -328000)
     lon1, lat1 = transform.transform(-300000, 56000)
     row = {
-        "id": "event",
+        "id": event,
         "img_type": "vil",
-        "pct_missing": 0,
+        "pct_missing": missing,
         "proj": crs,
         "llcrnrlon": lon0,
         "llcrnrlat": lat0,
@@ -201,11 +208,15 @@ def test_catalog_grid_and_missing_rejection(tmp_path):
             writer.writerow(row)
 
     write()
-    grid = read_grid(path, "event")
+    return path
+
+
+def test_catalog_grid_and_missing_rejection(tmp_path):
+    path = write_catalog(tmp_path, "event")
+    grid = _read_grid(path, "event")
     assert grid["x"][0] == pytest.approx(-683000)
     assert grid["y"][0] == pytest.approx(-327000)
     assert np.allclose(np.diff(grid["x"]), 3000)
-    row["pct_missing"] = 1
-    write()
+    write_catalog(tmp_path, "event", missing=1)
     with pytest.raises(ValueError, match="mask-aware"):
-        read_grid(path, "event")
+        _read_grid(path, "event")

@@ -42,8 +42,14 @@ INCOMPATIBLE = "incompatible-pair"
 
 #: every reason a plan can give, so a new one cannot be added without a sentence
 #: to go with it -- and without the page being able to keep a stale copy
-REASONS = (NOT_ON_ROSTER, OTHER_SOURCE, INACTIVE, NO_START_TIME, BEYOND_HORIZON,
-           INCOMPATIBLE)
+REASONS = (
+    NOT_ON_ROSTER,
+    OTHER_SOURCE,
+    INACTIVE,
+    NO_START_TIME,
+    BEYOND_HORIZON,
+    INCOMPATIBLE,
+)
 
 REASON_TEXT = {
     NOT_ON_ROSTER: "the run's model is not on this config's roster",
@@ -174,8 +180,9 @@ def plan(
     for run in runs:
         member = roster.get(run.model_id)
         if member is None:
-            result.rejections.append(_reject(run, NOT_ON_ROSTER,
-                                             f"{run.model_id} is not on the roster"))
+            result.rejections.append(
+                _reject(run, NOT_ON_ROSTER, f"{run.model_id} is not on the roster")
+            )
             continue
 
         # The ruler names *the* observation source. A prediction made from a
@@ -183,23 +190,31 @@ def plan(
         # against the ruler's truth would produce a number about an experiment
         # nobody described.
         if run.data_id and run.data_id != cfg.ruler.ground_truth:
-            result.rejections.append(_reject(
-                run, OTHER_SOURCE,
-                f"the run used {run.data_id}, but this config verifies against "
-                f"{cfg.ruler.ground_truth}",
-            ))
+            result.rejections.append(
+                _reject(
+                    run,
+                    OTHER_SOURCE,
+                    f"the run used {run.data_id}, but this config verifies against "
+                    f"{cfg.ruler.ground_truth}",
+                )
+            )
             continue
 
         if run.start_time is None:
-            result.rejections.append(_reject(run, NO_START_TIME, "run.start_time is absent"))
+            result.rejections.append(
+                _reject(run, NO_START_TIME, "run.start_time is absent")
+            )
             continue
 
         if not member.active_on(run.start_time.date()):
-            result.rejections.append(_reject(
-                run, INACTIVE,
-                f"{member.name} is active {member.active_from or '...'} .. "
-                f"{member.active_to or '...'}",
-            ))
+            result.rejections.append(
+                _reject(
+                    run,
+                    INACTIVE,
+                    f"{member.name} is active {member.active_from or '...'} .. "
+                    f"{member.active_to or '...'}",
+                )
+            )
             continue
 
         if catalog is not None:
@@ -210,11 +225,14 @@ def plan(
 
         allowed = _leads_inside_horizon(run, member.leads, cfg.ruler.time_step_minutes)
         if not allowed:
-            result.rejections.append(_reject(
-                run, BEYOND_HORIZON,
-                f"horizon {run.forecast_horizon} frames x "
-                f"{cfg.ruler.time_step_minutes} min covers none of {list(member.leads)}",
-            ))
+            result.rejections.append(
+                _reject(
+                    run,
+                    BEYOND_HORIZON,
+                    f"horizon {run.forecast_horizon} frames x "
+                    f"{cfg.ruler.time_step_minutes} min covers none of {list(member.leads)}",
+                )
+            )
             continue
 
         dropped = sorted(set(member.leads) - set(allowed))
@@ -225,12 +243,14 @@ def plan(
             )
 
         for lead in allowed:
-            result.tasks.append(PlannedTask(
-                group_id=cfg.group_id,
-                member=member.name,
-                init_time=run.start_time,
-                lead_minutes=int(lead),
-            ))
+            result.tasks.append(
+                PlannedTask(
+                    group_id=cfg.group_id,
+                    member=member.name,
+                    init_time=run.start_time,
+                    lead_minutes=int(lead),
+                )
+            )
 
     result.tasks.sort(key=lambda t: (t.init_time, t.member, t.lead_minutes))
 
@@ -246,8 +266,10 @@ def planned_runs(plan_result: Plan):
 
     seen: dict[tuple[str, datetime], RunRef] = {}
     for task in plan_result.tasks:
-        seen.setdefault((task.member, task.init_time),
-                        RunRef(member=task.member, init_time=task.init_time))
+        seen.setdefault(
+            (task.member, task.init_time),
+            RunRef(member=task.member, init_time=task.init_time),
+        )
     return list(seen.values())
 
 
@@ -283,12 +305,20 @@ def _coverage(cfg: VerificationConfig, result: Plan, access: FieldAccess) -> dic
 
     observed: set[datetime] = set()
     try:
-        observed = set(access.list_observations(
-            cfg.ruler.ground_truth, init_times[0], init_times[-1] + timedelta(hours=6)
-        ))
+        observed = set(
+            access.list_observations(
+                cfg.ruler.ground_truth,
+                init_times[0],
+                init_times[-1] + timedelta(hours=6),
+            )
+        )
     except FieldUnavailable as exc:
-        return {"expected": len(result.tasks), "available": 0,
-                "unavailable": [], "error": str(exc)}
+        return {
+            "expected": len(result.tasks),
+            "available": 0,
+            "unavailable": [],
+            "error": str(exc),
+        }
 
     missing: list[dict] = []
     available = 0

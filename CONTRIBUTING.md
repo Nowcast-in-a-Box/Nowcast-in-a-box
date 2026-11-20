@@ -22,8 +22,8 @@ You need basic knowledge of Git, GitHub, and code style. If not, check online tu
 
 So far, this repo has offered two types of issues:
 
-- *Claim*: Say that you want to do something.
-- *Bug:* Report a bug while running, or anything that does not feel right.
+- _Claim_: Say that you want to do something.
+- _Bug:_ Report a bug while running, or anything that does not feel right.
 
 If you are a developer, a claim is for you. Bug reports are mainly for users.
 
@@ -47,12 +47,12 @@ Name a branch like:
 
 The recommended options for {type} are:
 
-- fix  Bug fixed
-- feat  New feature introduced
-- docs Update documentation
-- test Testing related
-- ci Continuous system
-- i18n Internationalization and localization
+- fix: Bug fixed
+- feat: New feature introduced
+- docs: Update documentation
+- test: Testing related
+- ci: Continuous system
+- i18n: Internationalization and localization
 
 You may use others, but keep it neat and formal.
 
@@ -69,7 +69,7 @@ git checkout -b feat/some-work
 
 Work on coding in your branch.
 
-Please keep each branch limited to related work*.*
+Please keep each branch limited to related work.
 
 ### Testing
 
@@ -126,7 +126,6 @@ git add -p
 git commit -m "feat:(#12) add nib:// handler uri scheme"
 ```
 
-
 ## Pull requests
 
 Push the branch:
@@ -144,12 +143,12 @@ On GitHub, open a pull request from that branch into main:
 
 ## Model contributions
 
-Follow the [model contribution guide](docs/guides/model-contribution.md) for required files, declaration fields, lifecycle and release-candidate acceptance. Declarations use `nib.model.v1` under `contracts/models/<data>/<model>.json`. The runtime validates physical observations, calls model-private preparation and prediction inside Docker, validates the physical forecast, then saves it. Atlas registration is manual.
+Follow the [model contribution guide](docs/guides/model-contribution.md) for required files, declaration fields, lifecycle and release-candidate acceptance. Declarations use `nib.model.v1` under `atlas/contracts/models/<data>/<model>.json`. The runtime validates physical observations, calls model-private preparation and prediction inside Docker, validates the physical forecast, then saves it. Atlas registration is manual.
 
 Use the [documentation index](docs/README.md) to find current guides and reference; historical checks and plans are in the archive.
 
 ## Runtime boundaries and formatting
 
-The host handler is Go. Model inference, metrics, and visualization run in Docker. Python formatting uses `black.toml` and `scripts/format-python.sh`.
+The host handler is Go. Model inference, metrics, and visualization run in Docker. Install the pinned Ruff from `tests/requirements-dev.lock.txt`. Run `ruff format .` and `ruff check .` from the repository root.
 
 Do not commit weights, checkpoints, ONNX, HDF5, run images, PDFs, Word or Visio files, secrets, runtime outputs under `runs/`, or downloaded `artifacts/`. Do not add a root Python project or `uv.lock`. See [weights](docs/guides/weights.md).

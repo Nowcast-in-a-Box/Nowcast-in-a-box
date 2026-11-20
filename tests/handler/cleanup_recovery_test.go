@@ -32,7 +32,7 @@ func (f *cleanupRunner) Run(ctx context.Context, args ...string) (int, []byte, e
 		return 0, nil, nil
 	}
 	joined := strings.Join(args, " ")
-	if strings.Contains(joined, " down ") && ((f.fail == "inference" && strings.Contains(joined, "compose-ingestion.yaml")) || (f.fail == "diagnostics" && strings.Contains(joined, "compose.yaml"))) {
+	if strings.Contains(joined, " down ") && ((f.fail == "inference" && strings.Contains(joined, "compose-read-inputs.yaml")) || (f.fail == "diagnostics" && strings.Contains(joined, "compose.yaml"))) {
 		f.lock.Lock()
 		defer f.lock.Unlock()
 		for i, arg := range args {
@@ -56,7 +56,7 @@ func TestSameRunRequeueCannotHideFailedCleanup(t *testing.T) {
 	// Same sample and models: admission would reuse this run if reconciliation
 	// treated the old record as exempt.
 	raw, hash := selectionPackage(t, "S700006", []string{"wadepre"}, "metrics")
-	body, _ := json.Marshal(map[string]any{"package": raw, "sha256": hash})
+	body, _ := json.Marshal(map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, hash))})
 	request := httptest.NewRequest("POST", "http://127.0.0.1/v1/jobs", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer token")
 	request.Header.Set("Idempotency-Key", "second")
@@ -84,7 +84,7 @@ func TestFailedCleanupBlocksNewExecutionAndStopAcrossRestart(t *testing.T) {
 			for _, instance := range []*handler.Server{server, handler.NewServer(cfg)} {
 				instance.Runner = runner
 				raw, hash := selectionPackage(t, "S700005", []string{"wadepre"}, "")
-				body, _ := json.Marshal(map[string]any{"package": raw, "sha256": hash})
+				body, _ := json.Marshal(map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, hash))})
 				req := httptest.NewRequest("POST", "http://127.0.0.1/v1/jobs", bytes.NewReader(body))
 				req.Header.Set("Authorization", "Bearer token")
 				response := httptest.NewRecorder()

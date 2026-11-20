@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .packages import FieldSpec, PackageManifest
+from .packages import PackageManifest
 
 
 @dataclass
@@ -236,9 +236,11 @@ def _missing_fields(data: PackageManifest, model: PackageManifest) -> list[str]:
     return sorted(wanted - have)
 
 
-def _dtype_notes(data: PackageManifest, model: PackageManifest, result: MatchResult) -> None:
+def _dtype_notes(
+    data: PackageManifest, model: PackageManifest, result: MatchResult
+) -> None:
     data_dtypes = {f.name.lower(): f.dtype for f in data.fields if f.name}
-    for spec in (model.input_fields or model.fields):
+    for spec in model.input_fields or model.fields:
         if not spec.name:
             continue
         theirs = data_dtypes.get(spec.name.lower())
@@ -249,7 +251,9 @@ def _dtype_notes(data: PackageManifest, model: PackageManifest, result: MatchRes
             )
 
 
-def _domain_notes(data: PackageManifest, model: PackageManifest, result: MatchResult) -> None:
+def _domain_notes(
+    data: PackageManifest, model: PackageManifest, result: MatchResult
+) -> None:
     for key in ("region", "domain", "training_domain"):
         theirs = data.raw.get(key)
         ours = model.raw.get(key)

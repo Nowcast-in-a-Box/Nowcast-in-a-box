@@ -1,19 +1,38 @@
 """Regression test: CF time units must not collide with xarray Zarr encoding."""
+
 import json
+
 import numpy as np
 import xarray as xr
 from xarray.conventions import encode_cf_variable
 
-from scripts.download_mlcast_sample import _prepare_temporal_attrs_for_zarr_v2
+from scripts.mlcast.download_sample import _prepare_temporal_attrs_for_zarr_v2
 
 
 def test_preserve_rainfall_units_and_avoid_cf_datetime_collision():
-    times = np.array(["2022-07-01T11:05:00", "2022-07-01T11:10:00"], dtype="datetime64[ns]")
+    times = np.array(
+        ["2022-07-01T11:05:00", "2022-07-01T11:10:00"], dtype="datetime64[ns]"
+    )
     ds = xr.Dataset(
-        {"prate": (("time", "y", "x"), np.array([[[1.0]], [[2.0]]], dtype="float32"),
-                   {"units": "kg m-2 h-1"})},
-        coords={"time": ("time", times, {"units": "minutes since 1970-01-01", "calendar": "proleptic_gregorian"}),
-                "x": [1000.0], "y": [2000.0]},
+        {
+            "prate": (
+                ("time", "y", "x"),
+                np.array([[[1.0]], [[2.0]]], dtype="float32"),
+                {"units": "kg m-2 h-1"},
+            )
+        },
+        coords={
+            "time": (
+                "time",
+                times,
+                {
+                    "units": "minutes since 1970-01-01",
+                    "calendar": "proleptic_gregorian",
+                },
+            ),
+            "x": [1000.0],
+            "y": [2000.0],
+        },
     )
     # Unfixed input reproduces the actual French error.
     try:

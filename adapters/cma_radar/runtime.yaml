@@ -11,7 +11,7 @@ verification:
   level_max: 75
   unit: dBZ
 container:
-  image: nib-ingestion:cma-demo
+  image: nib-reader-cma-radar:local-v1
   build:
     context: "."
     dockerfile: adapters/cma_radar/Dockerfile

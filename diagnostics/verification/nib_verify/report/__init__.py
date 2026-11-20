@@ -12,8 +12,17 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from ..query.service import DEFAULT_LIMIT
-from .chart import (PALETTE, Chart, Series, axis_label, failure_svg,
-                    from_query, line_chart)
+from .chart import (
+    PALETTE,
+    Chart,
+    Series,
+    failure_svg,
+    from_query,
+    line_chart,
+)
+from .chart import (
+    axis_label as axis_label,
+)
 from .grid import columns_for, small_multiples
 from .mesh import Mesh, Panel, mesh_for, mesh_svg
 
@@ -59,8 +68,9 @@ def chart_for(
     # legend reads the way they asked for it.
     expand = tuple(dict.fromkeys([*series, x]))
     result = query_scores(store, cfg, method=method, s=s, g=expand, limit=limit)
-    return from_query(result, x=x, series=tuple(series), order=_order(cfg, order),
-                      domain=x_domain(x))
+    return from_query(
+        result, x=x, series=tuple(series), order=_order(cfg, order), domain=x_domain(x)
+    )
 
 
 def chart_panels(
@@ -90,8 +100,15 @@ def chart_panels(
     records = result.get("records") or []
 
     if not panels:
-        return [""], [from_query(result, x=x, series=tuple(series),
-                                 order=_order(cfg, order), domain=x_domain(x))]
+        return [""], [
+            from_query(
+                result,
+                x=x,
+                series=tuple(series),
+                order=_order(cfg, order),
+                domain=x_domain(x),
+            )
+        ]
 
     seen: dict[tuple, None] = {}
     for record in records:
@@ -99,13 +116,19 @@ def chart_panels(
 
     labels, built = [], []
     for key in sorted(seen):
-        subset = [r for r in records
-                  if tuple(str(r.get(d)) for d in panels) == key]
-        labels.append(" / ".join(panel_title(d, v, cfg)
-                                  for d, v in zip(panels, key) if v))
-        built.append(from_query({"records": subset, "meta": result.get("meta") or {}},
-                                x=x, series=tuple(series),
-                                order=_order(cfg, order), domain=x_domain(x)))
+        subset = [r for r in records if tuple(str(r.get(d)) for d in panels) == key]
+        labels.append(
+            " / ".join(panel_title(d, v, cfg) for d, v in zip(panels, key) if v)
+        )
+        built.append(
+            from_query(
+                {"records": subset, "meta": result.get("meta") or {}},
+                x=x,
+                series=tuple(series),
+                order=_order(cfg, order),
+                domain=x_domain(x),
+            )
+        )
     return labels, built
 
 

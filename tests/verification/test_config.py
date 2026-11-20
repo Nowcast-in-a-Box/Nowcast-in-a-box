@@ -7,12 +7,10 @@ from dataclasses import replace
 from datetime import date
 
 import pytest
-
 from nib_verify.config import (
     ConfigError,
     Member,
     MetricGroup,
-    Ruler,
     VerificationConfig,
     dump,
     load,
@@ -88,8 +86,14 @@ def test_roster_can_retire_a_member_without_deleting_it():
 
 
 def test_active_window_is_respected():
-    m = Member(name="x", variable="vil", unit="kg m-2", leads=(10,),
-               active_from=date(2026, 2, 1), active_to=date(2026, 3, 1))
+    m = Member(
+        name="x",
+        variable="vil",
+        unit="kg m-2",
+        leads=(10,),
+        active_from=date(2026, 2, 1),
+        active_to=date(2026, 3, 1),
+    )
     assert not m.active_on(date(2026, 1, 31))
     assert m.active_on(date(2026, 2, 1))
     assert m.active_on(date(2026, 3, 1))
@@ -105,8 +109,9 @@ def test_a_member_on_the_roster_can_have_its_leads_changed():
     could not do anything.
     """
     cfg = make_config()
-    edited = cfg.with_member(Member(name="mlcast-det", variable="vil",
-                                    unit="kg m-2", leads=(10, 90)))
+    edited = cfg.with_member(
+        Member(name="mlcast-det", variable="vil", unit="kg m-2", leads=(10, 90))
+    )
     assert edited.member("mlcast-det").leads == (10, 90)
     assert len(edited.members) == len(cfg.members), "it edited, it did not append"
     assert cfg.member("mlcast-det").leads == (10, 20, 30), "the original moved"
@@ -117,28 +122,42 @@ def test_a_members_unit_and_variable_cannot_be_changed_under_it():
     silent change would re-attribute rows that are already written."""
     cfg = make_config()
     with pytest.raises(ConfigError, match="already on the roster as"):
-        cfg.with_member(Member(name="mlcast-det", variable="rain_rate",
-                               unit="mm h-1", leads=(10,)))
+        cfg.with_member(
+            Member(name="mlcast-det", variable="rain_rate", unit="mm h-1", leads=(10,))
+        )
 
 
 def test_a_retired_member_cannot_have_its_leads_changed():
     cfg = make_config().with_member(
         Member(name="mlcast-det", variable="vil", unit="kg m-2", leads=(10,)),
-        retire_on=date(2026, 5, 1))
+        retire_on=date(2026, 5, 1),
+    )
     with pytest.raises(ConfigError, match="was retired on"):
-        cfg.with_member(Member(name="mlcast-det", variable="vil",
-                               unit="kg m-2", leads=(10, 90)))
+        cfg.with_member(
+            Member(name="mlcast-det", variable="vil", unit="kg m-2", leads=(10, 90))
+        )
 
 
 def test_editing_the_leads_leaves_the_roster_dates_where_they_were():
     """The dates are the record of when the member was on the roster. A leads
     edit is not allowed to reopen one or move one."""
-    on = Member(name="mlcast-det", variable="vil", unit="kg m-2",
-                leads=(10, 20), active_from=date(2026, 1, 1))
+    on = Member(
+        name="mlcast-det",
+        variable="vil",
+        unit="kg m-2",
+        leads=(10, 20),
+        active_from=date(2026, 1, 1),
+    )
     cfg = replace(make_config(), members=(on,))
-    edited = cfg.with_member(Member(name="mlcast-det", variable="vil",
-                                    unit="kg m-2", leads=(90,),
-                                    active_from=date(2026, 6, 1)))
+    edited = cfg.with_member(
+        Member(
+            name="mlcast-det",
+            variable="vil",
+            unit="kg m-2",
+            leads=(90,),
+            active_from=date(2026, 6, 1),
+        )
+    )
     got = edited.member("mlcast-det")
     assert got.leads == (90,)
     assert got.active_from == date(2026, 1, 1)
@@ -146,8 +165,14 @@ def test_editing_the_leads_leaves_the_roster_dates_where_they_were():
 
 def test_roster_rejects_a_backwards_window():
     with pytest.raises(ConfigError, match="ends before it starts"):
-        Member(name="x", variable="vil", unit="kg m-2", leads=(10,),
-               active_from=date(2026, 3, 1), active_to=date(2026, 2, 1))
+        Member(
+            name="x",
+            variable="vil",
+            unit="kg m-2",
+            leads=(10,),
+            active_from=date(2026, 3, 1),
+            active_to=date(2026, 2, 1),
+        )
 
 
 # ----------------------------------------------------------------------
@@ -207,7 +232,8 @@ def test_dropping_a_metric_forces_a_new_config():
         before,
         metrics=tuple(
             replace(g, items=tuple(i for i in g.items if i != "ets"))
-            if g.family == "yes_or_no" else g
+            if g.family == "yes_or_no"
+            else g
             for g in before.metrics
         ),
     )
@@ -290,7 +316,8 @@ def test_dropped_metrics_helper_is_symmetric():
         before,
         metrics=tuple(
             MetricGroup(family="yes_or_no", items=("bias",), levels=(5.0,))
-            if g.family == "yes_or_no" else g
+            if g.family == "yes_or_no"
+            else g
             for g in before.metrics
         ),
     )
@@ -342,26 +369,38 @@ def test_the_fingerprint_covers_the_five_things_that_are_left():
 
     from nib_verify.config.schema import Ruler
 
-    base = Ruler(ground_truth="a", unit="kg m-2", time_step_minutes=10,
-                 extent=(110.0, 30.0, 120.0, 42.0), resolution=0.5)
+    base = Ruler(
+        ground_truth="a",
+        unit="kg m-2",
+        time_step_minutes=10,
+        extent=(110.0, 30.0, 120.0, 42.0),
+        resolution=0.5,
+    )
     assert len(base.fingerprint) == 16
     assert replace(base).fingerprint == base.fingerprint
-    for field, value in (("ground_truth", "b"), ("unit", "dBZ"),
-                         ("time_step_minutes", 5), ("resolution", 1.0),
-                         ("extent", (0.0, 0.0, 1.0, 1.0))):
+    for field, value in (
+        ("ground_truth", "b"),
+        ("unit", "dBZ"),
+        ("time_step_minutes", 5),
+        ("resolution", 1.0),
+        ("extent", (0.0, 0.0, 1.0, 1.0)),
+    ):
         assert replace(base, **{field: value}).fingerprint != base.fingerprint, field
 
 
 # ----------------------------------------------------------------------
 # a metric has to live in the block it reads
 # ----------------------------------------------------------------------
-@pytest.mark.parametrize("family, item", [
-    ("continuous", "ts"),
-    ("moments", "mae"),
-    ("spatial", "bias"),
-    ("yes_or_no", "fss"),
-    ("yes_or_no", "corr"),
-])
+@pytest.mark.parametrize(
+    "family, item",
+    [
+        ("continuous", "ts"),
+        ("moments", "mae"),
+        ("spatial", "bias"),
+        ("yes_or_no", "fss"),
+        ("yes_or_no", "corr"),
+    ],
+)
 def test_a_metric_cannot_be_filed_under_a_family_it_does_not_read(family, item):
     """The bug two vocabularies made invisible.
 
@@ -379,7 +418,7 @@ def test_every_metric_in_the_registry_is_where_it_says_it_is():
     from nib_verify.core.metrics import REGISTRY, spec_for
 
     for name in REGISTRY:
-        spec = spec_for(name)                      # raises if it is not
+        spec = spec_for(name)  # raises if it is not
         assert set(spec.columns) <= set(spec.block.columns), name
 
 

@@ -75,7 +75,8 @@ def _frame(manifest: dict, index: int, key: str) -> object:
 def _page(manifest: dict, map_url: str, gif_url: str, manifest_url: str) -> str:
     mock_notice = (
         '<p class="notice">MOCK FORECAST — demo data, not a real forecast.</p>'
-        if _nested(manifest, "input", "mock") is True else ""
+        if _nested(manifest, "input", "mock") is True
+        else ""
     )
     rows = [
         ("Variable", _nested(manifest, "variable", "name")),
@@ -101,7 +102,7 @@ def _page(manifest: dict, map_url: str, gif_url: str, manifest_url: str) -> str:
         ("Artifact reviewer", _nested(manifest, "checks", "visual_review", "reviewer_role")),
     ]
     metadata = "\n".join(
-        f"<div class=\"metadata-row\"><dt>{escape(label)}</dt>"
+        f'<div class="metadata-row"><dt>{escape(label)}</dt>'
         f"<dd>{escape(_display(value), quote=True)}</dd></div>"
         for label, value in rows
     )
@@ -113,14 +114,15 @@ def _page(manifest: dict, map_url: str, gif_url: str, manifest_url: str) -> str:
         if isinstance(source, dict) and (source.get("attribution") or source.get("disclaimer")):
             source_notes.append(
                 f'<div class="source"><h3>{label}</h3>'
-                f'<p>{escape(_display(source.get("attribution")))}</p>'
-                f'<p>{escape(_display(source.get("disclaimer")))}</p></div>'
+                f"<p>{escape(_display(source.get('attribution')))}</p>"
+                f"<p>{escape(_display(source.get('disclaimer')))}</p></div>"
             )
     sources = (
         '<section class="metadata" aria-labelledby="sources-title">'
         '<h2 id="sources-title">Sources and use notes</h2>'
         f'<div class="sources">{"".join(source_notes)}</div></section>'
-        if source_notes else ""
+        if source_notes
+        else ""
     )
     map_url = escape(map_url, quote=True)
     gif_url = escape(gif_url, quote=True)
@@ -239,7 +241,11 @@ def write_gallery(manifest_path: Path | str, output_path: Path | str | None = No
     temporary: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=output.parent, prefix=".gallery-", suffix=".tmp",
+            mode="w",
+            encoding="utf-8",
+            dir=output.parent,
+            prefix=".gallery-",
+            suffix=".tmp",
             delete=False,
         ) as handle:
             temporary = Path(handle.name)

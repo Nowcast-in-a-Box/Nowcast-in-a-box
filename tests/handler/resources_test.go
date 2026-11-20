@@ -126,12 +126,12 @@ func TestResourcesReportMissingImagesWithoutPulling(t *testing.T) {
 	server := resourceServer(t, testConfig(t))
 	server.Runner = &resourceRunner{}
 	server.RefreshResources()
-	snapshot := resourceGet(t, server, "/v1/resources")
+	snapshot := resourceGet(t, server, "/v1/resources?refresh=true")
 	diagnostics := snapshot["diagnostics"].(map[string]any)
 	if diagnostics["status"] != "missing" {
 		t.Fatalf("diagnostics status = %v", diagnostics["status"])
 	}
-	if !strings.Contains(diagnostics["message"].(string), "is not present locally") {
+	if !strings.Contains(diagnostics["message"].(string), "image is missing") {
 		t.Fatalf("diagnostics message = %v", diagnostics["message"])
 	}
 	if server.Runner.(*resourceRunner).pulled() {
@@ -149,12 +149,12 @@ func TestResourcesPrepareCopiesMissingWeightFromLocalSource(t *testing.T) {
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Paths.WeightSource, _ = filepath.Abs(source)
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-reader-cma-radar:local-v1": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
-	snapshot := waitForExecution(t, server, "ready")
+	snapshot := waitForExecution(t, server, "prepared")
 	group := executionGroup(snapshot)
-	if group["status"] != "ready" {
+	if group["status"] != "prepared" {
 		t.Fatalf("execution = %s", mustJSON(t, group))
 	}
 	weight := filepath.Join(cfg.Paths.Artifacts, "cma_radar", "nowcastnet", "NowcastNet.onnx")
@@ -182,10 +182,10 @@ func TestResourcesSkipWeightCopyWhenSHAAlreadyMatches(t *testing.T) {
 	cfg.Paths.Artifacts = artifacts
 	cfg.Paths.WeightSource = t.TempDir()
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-reader-cma-radar:local-v1": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
-	waitForExecution(t, server, "ready")
+	waitForExecution(t, server, "prepared")
 }
 
 func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
@@ -201,7 +201,7 @@ func TestResourcesRejectWrongSourceWeightWithoutReplacingTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-reader-cma-radar:local-v1": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "failed")
@@ -223,7 +223,7 @@ func TestResourcesExplainMissingWeightSource(t *testing.T) {
 	writeCmaData(t, &cfg)
 	cfg.Paths.Artifacts = t.TempDir()
 	server := externalWeightServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-reader-cma-radar:local-v1": true, "nib-nowcastnet:cma-demo": true}}
 
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
 	snapshot := waitForExecution(t, server, "failed")
@@ -249,9 +249,9 @@ func TestResourcesPrepareEmbeddedModelWithoutHostWeights(t *testing.T) {
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Paths.WeightSource = ""
 	server := resourceServer(t, cfg)
-	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-ingestion:cma-demo": true, "nib-nowcastnet:cma-demo-embedded": true}}
+	server.Runner = &resourceRunner{present: map[string]bool{server.Resources.Diagnostics.Container.Image: true, "nib-reader-cma-radar:local-v1": true, "nib-nowcastnet:cma-demo-embedded": true}}
 	resourcePrepare(t, server, `{"data_id":"cma_radar","models":["nowcastnet"]}`)
-	waitForExecution(t, server, "ready")
+	waitForExecution(t, server, "prepared")
 	if _, err := os.Stat(filepath.Join(cfg.Paths.Artifacts, "cma_radar", "nowcastnet", "NowcastNet.onnx")); !os.IsNotExist(err) {
 		t.Fatalf("embedded model must not create a host weight: %v", err)
 	}

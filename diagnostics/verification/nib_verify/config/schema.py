@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
-from ..core.metrics import REGISTRY, spec_for
+from ..core.metrics import spec_for
 from ..core.quantities import FAMILY_OF
 
 #: the family names a config may use — one vocabulary, and it is the store's
@@ -94,7 +94,7 @@ class Member:
     def __post_init__(self) -> None:
         if not self.leads:
             raise ConfigError(f"member {self.name!r} has no lead times")
-        if any(l <= 0 for l in self.leads):
+        if any(lead <= 0 for lead in self.leads):
             raise ConfigError(f"member {self.name!r} has a non-positive lead")
         if self.active_from and self.active_to and self.active_to < self.active_from:
             raise ConfigError(f"member {self.name!r} ends before it starts")

@@ -70,17 +70,13 @@ def paint_land_tile(mask, extent, bounds, geometries):
 def land_only_terrain(view, basemap, max_lod=7):
     """Mask by WMO land geometry, never by the sign of elevation."""
     mask = np.zeros(view.values.shape, dtype="uint8")
-    coverage = json.loads(
-        (basemap.path / "VectorTileServer" / "metadata.json").read_text()
-    )["fullExtent"]
+    coverage = json.loads((basemap.path / "VectorTileServer" / "metadata.json").read_text())[
+        "fullExtent"
+    ]
     for z, row, col, path in physical_tiles(basemap, min(max_lod, basemap.max_lod)):
         bounds = _tile_bounds(basemap, z, row, col)
         names = {name for name, _ in pyogrio.list_layers(path)}
-        geometries = (
-            _decode_layer(path, "WMO BNDA", bounds).geometry
-            if "WMO BNDA" in names
-            else []
-        )
+        geometries = _decode_layer(path, "WMO BNDA", bounds).geometry if "WMO BNDA" in names else []
         if z > 0:
             # Retain the global parent's polar caps outside the detailed
             # service coverage; an artificial -89.9 cut is not a coastline.
@@ -124,9 +120,7 @@ def export_wmo_tiles(basemap, output):
 
 
 _PREPARE = "prepare the offline global terrain and WMO basemap cache"
-_WMO_SOURCE = (
-    Path(__file__).resolve().parents[2] / "basemap_sources" / "wmo-source.json"
-)
+_WMO_SOURCE = Path(__file__).resolve().parents[2] / "basemap_sources" / "wmo-source.json"
 _CROP_EXTENT = (-180.0, 180.0, -90.0, 90.0)
 _MAP_EXTENT = [-180.0, -90.0, 180.0, 90.0]
 
@@ -223,9 +217,7 @@ def _open_sources(wmo_path, terrain_path, source_record, terrain_sha256, terrain
         wmo = load_wmo_basemap(wmo_path, _WMO_SOURCE)
         checksum = verify_wmo_checksum_manifest(wmo.path)
     except (OSError, ValueError, BasemapError) as err:
-        raise ValueError(
-            f"{_PREPARE}: WMO cache is missing or corrupt ({err})"
-        ) from err
+        raise ValueError(f"{_PREPARE}: WMO cache is missing or corrupt ({err})") from err
     if checksum["mismatched"]:
         raise ValueError(f"{_PREPARE}: WMO cache checksum mismatch")
     try:
@@ -250,7 +242,7 @@ def _stage_bundle(staging, wmo, terrain, checksum, cache_key):
     info = _json_ready(export_terrain_cog(view, terrain_file))
     bounds = [float(value) for value in info["bounds"]]
     if any(
-        abs(found - expected) > 1e-6 for found, expected in zip(bounds, _MAP_EXTENT)
+        abs(found - expected) > 1e-6 for found, expected in zip(bounds, _MAP_EXTENT, strict=False)
     ):
         raise ValueError(f"{_PREPARE}: prepared terrain is not the global extent")
     info["bounds"] = bounds
@@ -280,17 +272,13 @@ def _stage_bundle(staging, wmo, terrain, checksum, cache_key):
             "styles": _WMO_BOUNDARY_STYLES,
             "extent": list(_MAP_EXTENT),
             "detail": (
-                "WMO local vector tiles LOD 0–9; view-dependent with parent "
-                "fallback; no labels"
+                "WMO local vector tiles LOD 0–9; view-dependent with parent fallback; no labels"
             ),
             "source_manifest_sha256": checksum["manifest_sha256"],
         },
         "cache": {"key": cache_key, "info": info},
     }
-    text = (
-        json.dumps(_json_ready(bundle), ensure_ascii=False, indent=2, allow_nan=False)
-        + "\n"
-    )
+    text = json.dumps(_json_ready(bundle), ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     (staging / "basemap.json").write_text(text)
     return json.loads(text)
 
@@ -341,11 +329,7 @@ def _matching_cache(output, cache_key):
 
 def _publish(staging, output):
     output.mkdir(parents=True, exist_ok=True)
-    files = [
-        path
-        for path in staging.rglob("*")
-        if path.is_file() and path.name != "basemap.json"
-    ]
+    files = [path for path in staging.rglob("*") if path.is_file() and path.name != "basemap.json"]
     for path in files:
         dest = output / path.relative_to(staging)
         dest.parent.mkdir(parents=True, exist_ok=True)

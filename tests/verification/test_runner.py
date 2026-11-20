@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import pytest
-
 from nib_verify.access import CountingAccess
 from nib_verify.config import Member, VerificationConfig
 from nib_verify.runner import RunRef, run_tasks, todo
@@ -16,8 +15,9 @@ from .conftest import T0, make_access, make_config
 
 
 def _runs(n=1):
-    return [RunRef(member="mlcast-det", init_time=T0 + timedelta(hours=i))
-            for i in range(n)]
+    return [
+        RunRef(member="mlcast-det", init_time=T0 + timedelta(hours=i)) for i in range(n)
+    ]
 
 
 def test_a_unit_mismatch_fails_loudly_rather_than_quietly():
@@ -31,12 +31,17 @@ def test_a_unit_mismatch_fails_loudly_rather_than_quietly():
 
     assert stats.ran == 0
     assert stats.failed == 3
-    assert store.task_state(cfg.group_id, "mlcast-det", "2026-01-01T00:00:00Z", 10) == "failed"
+    assert (
+        store.task_state(cfg.group_id, "mlcast-det", "2026-01-01T00:00:00Z", 10)
+        == "failed"
+    )
     assert any("meaningless" in m for m in stats.messages)
 
 
 def test_missing_observations_are_recorded_not_skipped_silently():
-    access = CountingAccess(make_access(unavailable_times=(T0 + timedelta(minutes=20),)))
+    access = CountingAccess(
+        make_access(unavailable_times=(T0 + timedelta(minutes=20),))
+    )
     store = Store(":memory:")
     cfg = make_config()
 
@@ -46,13 +51,17 @@ def test_missing_observations_are_recorded_not_skipped_silently():
     assert stats.ran == 2
     assert stats.unavailable == 1
     assert stats.obs_missing == 1
-    assert store.task_state(cfg.group_id, "mlcast-det",
-                            "2026-01-01T00:00:00Z", 20) == "unavailable"
+    assert (
+        store.task_state(cfg.group_id, "mlcast-det", "2026-01-01T00:00:00Z", 20)
+        == "unavailable"
+    )
     assert store.obs_gaps(cfg.group_id) == ["2026-01-01T00:20:00Z"]
 
 
 def test_a_failure_does_not_stop_the_rest():
-    access = CountingAccess(make_access(unavailable_times=(T0 + timedelta(minutes=10),)))
+    access = CountingAccess(
+        make_access(unavailable_times=(T0 + timedelta(minutes=10),))
+    )
     store = Store(":memory:")
     cfg = make_config()
 
@@ -92,14 +101,22 @@ def test_an_unknown_member_is_recorded_as_unavailable():
     access = CountingAccess(make_access())
     store = Store(":memory:")
 
-    stats = run_tasks(access, store, cfg, [
-        RunRef(member="mlcast-det", init_time=T0),
-        RunRef(member="ghost", init_time=T0),
-    ])
+    stats = run_tasks(
+        access,
+        store,
+        cfg,
+        [
+            RunRef(member="mlcast-det", init_time=T0),
+            RunRef(member="ghost", init_time=T0),
+        ],
+    )
 
     assert stats.ran == 1
     assert stats.unavailable == 1
-    assert store.task_state(cfg.group_id, "ghost", "2026-01-01T00:00:00Z", 10) == "unavailable"
+    assert (
+        store.task_state(cfg.group_id, "ghost", "2026-01-01T00:00:00Z", 10)
+        == "unavailable"
+    )
 
 
 def test_progress_callback_sees_every_task():
@@ -151,7 +168,9 @@ def test_todo_filters_by_roster_and_provider():
 
 def test_todo_skips_members_the_provider_does_not_have():
     cfg = VerificationConfig(
-        group_id="g", name="n", ruler=make_config().ruler,
+        group_id="g",
+        name="n",
+        ruler=make_config().ruler,
         members=(Member(name="ghost", variable="vil", unit="kg m-2", leads=(10,)),),
         metrics=make_config().metrics,
     )
@@ -184,7 +203,6 @@ def test_a_store_from_an_older_version_is_refused_not_quietly_ignored(tmp_path):
     import sqlite3
 
     import pytest
-
     from nib_verify.store.db import Store
 
     path = tmp_path / "old.sqlite"
@@ -237,12 +255,15 @@ def test_running_again_is_a_second_event_not_an_overwrite(store):
     history = store.run_history(cfg.group_id)
     assert len(history) == 2
     assert [r["started_at"] for r in history] == sorted(
-        (r["started_at"] for r in history), reverse=True), "newest first"
+        (r["started_at"] for r in history), reverse=True
+    ), "newest first"
 
 
 def test_a_run_record_carries_the_reason_a_pass_went_wrong(store):
     cfg = make_config()
-    stats = run_tasks(make_access(), store, cfg, [RunRef("mlcast-det", T0 + timedelta(days=30))])
+    stats = run_tasks(
+        make_access(), store, cfg, [RunRef("mlcast-det", T0 + timedelta(days=30))]
+    )
     assert stats.failed or stats.unavailable or stats.ran
 
     row = store.run_history(cfg.group_id)[0]
@@ -252,7 +273,7 @@ def test_a_run_record_carries_the_reason_a_pass_went_wrong(store):
 
 def test_a_history_is_per_config(store):
     """Numbers from two configs are not comparable, and neither are their runs."""
-    one, two = make_config(), make_config(group_id="other")
+    one = make_config()
     run_tasks(make_access(), store, one, [RunRef("mlcast-det", T0)])
     assert store.run_history("other") == []
     assert len(store.run_history(one.group_id)) == 1
@@ -261,6 +282,11 @@ def test_a_history_is_per_config(store):
 def test_only_a_bounded_number_of_passes_comes_back(store):
     cfg = make_config()
     for i in range(4):
-        run_tasks(make_access(), store, cfg, [RunRef("mlcast-det", T0 + timedelta(minutes=10 * i))],
-                  force=True)
+        run_tasks(
+            make_access(),
+            store,
+            cfg,
+            [RunRef("mlcast-det", T0 + timedelta(minutes=10 * i))],
+            force=True,
+        )
     assert len(store.run_history(cfg.group_id, limit=2)) == 2

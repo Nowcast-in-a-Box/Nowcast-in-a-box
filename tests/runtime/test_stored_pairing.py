@@ -4,11 +4,12 @@ import json
 
 import numpy as np
 import pytest
+from nib_verify.access.stored import RunAccess
+from test_stored_fields import fixture_forecast, fixture_window
+from test_stored_fields import run as run
 
 from diagnostics.verification_run import verification, verification_batch
-from nib_verify.access.stored import RunAccess
 from tests.field_fixtures import forecast
-from test_stored_fields import fixture_window, fixture_forecast, run as run
 from utils.model_contract import utc
 from utils.stored_fields import StoredFields, add_forecast, create_run, save_manifest
 
@@ -57,12 +58,18 @@ def test_incompatible_pair_is_rejected_before_report(tmp_path, mismatch, batch):
     if batch:
         make_run(tmp_path, "good")
         save_manifest(tmp_path, {"id": "parent"})
-        operation = lambda: verification_batch(
-            tmp_path, [{"path": "good"}, {"path": "bad"}], METRICS
-        )
+
+        def operation():
+            return verification_batch(
+                tmp_path, [{"path": "good"}, {"path": "bad"}], METRICS
+            )
+
         report_root = tmp_path
     else:
-        operation = lambda: verification(directory, METRICS)
+
+        def operation():
+            return verification(directory, METRICS)
+
         report_root = directory
     with pytest.raises(ValueError, match="stored verification requires"):
         operation()

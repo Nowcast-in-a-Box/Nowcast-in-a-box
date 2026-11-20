@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 import xarray as xr
 
-from adapters.satellite_zarr import build_satellite_dataset
+from utils.satellite_zarr_export import build_satellite_dataset
 
 
 class _FakeCRS:
@@ -31,7 +31,9 @@ def _bundle() -> dict:
         dims=("y", "x"),
         coords={
             "y": xr.DataArray([1.0, 0.0, -1.0], dims=("y",), attrs={"units": "meter"}),
-            "x": xr.DataArray([-2.0, -1.0, 0.0, 1.0], dims=("x",), attrs={"units": "meter"}),
+            "x": xr.DataArray(
+                [-2.0, -1.0, 0.0, 1.0], dims=("x",), attrs={"units": "meter"}
+            ),
             "crs": xr.DataArray(_FakeCRS()),
         },
         attrs={
@@ -99,7 +101,9 @@ class SatelliteZarrDatasetTests(unittest.TestCase):
 
         self.assertEqual(ds["C13"].attrs["units"], "K")
         self.assertIn("crs_wkt", ds["C13"].attrs)
-        self.assertIn("native pixel dimensions", ds["sw038"].attrs["spatial_metadata_status"])
+        self.assertIn(
+            "native pixel dimensions", ds["sw038"].attrs["spatial_metadata_status"]
+        )
         self.assertEqual(ds.attrs["source_file_count"], 4)
 
     def test_grid_change_is_rejected(self) -> None:
