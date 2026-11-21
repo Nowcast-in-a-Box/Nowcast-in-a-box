@@ -185,7 +185,7 @@ func TestStopRequiresLocalCLIAndIgnoresHistoricalJobs(t *testing.T) {
 		{"http://hub.example:8123", "local-token", 403},
 		{"", "wrong", 401},
 		{"", "local-token", 202},
-		{"", "local-token", 202},
+		{"", "local-token", 409},
 	} {
 		if response := stopRequest(server, test.origin, test.token); response.Code != test.status {
 			t.Fatal(response.Code, response.Body.String())
@@ -201,6 +201,9 @@ type blockedLifecycleRunner struct {
 
 func (runner *blockedLifecycleRunner) Run(ctx context.Context, args ...string) (int, []byte, error) {
 	for _, arg := range args {
+		if arg == "--check-window" {
+			return 0, []byte(`{"ready":true}`), nil
+		}
 		if arg == "up" {
 			runner.once.Do(func() { close(runner.entered) })
 			select {
@@ -221,6 +224,11 @@ func TestStopBlocksActiveDiagnosticAttempt(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := `{"schema":"nib.run.v1","id":"saved-run","data":{"id":"cma_radar"},"forecasts":{"nowcastnet":{}},"diagnostics":[]}`
+	order := orderFixture()
+	order.DataID, order.EventID, order.Models = "cma_radar", "20170627", []string{"nowcastnet"}
+	if err := os.WriteFile(filepath.Join(run, "order.yaml"), []byte(orderYAML(t, order)), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(run, "manifest.json"), []byte(manifest), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -262,8 +270,9 @@ func TestLiveRunAllowsDistinctIdentityAndProtectsIdempotencyKeys(t *testing.T) {
 	server.Config = cfg
 	runner := &blockedLifecycleRunner{entered: make(chan struct{}), release: make(chan struct{})}
 	server.Runner = runner
+	writeExecutionWeights(t, server)
 	raw, digest := packageFixture(t, "wadepre-sevir", nil)
-	body, _ := json.Marshal(map[string]any{"package": raw, "sha256": digest})
+	body, _ := json.Marshal(map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, digest))})
 	submit := func(key string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/v1/jobs", bytes.NewReader(body))
 		request.Header.Set("Authorization", "Bearer local-token")
@@ -345,7 +354,7 @@ func TestHistoricalPollingCannotOverwriteConcurrentAdmission(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(directory, "job.json"), old, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			body, _ := json.Marshal(map[string]any{"package": raw, "sha256": digest})
+			body, _ := json.Marshal(map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, digest))})
 			admit := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/v1/jobs", bytes.NewReader(body))
 			admit.Header.Set("Authorization", "Bearer local-token")
 			admit.Header.Set("Idempotency-Key", "new-key")
@@ -392,7 +401,7 @@ func TestJobAdmissionCannotRaceSuccessfulStop(t *testing.T) {
 		runner := &blockedLifecycleRunner{entered: make(chan struct{}), release: make(chan struct{})}
 		server.Runner = runner
 		raw, digest := packageFixture(t, "wadepre-sevir", nil)
-		body, _ := json.Marshal(map[string]any{"package": raw, "sha256": digest})
+		body, _ := json.Marshal(map[string]any{"yaml": orderYAML(t, orderFromPackage(t, raw, digest))})
 		request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/v1/jobs", bytes.NewReader(body))
 		request.Header.Set("Authorization", "Bearer local-token")
 		admission := httptest.NewRecorder()

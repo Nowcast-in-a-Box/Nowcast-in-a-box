@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import argparse
 import importlib
-import json
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -24,24 +24,22 @@ from interfaces.data import request_from_mapping
 from interfaces.errors import ConstraintError
 
 
-def catalog_path() -> Path:
-    return Path(__file__).resolve().parent / "catalog.json"
-
-
-def load_catalog() -> dict:
-    with catalog_path().open(encoding="utf-8") as handle:
-        return json.load(handle)
+def adapter_ids() -> list[str]:
+    root = Path(__file__).resolve().parent
+    return sorted(
+        path.parent.name
+        for path in root.glob("*/source.py")
+        if re.fullmatch(r"[a-z][a-z0-9_]*", path.parent.name) and path.is_file()
+    )
 
 
 def adapter_for(source: str):
-    catalog = load_catalog()
-    known = [item["id"] for item in catalog["data_adapters"]]
+    known = adapter_ids()
     if source not in known:
         raise ConstraintError(
             f"Unsupported source: {source}. Supported sources: {known}"
         )
-    module = importlib.import_module(f"adapters.{source}.source")
-    return module.ADAPTER
+    return importlib.import_module(f"adapters.{source}.source").ADAPTER
 
 
 def data_root_from(explicit: str | None) -> str | None:
@@ -86,7 +84,9 @@ def zarr_options_from_config(config: Mapping) -> tuple[str | None, bool]:
 
     path = zarr.get("path") or zarr.get("store")
     if not path:
-        raise ConstraintError("output.zarr.path is required when output.zarr is enabled")
+        raise ConstraintError(
+            "output.zarr.path is required when output.zarr is enabled"
+        )
 
     return str(path), bool(zarr.get("overwrite", False))
 
@@ -138,7 +138,7 @@ def run(
             )
             spec_label = "cma_radar v0.1 prototype"
         elif request.source in {"fy4b", "gk2a", "himawari9", "mtg"}:
-            from adapters.satellite_zarr import write_satellite_zarr
+            from utils.satellite_zarr_export import write_satellite_zarr
 
             written = write_satellite_zarr(
                 bundle,

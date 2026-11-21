@@ -223,31 +223,35 @@ func TestSelectionPreflightReportsMissingDataAndWeights(t *testing.T) {
 	cfg.Paths.Artifacts = t.TempDir()
 	cfg.Runtime.Token = "token"
 	server := handler.NewServer(cfg)
+	server.Runner = readyRunner{}
 	body := `{"data_id":"sevir","event_id":"S710140","context_start_time":"2017-06-16T21:15:00Z","models":["wadepre"]}`
 	response := postPreflight(t, server, body)
-	if response["ok"] != false || response["checks"].([]any)[0].(map[string]any)["id"] != "data" {
+	checks := response["checks"].([]any)
+	if response["ok"] != false || checks[len(checks)-1].(map[string]any)["id"] != "data" {
 		t.Fatal(response)
 	}
-
 	writeSevirData(t, &cfg)
 	server.Config = cfg
-	server.Runner = readyRunner{}
-	joined := mustJSON(t, postPreflight(t, server, body))
-	if !strings.Contains(joined, "Validate copies it from paths.weight_source") {
-		t.Fatal(joined)
+	for _, corrupt := range []bool{false, true} {
+		if corrupt {
+			weight := filepath.Join(cfg.Paths.Artifacts, "sevir", "wadepre", server.Resources.Models["sevir"]["wadepre"].Weights.File)
+			if err := os.MkdirAll(filepath.Dir(weight), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(weight, []byte("not the weight"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		result := postPreflight(t, server, body)
+		checks := result["checks"].([]any)
+		last := checks[len(checks)-1].(map[string]any)
+		if result["ok"] != false || last["id"] != "weight:wadepre" || last["ok"] != false {
+			t.Fatalf("missing or corrupt weight passed preflight: %s", mustJSON(t, result))
+		}
 	}
+	writeExecutionWeights(t, server)
 	if result := postPreflight(t, server, body); result["ok"] != true {
-		t.Fatalf("a missing weight is prepared later, not a preflight failure: %s", mustJSON(t, result))
-	}
-	weight := filepath.Join(cfg.Paths.Artifacts, "sevir", "wadepre", "WADEPre.onnx")
-	if err := os.MkdirAll(filepath.Dir(weight), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(weight, []byte("not the weight"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(mustJSON(t, postPreflight(t, server, body)), "does not match the pinned SHA-256") {
-		t.Fatal("checksum mismatch was not reported")
+		t.Fatalf("verified fixture weight rejected: %s", mustJSON(t, result))
 	}
 }
 

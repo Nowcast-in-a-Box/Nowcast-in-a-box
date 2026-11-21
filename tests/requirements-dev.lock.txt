@@ -37,6 +37,7 @@ h11==0.16.0
     # via
     #   -r direct-tests.in
     #   httpcore
+hdf5plugin==7.1.0
 h5py==3.16.0
     # via -r direct-tests.in
 httpcore==1.0.9
@@ -60,6 +61,7 @@ kiwisolver==1.5.1
     #   matplotlib
 matplotlib==3.11.2
     # via -r direct-tests.in
+numcodecs==0.16.5
 numpy==2.5.3
     # via
     #   -r direct-tests.in
@@ -113,6 +115,7 @@ python-dateutil==2.9.0.post0
     #   pandas
 pyyaml==6.0.3
     # via -r direct-tests.in
+ruff==0.16.8
 six==1.17.0
     # via
     #   -r direct-tests.in

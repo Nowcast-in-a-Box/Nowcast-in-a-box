@@ -83,17 +83,17 @@ func TestDiagnosticsViewerStartsOnceFromTheConfiguredPort(t *testing.T) {
 	if err := server.ensureDiagnosticsViewer(runID, true); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.calls) != 1 {
+	if len(runner.calls) != 2 {
 		t.Fatalf("calls=%d", len(runner.calls))
 	}
-	joined := strings.Join(runner.calls[0], " ")
+	joined := strings.Join(runner.calls[1], " ")
 	for _, want := range []string{"--entrypoint python", "--port " + portText, "-p " + net.JoinHostPort(host, portText) + ":" + portText, "diagnostics.diagnostics_server"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in %s", want, joined)
 		}
 	}
 	server.stopDiagnosticsViewer()
-	if len(runner.calls) != 2 || !strings.Contains(strings.Join(runner.calls[1], " "), "rm -f") {
+	if len(runner.calls) != 3 || !strings.Contains(strings.Join(runner.calls[2], " "), "rm -f") {
 		t.Fatalf("stop calls=%v", runner.calls)
 	}
 }

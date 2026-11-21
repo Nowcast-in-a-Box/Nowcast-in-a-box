@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from nib_verify.cli import EXIT_FAILURE, EXIT_OK, main
 from nib_verify.config import dump, load
 from nib_verify.store import Store
@@ -24,12 +23,18 @@ EXPOSED_YAML = """review:
 """
 
 MOCK = [
-    "--access", "mock",
-    "--mock", "peak=250",
-    "--mock", "unit=kg m-2",
-    "--mock", "variable=vil",
-    "--mock", "obs_shape=48,64",
-    "--mock", "model_shape=40,52",
+    "--access",
+    "mock",
+    "--mock",
+    "peak=250",
+    "--mock",
+    "unit=kg m-2",
+    "--mock",
+    "variable=vil",
+    "--mock",
+    "obs_shape=48,64",
+    "--mock",
+    "model_shape=40,52",
 ]
 
 
@@ -69,8 +74,10 @@ def test_host_show_is_honest_when_there_is_no_data_root(tmp_path, capsys, monkey
 def test_host_show_as_json(platform, capsys):
     import json
 
-    assert main(["host", "show", "--host-config", str(platform.config_path),
-                 "--json"]) == EXIT_OK
+    assert (
+        main(["host", "show", "--host-config", str(platform.config_path), "--json"])
+        == EXIT_OK
+    )
     payload = json.loads(capsys.readouterr().out)
     assert payload["review"]["port"] == 8766
     assert payload["paths"]["data_root"].endswith("data")
@@ -137,22 +144,43 @@ def test_a_missing_scan_root_is_named(tmp_path, capsys, monkeypatch):
 # planning
 # ======================================================================
 def test_task_plan_uses_the_discovered_runs(config_file, platform, capsys):
-    code = main(["task", "plan", "--config", str(config_file),
-                 "--runs", str(platform.runs_root), *MOCK])
+    code = main(
+        [
+            "task",
+            "plan",
+            "--config",
+            str(config_file),
+            "--runs",
+            str(platform.runs_root),
+            *MOCK,
+        ]
+    )
     assert code == EXIT_OK
     out = capsys.readouterr().out
     assert "tasks    6" in out
     assert "leads    [10, 20, 30]" in out
 
 
-def test_task_plan_says_what_it_rejected_and_exits_nonzero(config_file, platform, capsys):
+def test_task_plan_says_what_it_rejected_and_exits_nonzero(
+    config_file, platform, capsys
+):
     """Quietly reporting zero tasks would look like success."""
     cfg = load(config_file)
-    dump(cfg.with_member(cfg.member("mlcast-det"), retire_on=date(2025, 12, 31)),
-         config_file)
+    dump(
+        cfg.with_member(cfg.member("mlcast-det"), retire_on=date(2025, 12, 31)),
+        config_file,
+    )
 
-    code = main(["task", "plan", "--config", str(config_file),
-                 "--runs", str(platform.runs_root)])
+    code = main(
+        [
+            "task",
+            "plan",
+            "--config",
+            str(config_file),
+            "--runs",
+            str(platform.runs_root),
+        ]
+    )
     out = capsys.readouterr().out
     assert code == EXIT_FAILURE
     assert "inactive" in out
@@ -160,18 +188,39 @@ def test_task_plan_says_what_it_rejected_and_exits_nonzero(config_file, platform
 
 def test_task_plan_verbose_explains_each_rejection(config_file, platform, capsys):
     cfg = load(config_file)
-    dump(cfg.with_member(cfg.member("mlcast-det"), retire_on=date(2025, 12, 31)),
-         config_file)
-    main(["task", "plan", "--config", str(config_file),
-          "--runs", str(platform.runs_root), "--verbose"])
+    dump(
+        cfg.with_member(cfg.member("mlcast-det"), retire_on=date(2025, 12, 31)),
+        config_file,
+    )
+    main(
+        [
+            "task",
+            "plan",
+            "--config",
+            str(config_file),
+            "--runs",
+            str(platform.runs_root),
+            "--verbose",
+        ]
+    )
     out = capsys.readouterr().out
     assert "the member was not on the roster on that date" in out
     assert "is active" in out
 
 
 def test_task_plan_can_probe_the_provider(config_file, platform, capsys):
-    code = main(["task", "plan", "--config", str(config_file),
-                 "--runs", str(platform.runs_root), *MOCK, "--probe"])
+    code = main(
+        [
+            "task",
+            "plan",
+            "--config",
+            str(config_file),
+            "--runs",
+            str(platform.runs_root),
+            *MOCK,
+            "--probe",
+        ]
+    )
     assert code == EXIT_OK
     out = capsys.readouterr().out
     assert "coverage" in out
@@ -181,8 +230,17 @@ def test_task_plan_can_probe_the_provider(config_file, platform, capsys):
 def test_task_plan_as_json_is_machine_readable(config_file, platform, capsys):
     import json
 
-    code = main(["task", "plan", "--config", str(config_file),
-                 "--runs", str(platform.runs_root), "--json"])
+    code = main(
+        [
+            "task",
+            "plan",
+            "--config",
+            str(config_file),
+            "--runs",
+            str(platform.runs_root),
+            "--json",
+        ]
+    )
     assert code == EXIT_OK
     payload = json.loads(capsys.readouterr().out)
     assert payload["tasks"] == 6
@@ -191,20 +249,30 @@ def test_task_plan_as_json_is_machine_readable(config_file, platform, capsys):
 
 
 def test_the_plan_alias_works(config_file, platform, capsys):
-    assert main(["plan", "--config", str(config_file),
-                 "--runs", str(platform.runs_root)]) == EXIT_OK
+    assert (
+        main(["plan", "--config", str(config_file), "--runs", str(platform.runs_root)])
+        == EXIT_OK
+    )
     assert "tasks    6" in capsys.readouterr().out
 
 
 def test_the_plan_lists_leads_outside_the_horizon(config_file, platform, capsys):
-    from nib_verify.catalog.runs import discover as discover_runs
     from .conftest import run_config_text, write_yaml
 
     short = platform.root / "short" / "j"
     write_yaml(short / "run.yaml", run_config_text(horizon=2))
 
-    main(["task", "plan", "--config", str(config_file), "--runs", str(short),
-          "--verbose"])
+    main(
+        [
+            "task",
+            "plan",
+            "--config",
+            str(config_file),
+            "--runs",
+            str(short),
+            "--verbose",
+        ]
+    )
     out = capsys.readouterr().out
     assert "tasks    2" in out
     assert "left out" in out
@@ -215,16 +283,34 @@ def test_the_plan_lists_leads_outside_the_horizon(config_file, platform, capsys)
 # ======================================================================
 def test_task_run_takes_its_init_times_from_the_runs(config_file, platform, capsys):
     root = str(platform.root / "verify-root")
-    code = main(["run", "--config", str(config_file), "--root", root,
-                 "--runs", str(platform.runs_root), *MOCK])
+    code = main(
+        [
+            "run",
+            "--config",
+            str(config_file),
+            "--root",
+            root,
+            "--runs",
+            str(platform.runs_root),
+            *MOCK,
+        ]
+    )
     assert code == EXIT_OK
     assert "6 total, 6 ran" in capsys.readouterr().out
 
 
 def test_running_the_same_runs_twice_reads_nothing(config_file, platform, capsys):
     root = str(platform.root / "verify-root")
-    args = ["run", "--config", str(config_file), "--root", root,
-            "--runs", str(platform.runs_root), *MOCK]
+    args = [
+        "run",
+        "--config",
+        str(config_file),
+        "--root",
+        root,
+        "--runs",
+        str(platform.runs_root),
+        *MOCK,
+    ]
     assert main(args) == EXIT_OK
     capsys.readouterr()
     assert main(args) == EXIT_OK
@@ -240,11 +326,15 @@ def test_config_create_writes_and_refuses_to_overwrite(config_file, tmp_path, ca
     assert out.is_file()
     capsys.readouterr()
 
-    assert main(["config", "create", str(out), "--from", str(config_file)]) == EXIT_FAILURE
+    assert (
+        main(["config", "create", str(out), "--from", str(config_file)]) == EXIT_FAILURE
+    )
     assert "exists" in capsys.readouterr().err
 
-    assert main(["config", "create", str(out), "--from", str(config_file),
-                 "--force"]) == EXIT_OK
+    assert (
+        main(["config", "create", str(out), "--from", str(config_file), "--force"])
+        == EXIT_OK
+    )
 
 
 def test_config_list_shows_the_ruler_fingerprint(config_file, capsys):
@@ -256,19 +346,55 @@ def test_config_list_shows_the_ruler_fingerprint(config_file, capsys):
 
 
 def test_config_roster_add_then_retire(config_file, capsys):
-    assert main(["config", "roster", "add", str(config_file),
-                 "--member", "simvp", "--leads", "10,20"]) == EXIT_OK
+    assert (
+        main(
+            [
+                "config",
+                "roster",
+                "add",
+                str(config_file),
+                "--member",
+                "simvp",
+                "--leads",
+                "10,20",
+            ]
+        )
+        == EXIT_OK
+    )
     assert "added simvp" in capsys.readouterr().out
     assert load(config_file).member("simvp").leads == (10, 20)
 
-    assert main(["config", "roster", "retire", str(config_file),
-                 "--member", "simvp", "--on", "2026-06-01"]) == EXIT_OK
+    assert (
+        main(
+            [
+                "config",
+                "roster",
+                "retire",
+                str(config_file),
+                "--member",
+                "simvp",
+                "--on",
+                "2026-06-01",
+            ]
+        )
+        == EXIT_OK
+    )
     assert load(config_file).member("simvp").active_to == date(2026, 6, 1)
 
 
 def test_config_roster_refuses_a_member_that_is_already_there(config_file, capsys):
-    code = main(["config", "roster", "add", str(config_file),
-                 "--member", "mlcast-det", "--leads", "10"])
+    code = main(
+        [
+            "config",
+            "roster",
+            "add",
+            str(config_file),
+            "--member",
+            "mlcast-det",
+            "--leads",
+            "10",
+        ]
+    )
     assert code == EXIT_FAILURE
     assert "already on the roster" in capsys.readouterr().err
 
@@ -280,15 +406,37 @@ def test_config_roster_needs_leads(config_file, capsys):
 
 
 def test_config_roster_add_can_carry_an_active_window(config_file, capsys):
-    main(["config", "roster", "add", str(config_file), "--member", "simvp",
-          "--leads", "10", "--active-from", "2026-02-01"])
+    main(
+        [
+            "config",
+            "roster",
+            "add",
+            str(config_file),
+            "--member",
+            "simvp",
+            "--leads",
+            "10",
+            "--active-from",
+            "2026-02-01",
+        ]
+    )
     assert load(config_file).member("simvp").active_from == date(2026, 2, 1)
 
 
 def test_config_delete_removes_only_that_configs_rows(config_file, platform, capsys):
     root = platform.root / "verify-root"
-    main(["run", "--config", str(config_file), "--root", str(root),
-          "--runs", str(platform.runs_root), *MOCK])
+    main(
+        [
+            "run",
+            "--config",
+            str(config_file),
+            "--root",
+            str(root),
+            "--runs",
+            str(platform.runs_root),
+            *MOCK,
+        ]
+    )
     capsys.readouterr()
 
     group = load(config_file).group_id
@@ -314,10 +462,30 @@ def test_config_delete_keeps_other_configs(config_file, platform, capsys):
     dump(other, other_path)
 
     root = platform.root / "verify-root"
-    main(["run", "--config", str(config_file), "--root", str(root), *MOCK,
-          "--init", "2026-01-01T00:00Z"])
-    main(["run", "--config", str(other_path), "--root", str(root), *MOCK,
-          "--init", "2026-01-01T00:00Z"])
+    main(
+        [
+            "run",
+            "--config",
+            str(config_file),
+            "--root",
+            str(root),
+            *MOCK,
+            "--init",
+            "2026-01-01T00:00Z",
+        ]
+    )
+    main(
+        [
+            "run",
+            "--config",
+            str(other_path),
+            "--root",
+            str(root),
+            *MOCK,
+            "--init",
+            "2026-01-01T00:00Z",
+        ]
+    )
     capsys.readouterr()
 
     with Store(root / "verify.sqlite") as store:
@@ -327,12 +495,16 @@ def test_config_delete_keeps_other_configs(config_file, platform, capsys):
 
     with Store(root / "verify.sqlite") as store:
         assert store.count_rows("yes_or_no", filters={"group_id": cfg.group_id}) == 0
-        assert store.count_rows("yes_or_no", filters={"group_id": "a-second-config"}) > 0
+        assert (
+            store.count_rows("yes_or_no", filters={"group_id": "a-second-config"}) > 0
+        )
 
 
 def test_config_delete_on_a_missing_file(config_file, tmp_path, capsys):
-    assert main(["config", "delete", str(tmp_path / "nope.json"),
-                 "--root", str(tmp_path)]) == EXIT_FAILURE
+    assert (
+        main(["config", "delete", str(tmp_path / "nope.json"), "--root", str(tmp_path)])
+        == EXIT_FAILURE
+    )
     assert "does not exist" in capsys.readouterr().err
 
 
@@ -341,22 +513,32 @@ def test_config_delete_on_a_missing_file(config_file, tmp_path, capsys):
 # ======================================================================
 def _serve_args(platform, tmp_path):
     return [
-        "serve", "--root", str(tmp_path / "verify-root"),
-        "--configs", str(tmp_path / "configs"),
-        "--host-config", str(platform.config_path),
+        "serve",
+        "--root",
+        str(tmp_path / "verify-root"),
+        "--configs",
+        str(tmp_path / "configs"),
+        "--host-config",
+        str(platform.config_path),
         *MOCK,
         *[x for r in platform.packages for x in ("--packages", str(r))],
-        "--runs", str(platform.runs_root),
+        "--runs",
+        str(platform.runs_root),
     ]
 
 
-def test_serve_takes_its_bind_address_from_config_yaml(platform, tmp_path, monkeypatch, capsys):
+def test_serve_takes_its_bind_address_from_config_yaml(
+    platform, tmp_path, monkeypatch, capsys
+):
     """AGENTS.md puts the review page on loopback, at a port config.yaml owns."""
     import uvicorn
 
     seen = {}
-    monkeypatch.setattr(uvicorn, "run",
-                        lambda app, host, port, log_level: seen.update(host=host, port=port))
+    monkeypatch.setattr(
+        uvicorn,
+        "run",
+        lambda app, host, port, log_level: seen.update(host=host, port=port),
+    )
 
     code = main(_serve_args(platform, tmp_path))
     assert code == EXIT_OK, capsys.readouterr().err
@@ -383,12 +565,17 @@ def test_serve_refuses_a_non_loopback_address(platform, tmp_path, monkeypatch, c
     assert "not loopback" in capsys.readouterr().err
 
 
-def test_serve_can_be_told_to_expose_itself_anyway(platform, tmp_path, monkeypatch, capsys):
+def test_serve_can_be_told_to_expose_itself_anyway(
+    platform, tmp_path, monkeypatch, capsys
+):
     import uvicorn
 
     seen = {}
-    monkeypatch.setattr(uvicorn, "run",
-                        lambda app, host, port, log_level: seen.update(host=host, port=port))
+    monkeypatch.setattr(
+        uvicorn,
+        "run",
+        lambda app, host, port, log_level: seen.update(host=host, port=port),
+    )
 
     exposed = platform.root / "exposed.yaml"
     write_yaml(exposed, EXPOSED_YAML)
@@ -404,19 +591,22 @@ def test_serve_can_override_the_port(platform, tmp_path, monkeypatch, capsys):
     import uvicorn
 
     seen = {}
-    monkeypatch.setattr(uvicorn, "run",
-                        lambda app, host, port, log_level: seen.update(port=port))
+    monkeypatch.setattr(
+        uvicorn, "run", lambda app, host, port, log_level: seen.update(port=port)
+    )
     assert main(_serve_args(platform, tmp_path) + ["--port", "9000"]) == EXIT_OK
     assert seen["port"] == 9000
 
 
-def test_serve_starts_even_when_the_provider_is_unavailable(platform, tmp_path, monkeypatch, capsys):
+def test_serve_starts_even_when_the_provider_is_unavailable(
+    platform, tmp_path, monkeypatch, capsys
+):
     """The page should come up and say so, rather than refusing to start."""
     import uvicorn
 
     monkeypatch.setattr(uvicorn, "run", lambda app, host, port, log_level: None)
 
     args = _serve_args(platform, tmp_path)
-    args[args.index("--access") + 1] = "real"          # deliberately not implemented
+    args[args.index("--access") + 1] = "real"  # deliberately not implemented
     assert main(args) == EXIT_OK
     assert "unavailable" in capsys.readouterr().out

@@ -525,7 +525,8 @@ def _draw_basemap_layers(axes, view: BasemapView) -> None:
         raster = view.raster
         norm = Normalize(raster.color_stops[0][0], raster.color_stops[-1][0])
         cmap = LinearSegmentedColormap.from_list(
-            "basemap_relief", [(float(norm(value)), color) for value, color in raster.color_stops],
+            "basemap_relief",
+            [(float(norm(value)), color) for value, color in raster.color_stops],
             N=4096,
         )
         # The Core display is PlateCarree with a shifted longitude origin.
@@ -537,9 +538,14 @@ def _draw_basemap_layers(axes, view: BasemapView) -> None:
         display_west, _ = axes.projection.transform_point(west, south, ccrs.PlateCarree())
         axes.imshow(
             raster.values,
-            extent=(display_west, display_west + east - west, south, north), origin="lower",
-            transform=axes.projection, interpolation="nearest", cmap=cmap, norm=norm,
-            alpha=raster.alpha, zorder=0.5,
+            extent=(display_west, display_west + east - west, south, north),
+            origin="lower",
+            transform=axes.projection,
+            interpolation="nearest",
+            cmap=cmap,
+            norm=norm,
+            alpha=raster.alpha,
+            zorder=0.5,
         )
 
 
@@ -722,8 +728,7 @@ def render_frame(scene: PreparedScene, field: VisualizationField, lead_index: in
     )
     if not same_semantics or not same_limits:
         raise ValueError(
-            "field semantics or color limits do not match the prepared scene; "
-            "prepare a new scene"
+            "field semantics or color limits do not match the prepared scene; prepare a new scene"
         )
     scene.mesh.set_array(_display_values(np.asarray(frame.values), scene.config))
     scene.time_artist.set_text(_time_text(scene, frame, lead_index))

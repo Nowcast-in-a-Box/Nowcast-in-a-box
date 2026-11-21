@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import importlib
 import json
-
-import numpy as np
-import pytest
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from interfaces.model import WeightSpec
-from utils.weights import ensure_weights, file_sha256
+import numpy as np
+import pytest
+
 from interfaces.errors import ConstraintError
 from interfaces.fields import Forecast
+from interfaces.model import WeightSpec
 from tests.field_fixtures import mock_onnx, observations
+from utils.weights import ensure_weights, file_sha256
 
 ROOT = Path(__file__).resolve().parents[3]
-DECLARATIONS = sorted((ROOT / "contracts/models/sevir").glob("*.json"))
+DECLARATIONS = sorted((ROOT / "atlas/contracts/models/sevir").glob("*.json"))
 
 
 class WeightSkipTests(unittest.TestCase):

@@ -7,7 +7,8 @@ root the caller names and recognising files by what they contain
 that has not been designed.
 """
 
-from .hostconfig import HostConfig, HostConfigError, find_config_file, load as load_host
+from .hostconfig import HostConfig, HostConfigError, find_config_file
+from .hostconfig import load as load_host
 from .matching import MatchResult, check_pair, compatible_pairs
 from .packages import (
     DATA,
@@ -17,15 +18,19 @@ from .packages import (
     FieldSpec,
     ManifestError,
     PackageManifest,
-    discover as discover_packages,
     load_manifest,
+)
+from .packages import (
+    discover as discover_packages,
 )
 from .runs import (
     RunBook,
     RunConfig,
     RunConfigError,
-    discover as discover_runs,
     load_run_config,
+)
+from .runs import (
+    discover as discover_runs,
 )
 
 __all__ = [

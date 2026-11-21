@@ -76,7 +76,9 @@ class HttpAccess:
         self.prefix = urlsplit(base_url).path.rstrip("/")
         self.timeout = float(timeout)
         if encoding not in wire.ENCODINGS:
-            raise ValueError(f"unknown encoding {encoding!r}; expected {wire.ENCODINGS}")
+            raise ValueError(
+                f"unknown encoding {encoding!r}; expected {wire.ENCODINGS}"
+            )
         self.encoding = encoding
 
         self._connection: http.client.HTTPConnection | None = None
@@ -110,19 +112,27 @@ class HttpAccess:
     def list_observations(
         self, name: str, t0: datetime, t1: datetime
     ) -> list[datetime]:
-        payload = self._get("/observations", name=name,
-                            t0=wire.time_to_wire(t0), t1=wire.time_to_wire(t1))
+        payload = self._get(
+            "/observations",
+            name=name,
+            t0=wire.time_to_wire(t0),
+            t1=wire.time_to_wire(t1),
+        )
         return _times(payload, "times")
 
     def get_observation(self, name: str, valid_time: datetime) -> Field:
-        payload = self._get("/observation", name=name,
-                            valid_time=wire.time_to_wire(valid_time),
-                            encoding=self.encoding)
+        payload = self._get(
+            "/observation",
+            name=name,
+            valid_time=wire.time_to_wire(valid_time),
+            encoding=self.encoding,
+        )
         return self._field(payload)
 
     def list_predictions(self, model_id: str, init_time: datetime) -> list[int]:
-        payload = self._get("/predictions", model_id=model_id,
-                            init_time=wire.time_to_wire(init_time))
+        payload = self._get(
+            "/predictions", model_id=model_id, init_time=wire.time_to_wire(init_time)
+        )
         raw = payload.get("lead_minutes") if isinstance(payload, Mapping) else None
         if raw is None:
             raise HttpAccessError("the /predictions response has no 'lead_minutes'")
@@ -134,9 +144,13 @@ class HttpAccess:
     def get_prediction(
         self, model_id: str, init_time: datetime, lead_minutes: int
     ) -> Field:
-        payload = self._get("/prediction", model_id=model_id,
-                            init_time=wire.time_to_wire(init_time),
-                            lead_minutes=int(lead_minutes), encoding=self.encoding)
+        payload = self._get(
+            "/prediction",
+            model_id=model_id,
+            init_time=wire.time_to_wire(init_time),
+            lead_minutes=int(lead_minutes),
+            encoding=self.encoding,
+        )
         return self._field(payload)
 
     # ------------------------------------------------------------------
@@ -144,15 +158,20 @@ class HttpAccess:
         try:
             return wire.decode_field(payload, on_warning=self.warnings.append)
         except wire.WireError as exc:
-            raise HttpAccessError(f"the provider sent an unusable field: {exc}") from exc
+            raise HttpAccessError(
+                f"the provider sent an unusable field: {exc}"
+            ) from exc
 
     # ------------------------------------------------------------------
     # transport
     # ------------------------------------------------------------------
     def _connect(self) -> http.client.HTTPConnection:
         if self._connection is None:
-            factory = (http.client.HTTPSConnection if self.scheme == "https"
-                       else http.client.HTTPConnection)
+            factory = (
+                http.client.HTTPSConnection
+                if self.scheme == "https"
+                else http.client.HTTPConnection
+            )
             self._connection = factory(self.host, self.port, timeout=self.timeout)
         return self._connection
 

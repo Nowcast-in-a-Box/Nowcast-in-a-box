@@ -3,6 +3,8 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/platform"
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,7 +61,7 @@ func retireIdleServices() error {
 		}
 		if fields[0] != "-" {
 			pid, err := strconv.Atoi(fields[0])
-			if err != nil || !processExited(pid) {
+			if err != nil || !platform.ProcessExited(pid) {
 				return fmt.Errorf("another Handler service is still running; refusing to remove its registration")
 			}
 		}

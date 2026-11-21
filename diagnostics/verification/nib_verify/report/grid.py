@@ -20,6 +20,7 @@ from typing import Sequence
 
 from .chart import FONT, Chart, _axis, _esc, fs, line_chart
 
+
 #: Cells across, by how many there are. Two panels side by side beat two stacked;
 #: past four, three across keeps the cells from going flat.
 def columns_for(count: int) -> int:
@@ -44,8 +45,9 @@ def small_multiples(
     what = [c for c in charts if not c.is_empty()]
     if not what:
         labels = list(labels) or ["—"]
-        return line_chart(charts[0] if charts else Chart("no chart", "", ""),
-                          width=width, kind=kind)
+        return line_chart(
+            charts[0] if charts else Chart("no chart", "", ""), width=width, kind=kind
+        )
 
     values = [v for c in what for v in c.values()]
     if kind == "bar":
@@ -90,9 +92,14 @@ def small_multiples(
         # A cell is a whole chart minus the three things the grid owns: its title,
         # the legend, and the note -- which repeated in every cell is a line of
         # small grey text laid across the plot it is describing.
-        cell = line_chart(replace(chart, title="", x_label="", y_label="", note=""),
-                          width=cell_w, height=cell_h, kind=kind,
-                          y_min=lo, y_max=hi)
+        cell = line_chart(
+            replace(chart, title="", x_label="", y_label="", note=""),
+            width=cell_w,
+            height=cell_h,
+            kind=kind,
+            y_min=lo,
+            y_max=hi,
+        )
         body = cell.split("\n", 1)[1] if cell.startswith("<?xml") else cell
         body = body.replace("<svg ", f'<svg x="{x}" y="{y}" ', 1)
         out.append(body)
@@ -103,13 +110,13 @@ def small_multiples(
     out.append(
         f'<text x="{left + (total_w - left - right) / 2:.1f}" y="{total_h - 10}" '
         f'text-anchor="middle" font-family="{FONT}" font-size="{fs(12)}" fill="#374151">'
-        f'{_esc(first.x_label or "x")}</text>'
+        f"{_esc(first.x_label or 'x')}</text>"
     )
     out.append(
         f'<text x="13" y="{top + (total_h - top - bottom) / 2:.1f}" text-anchor="middle" '
         f'font-family="{FONT}" font-size="{fs(12)}" fill="#374151" '
         f'transform="rotate(-90 13 {top + (total_h - top - bottom) / 2:.1f})">'
-        f'{_esc(first.y_label or "y")}</text>'
+        f"{_esc(first.y_label or 'y')}</text>"
     )
     out.append("</svg>")
     return "\n".join(out) + "\n"

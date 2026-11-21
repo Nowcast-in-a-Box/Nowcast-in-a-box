@@ -21,7 +21,6 @@ import threading
 import time
 
 import pytest
-
 from nib_verify.catalog.hostconfig import load as load_host
 from nib_verify.server import create_app
 
@@ -275,9 +274,9 @@ def test_the_results_tab_answers_a_query(page, live_server):
     )
     assert [c[0] for c in chips] == ["16", "74", "133", "181", "219"], chips
     assert [c[0] for c in chips if c[1] == "true"] == ["133"], chips
-    assert (
-        page.page.text_content("#q-params .who") == "level (kg m-2)"
-    ), "a threshold means nothing without the unit it is a threshold on"
+    assert page.page.text_content("#q-params .who") == "level (kg m-2)", (
+        "a threshold means nothing without the unit it is a threshold on"
+    )
 
     page.page.click("#btn-query")
     page.page.wait_for_timeout(900)
@@ -342,17 +341,17 @@ def test_the_chart_is_drawn_by_the_browser(page, live_server):
     )
     assert page.page.eval_on_selector("#q-method", "e => e.value") == "ts"
     assert page.page.locator("#chart-card").is_visible()
-    assert (
-        page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0
-    ), "the browser could not render what /api/chart returned"
+    assert page.page.locator("#chart").evaluate("e => e.naturalWidth") > 0, (
+        "the browser could not render what /api/chart returned"
+    )
     src = page.page.locator("#chart").get_attribute("src")
     assert "method=ts" in src
     assert "kind=line" in src
     assert "x=lead_minutes" in src
     assert "ts over" in page.text()
-    assert (
-        page.page.locator("#chart-svg").count() == 0
-    ), "no save-the-chart link: the table is what can be saved"
+    assert page.page.locator("#chart-svg").count() == 0, (
+        "no save-the-chart link: the table is what can be saved"
+    )
     assert page.errors == []
 
 
@@ -620,9 +619,9 @@ def test_the_form_redraws_at_once_and_the_filters_wait_for_the_button(
     # a filter: no redraw until the button
     page.page.fill("#q-lead-from", "20")
     page.page.wait_for_timeout(600)
-    assert (
-        page.page.locator("#chart").get_attribute("src") == first
-    ), "typing in a filter started a query"
+    assert page.page.locator("#chart").get_attribute("src") == first, (
+        "typing in a filter started a query"
+    )
 
     # the form: a redraw with no button
     page.page.click("#q-kind button:has-text('line')")
@@ -716,9 +715,9 @@ def test_the_defaults_come_off_the_config_and_not_off_the_clock(page, live_serve
     lead_from = page.page.eval_on_selector("#q-lead-from", "e => Number(e.value)")
     lead_to = page.page.eval_on_selector("#q-lead-to", "e => Number(e.value)")
     assert lead_from <= lead_to and lead_to > 0, (lead_from, lead_to)
-    assert (
-        page.page.text_content("#tab-results").count("minutes") >= 1
-    ), "the lead boxes say what they are measured in"
+    assert page.page.text_content("#tab-results").count("minutes") >= 1, (
+        "the lead boxes say what they are measured in"
+    )
     # The range is chosen in a panel of our own, and the panel is the only place
     # it can be accepted. The browser's picker draws its own footer -- Today, and
     # Clear -- and none of that can be changed, so it is not used at all.
@@ -772,8 +771,8 @@ def test_a_one_model_config_needs_no_legend(page, live_server):
     page.page.click("#btn-query")
     page.page.wait_for_timeout(1600)
 
-    assert (
-        page.page.locator("#chart-legend").count() == 1
-    ), "the slot is there for when there are two models"
+    assert page.page.locator("#chart-legend").count() == 1, (
+        "the slot is there for when there are two models"
+    )
     assert page.page.locator("#chart-legend .chip").count() == 0
     assert page.errors == []

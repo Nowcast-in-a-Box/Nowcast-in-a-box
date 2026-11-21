@@ -10,7 +10,7 @@ For a model paired with an existing data reader, provide:
 
 | Path | Purpose |
 | --- | --- |
-| `contracts/models/<data>/<model>.json` | `nib.model.v1` declaration: identity, input/output requirements and weight provenance. |
+| `atlas/contracts/models/<data>/<model>.json` | `nib.model.v1` declaration: identity, input/output requirements and weight provenance. |
 | `adapters/<data>/<model>/adapter.py` | Contract queries, validation, preparation, and prediction. |
 | `adapters/<data>/<model>/__init__.py` | Package entry following neighboring adapters. |
 | `adapters/<data>/<model>/requirements.txt` | Dependencies for the chosen backend inside the image. |
@@ -19,12 +19,11 @@ For a model paired with an existing data reader, provide:
 | `adapters/<data>/<model>/README.md` | Input/output meaning, backend, weights, limitations, and test instructions. |
 | `tests/adapters/model/` | Small synthetic function tests for the model boundary. |
 
-Keep the existing local `adapters/catalog.json` index consistent with the pairing.
 If adding a reader, also provide its data declaration, source, dependencies,
 Dockerfile, runtime manifest, and reader tests. See
 [runtime resources](../reference/runtime-resources.md).
 
-Use the model starter under `templates/model/` and replace all example identity
+Use the model starter under `docs/templates/model/` and replace all example identity
 and requirements. Complete the required files listed above for the pairing.
 Atlas registration is a separate manual maintainer step; no automatic export is
 part of this contribution contract.
@@ -61,7 +60,7 @@ when changing persistence. Follow existing tests rather than duplicating the
 runtime suite for every model.
 
 Use `scripts/run-tests.sh` as the repository test entry; its header describes
-the contributor environment. Run `scripts/format-python.sh` for Python edits.
+the contributor environment. Run `ruff format .` and `ruff check .` for Python edits.
 Record the checks actually run in the PR. Do not claim forecast accuracy from
 function tests or from a successful container build.
 

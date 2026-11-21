@@ -17,9 +17,7 @@ import math
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-import numpy as np
-
-from .quantities import FAMILY_OF, FAMILIES, Family
+from .quantities import FAMILIES, FAMILY_OF, Family
 
 NAN = float("nan")
 
@@ -219,7 +217,9 @@ def spec_for(method: str) -> MetricSpec:
     spec = REGISTRY[key]
     block = FAMILY_OF.get(spec.family)
     if block is None:
-        raise KeyError(f"metric {key!r} names a family that does not exist: {spec.family!r}")
+        raise KeyError(
+            f"metric {key!r} names a family that does not exist: {spec.family!r}"
+        )
     missing = [c for c in spec.columns if c not in block.columns]
     if missing:
         raise KeyError(

@@ -174,8 +174,7 @@ def _validate_lead_time(values: xr.DataArray) -> np.ndarray:
         raise FieldValidationError(
             INVALID_TIME,
             "lead_time",
-            f"'lead_time' coordinate must be 1D aligned to dim 'lead_time', "
-            f"got dims {coord.dims}",
+            f"'lead_time' coordinate must be 1D aligned to dim 'lead_time', got dims {coord.dims}",
         )
     leads = coord.values
     if not np.issubdtype(leads.dtype, np.timedelta64):
@@ -324,8 +323,7 @@ def validate_field(field: VisualizationField) -> VisualizationField:
         raise FieldValidationError(
             INVALID_SHAPE,
             "values",
-            f"values dims must be {FIELD_DIMS} (exact names and order), "
-            f"got {tuple(values.dims)}",
+            f"values dims must be {FIELD_DIMS} (exact names and order), got {tuple(values.dims)}",
         )
     if values.sizes["y"] < 2 or values.sizes["x"] < 2:
         raise FieldValidationError(
@@ -350,7 +348,10 @@ def validate_field(field: VisualizationField) -> VisualizationField:
     leads = _validate_lead_time(values)
     valid_time = _resolve_valid_time(field.valid_time, init_time, leads)
     interval_start, interval_end = _validate_intervals(
-        field.temporal_statistic, field.interval_start, field.interval_end, valid_time,
+        field.temporal_statistic,
+        field.interval_start,
+        field.interval_end,
+        valid_time,
         leads.shape[0],
     )
     _reject_all_nan_frames(values, leads)

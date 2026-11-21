@@ -18,7 +18,6 @@ a level is a threshold.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
 
 import numpy as np
 
@@ -64,14 +63,26 @@ class Family:
 #: Every family there is. The order is the order they are shown in, and the
 #: three defaults come first because that is the order they are created in.
 FAMILIES: tuple[Family, ...] = (
-    Family("continuous", "Continuous", ("T", "E", "A", "S"), ("T",),
-           added_by_default=True),
-    Family("yes_or_no", "Yes or no", ("H", "F", "M", "C"),
-           ("H", "F", "M", "C"), ("level",), added_by_default=True),
-    Family("spatial", "Spatial", ("pob", "pfo", "fbs", "n_valid"),
-           ("n_valid",), ("level", "half_window"), added_by_default=True),
-    Family("moments", "Moments", ("T", "MX", "MY", "SX", "SY", "SXY"),
-           ("T",)),
+    Family(
+        "continuous", "Continuous", ("T", "E", "A", "S"), ("T",), added_by_default=True
+    ),
+    Family(
+        "yes_or_no",
+        "Yes or no",
+        ("H", "F", "M", "C"),
+        ("H", "F", "M", "C"),
+        ("level",),
+        added_by_default=True,
+    ),
+    Family(
+        "spatial",
+        "Spatial",
+        ("pob", "pfo", "fbs", "n_valid"),
+        ("n_valid",),
+        ("level", "half_window"),
+        added_by_default=True,
+    ),
+    Family("moments", "Moments", ("T", "MX", "MY", "SX", "SY", "SXY"), ("T",)),
 )
 
 FAMILY_OF: dict[str, Family] = {f.name: f for f in FAMILIES}
@@ -234,9 +245,9 @@ def box_sum(a: np.ndarray, half_window: int) -> np.ndarray:
     cum = np.pad(cum, ((1, 0), (1, 0)))
     ny, nx = a.shape
     return (
-        cum[k:k + ny, k:k + nx]
-        - cum[0:ny, k:k + nx]
-        - cum[k:k + ny, 0:nx]
+        cum[k : k + ny, k : k + nx]
+        - cum[0:ny, k : k + nx]
+        - cum[k : k + ny, 0:nx]
         + cum[0:ny, 0:nx]
     )
 
@@ -271,8 +282,7 @@ def accumulate(
             }
         elif spec.needs_level:
             out[family] = {
-                float(lv): categorical(truth, prediction, lv, valid)
-                for lv in levels
+                float(lv): categorical(truth, prediction, lv, valid) for lv in levels
             }
         elif spec.name == "moments":
             out[family] = moments(truth, prediction, valid)

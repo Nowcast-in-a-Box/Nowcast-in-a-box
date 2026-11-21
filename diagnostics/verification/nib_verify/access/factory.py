@@ -52,6 +52,7 @@ def build_access(kind: str = "mock", **kwargs) -> FieldAccess:
 
     if kind == "replay":
         from .replay import ReplayAccess
+
         return ReplayAccess(**kwargs)
 
     if kind in ("http", "real"):

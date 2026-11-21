@@ -181,7 +181,7 @@ func TestJobLogTruncatesAtLineBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := strings.Repeat("older output ", 800) + "\nTAIL\n"
-	if err := os.WriteFile(filepath.Join(directory, "ingestion.log"), []byte(raw), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "read-inputs.log"), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	server := handler.NewServer(cfg)

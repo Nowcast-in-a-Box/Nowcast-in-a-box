@@ -11,6 +11,10 @@ import (
 func (s *Server) originControl(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		if (r.URL.Path == "/v1/control/stop" || r.URL.Path == "/v1/control/restart") && origin != "" && origin != "http://"+r.Host {
+			runtimeError(w, http.StatusForbidden, fmt.Errorf("Handler control requires the local console origin"))
+			return
+		}
 		if r.URL.Path == "/v1/pair" {
 			next.ServeHTTP(w, r)
 			return

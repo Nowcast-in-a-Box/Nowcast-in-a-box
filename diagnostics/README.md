@@ -58,16 +58,8 @@ SEVIR support for this new interface is deferred; existing providers stay intact
 See the [interface contract](../docs/reference/interfaces-we-consume.md) for exact metadata,
 version responsibilities, errors and consumer/storage boundaries.
 
-From the diagnostics environment (both delivered modules installed), run:
-
-```sh
-python -m diagnostics.examples.run_source_example --run /path/to/saved-run \
-  --metrics /path/to/metric-groups.json --version 1
-```
-
-The metrics JSON is a list such as
-`[{"family":"continuous","items":["mae","rmse"]}]`. The example prints the
-group and matching observation/forecast fields without writing outputs. Each
+The contract shows how to open a saved run. Pass a metrics list such as
+`[{"family":"continuous","items":["mae","rmse"]}]`. The provider writes no outputs. Each
 selected cube is checksum-verified and loaded once per source object. Projected
 fields keep their native x/y values; 2-D lon/lat are auxiliary locations, not a
 new scoring grid. Changing semantics of an existing group requires the caller
@@ -100,7 +92,7 @@ python -m diagnostics --config /run/request.yaml
 ```
 
 The temporary request format is illustrated by
-[`diagnostics-request.example.yaml`](../contracts/examples/diagnostics-request.example.yaml):
+[`diagnostics-request.example.yaml`](../docs/examples/diagnostics-request.example.yaml):
 
 ```yaml
 observation: observation/future.zarr
@@ -122,7 +114,7 @@ metrics:
 Paths are relative to the request file or absolute; inputs must exist.
 The handler rewrites them to `/run/inputs/...` and records the source request,
 rewritten request, container log and status under `runs/<run-id>/`.
-The separate `evaluation.example.yaml` is an architecture example, not this CLI's
+The separate [`evaluation.example.yaml`](../docs/examples/evaluation.example.yaml) is an architecture example, not this CLI's
 request format; grid and scientific metadata there are illustrative declarations.
 
 This legacy CLI requires a non-null JSON `products/metrics.json` and a

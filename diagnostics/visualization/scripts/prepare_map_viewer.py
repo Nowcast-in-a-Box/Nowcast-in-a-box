@@ -19,13 +19,9 @@ def main(argv=None):
         required=True,
         help="local WMO tile cache root (acquisition.json and VectorTileServer)",
     )
-    parser.add_argument(
-        "--terrain", type=Path, required=True, help="local ETOPO NetCDF"
-    )
+    parser.add_argument("--terrain", type=Path, required=True, help="local ETOPO NetCDF")
     parser.add_argument("--terrain-source-record", type=Path, required=True)
-    parser.add_argument(
-        "--terrain-sha256", required=True, help="64 lowercase hex digits"
-    )
+    parser.add_argument("--terrain-sha256", required=True, help="64 lowercase hex digits")
     parser.add_argument(
         "--basemap-output",
         type=Path,

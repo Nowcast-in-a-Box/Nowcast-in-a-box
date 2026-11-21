@@ -24,7 +24,7 @@ import traceback
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Callable
 
 UTC = timezone.utc
 
@@ -72,7 +72,9 @@ class Job:
             "group": self.group,
             "state": self.state,
             "started": self.started.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "finished": self.finished.strftime("%Y-%m-%dT%H:%M:%SZ") if self.finished else None,
+            "finished": self.finished.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if self.finished
+            else None,
             "elapsed_seconds": round(self.elapsed_seconds, 3),
             "lines": self.lines[after:],
             "cursor": len(self.lines),
@@ -100,8 +102,9 @@ class JobRegistry:
         group: str | None = None,
     ) -> Job:
         """Run ``work`` on a thread.  It receives a ``report(line)`` callback."""
-        job = Job(id=job_id or uuid.uuid4().hex[:12], kind=kind, label=label,
-                  group=group)
+        job = Job(
+            id=job_id or uuid.uuid4().hex[:12], kind=kind, label=label, group=group
+        )
 
         with self._lock:
             self._prune_locked()
@@ -126,8 +129,9 @@ class JobRegistry:
                 with self._lock:
                     job.finished = datetime.now(UTC)
 
-        threading.Thread(target=runner, name=f"nib-verify-{kind}-{job.id}",
-                         daemon=True).start()
+        threading.Thread(
+            target=runner, name=f"nib-verify-{kind}-{job.id}", daemon=True
+        ).start()
         return job
 
     def get(self, job_id: str) -> Job:
@@ -152,7 +156,9 @@ class JobRegistry:
     def busy(self, kind: str | None = None) -> list[Job]:
         with self._lock:
             jobs = list(self._jobs.values())
-        return [j for j in jobs if j.state == RUNNING and (kind is None or j.kind == kind)]
+        return [
+            j for j in jobs if j.state == RUNNING and (kind is None or j.kind == kind)
+        ]
 
     def wait(self, job_id: str, timeout: float = 60.0) -> Job:
         """Block until a job finishes.  For tests, and for the CLI's sake."""
@@ -165,7 +171,9 @@ class JobRegistry:
         return job
 
     def _prune_locked(self) -> None:
-        finished = [(j.started, jid) for jid, j in self._jobs.items() if j.state != RUNNING]
+        finished = [
+            (j.started, jid) for jid, j in self._jobs.items() if j.state != RUNNING
+        ]
         if len(self._jobs) <= MAX_JOBS:
             return
         finished.sort()

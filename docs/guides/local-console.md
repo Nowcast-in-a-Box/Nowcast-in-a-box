@@ -1,179 +1,285 @@
-# Local console: offline orders and runs
+# Local console: YAML orders and immutable runs
 
-Some machines reach the Hub only briefly. The local console is the page those
-machines use afterwards, offline: it lists order packages on this machine,
-starts them, and watches run state. Order generation, catalog, and checkout
-stay on the Hub; this page never edits an order.
+The Hub downloads a product selection as JSON. The local Handler turns it into
+an order after you supply the event and sample times. Orders, data paths, and
+run history stay on this machine. Once the required data, images and weights
+are available locally, the console can run without the Hub.
 
 ## Open it
 
-The Handler serves the console itself at `http://127.0.0.1:8765/` (the
-`handler.host`/`handler.port` from `config.yaml`; no new port). Each release
-zip ships an `Open NiB.<os>` file next to `Start NiB.<os>` that starts the
-Handler if needed and opens the page in the default browser. `start` and
-`status` also print a `console <url>` line.
+The Handler serves the console at `http://127.0.0.1:8765/`, using
+`handler.host` and `handler.port` from `config.yaml`. `Open NiB.<os>` starts the
+Handler if needed and opens the page. `start` and `status` also print its URL.
+The page and its fonts are embedded in the Handler; opening it needs neither
+Docker nor Node.
 
-Platform limits of `Open NiB`:
+The console opens on **Dashboard** with current activity, recent runs, software
+version and Docker status. Use **Settings** for this machine, **Orders** to
+import configurations and inspect run history, and **Triggers** to schedule
+saved orders. With no active or recent runs, Dashboard links directly to
+dataset folders and orders.
 
-- macOS uses the launchd start; the Handler survives closing Terminal, as with
-  `Start NiB.command`.
-- Linux and Windows start the Handler in a background window when it is not
-  running. Closing that window stops it again — the same behavior as closing
-  the `Start NiB` terminal. Use `Start NiB.<os>` for a Handler you keep.
-- Linux requires `xdg-open`; without it the script prints the URL and exits
-  non-zero. It never starts browsers from the Handler itself.
+On macOS, the launchd process survives closing Terminal. On Linux and Windows,
+closing the Handler's background window stops it. Linux needs `xdg-open` to
+open the browser; otherwise the opener prints the URL and exits non-zero.
 
-The page is compiled into the Handler binary (`handler/console_page.html`,
-embedded with `go:embed`), so it exists on every platform the Handler runs on
-and needs neither Docker nor Node.
+## Create or import an order
 
-## Where orders come from
+In **Orders**, choose a downloaded file or drop it onto the import area. A Hub
+JSON selects exactly one data product and one or more compatible model
+versions. Import verifies their references against the installed Atlas release;
+it does not choose a time window, save an order or start a job. Review the
+draft, fill in the event and UTC sample starts, then validate and save.
+You can also create an order locally or import an existing NiB YAML order.
+ZIP package import and ZIP execution are no longer supported. Existing run
+records remain visible as read-only history, with logs and results. Saved ZIP
+files without runs are left on disk but are not listed as YAML orders.
+Create a YAML order to start new runs from those settings.
 
-Orders are generated on the Hub. To use one offline, get its package ZIP onto
-this machine while you still have the Hub:
+The form uses `GET /v1/order-options` for available data sources, paired models,
+verification methods, threshold bounds and units, region bounds, fixed geometry
+and the sample limit. It exposes:
 
-- Download the package in Hub Checkout, then import the ZIP on the console
-  page (`Import order package`). `POST /v1/orders` stores it under
-  `paths.orders` (`orders/<package_id>.zip`, default `orders/`).
-- Or start it once from the Hub. Every run keeps its submitted
-  `runs/<run-id>/package.zip`, and the console lists those packages too.
+- Order ID, data source, event ID and UTC RFC3339 sample start times.
+- Inference model selection and, for CMA data, the region centre coordinates.
+- Read-only context frames, target frames, cadence, width and height.
+- Optional verification models, methods, threshold levels and half-window sizes.
+- Optional visualization models. Layers, display thresholds and playback remain
+  controls in the existing diagnostics viewer.
 
-An order that never reached this machine does not appear offline. The console
-is a view of local inventory, not a copy of the Hub's order store.
+Under **Draft**, use **Validate draft** to check the configuration without saving, probing data
+or running Docker. **Save defaults** creates an order or saves changes with its
+current revision. A stale revision is rejected; the draft stays visible so it
+can be compared with the reloaded order. Under **Saved order**, **Export saved YAML** downloads the
+saved configuration, including when the form contains unsaved edits.
 
-## What needs Docker
+**Check readiness** is a separate local action for the current draft. It checks
+resources and data windows and may start a reader container. Individual checks
+show their result and message. Editing the order or local settings invalidates
+the result, including a response arriving after an edit. Every run start still
+performs backend checks automatically; an earlier green result is not a bypass.
 
-Starting a run is the only operation that needs Docker. Everything else works
-without it:
+Saved YAML is an order definition, not a runtime package. Its object shape is:
 
-| Action | Docker |
-| --- | --- |
-| Open the page, list orders, import a ZIP | no |
-| `stop`, `restart`, `uninstall`, SIGTERM | no |
-| Start / Run again | yes |
+```yaml
+schema_version: nib.order.v1
+order_id: example-order
+data_id: <supported data ID>
+event_id: <event ID>
+sample_starts:
+  - "2026-01-01T00:00:00Z"
+models:
+  - <paired model ID>
+# Include region only for a data source that supports it:
+# region: {center_lon: <longitude>, center_lat: <latitude>}
+# Optional diagnostics, with model IDs drawn from models above:
+# verification:
+#   models: [<paired model ID>]
+#   methods: [<supported method>]
+#   levels: [<threshold in the data source's unit>]
+#   half_windows: [<non-negative integer>]
+# visualization:
+#   models: [<paired model ID>]
+```
 
-A Docker daemon that is not running cannot hold containers, so it cannot be
-hiding an orphan from a previous run. `stop` therefore ignores an unreachable
-daemon and only refuses when Docker answers and still reports a Handler-owned
-project as running.
+The angle-bracket values are placeholders; use IDs and bounds from the options
+endpoint. Order IDs must be safe local identifiers. Paths, images, shell
+commands and Docker arguments are not order parameters. Fixed geometry comes
+from the supported data contract and is not editable in YAML.
 
-When Docker is not running, `POST /v1/orders/{package_id}/runs` and
-`POST /v1/jobs` answer `503 Docker is not running; start Docker and retry`
-before creating a run, and the console shows that message next to the orders
-instead of creating a run that fails immediately. The Hub receives the same
-message as its submit error.
+Omit `verification` or `visualization` to disable that diagnostic. Selecting a
+model for inference does not implicitly enable diagnostics. Threshold-dependent
+methods require explicit `levels`; FSS also requires integer `half_windows`
+from 0 to 16. These fields are ignored when the selected methods do not use them.
+Each diagnostic model list must be a subset of the inference models.
 
-## What the page does
+## Start and inspect runs
 
-- Status: handler liveness and the Docker preflight from `GET /v1/status`.
-  When Docker is not ready the page says so and refuses to start a run.
-- Orders: `GET /v1/orders` lists saved packages plus packages of past runs
-  (saved copies win; a package with several runs shows the newest run as its
-  source). A package that fails validation shows the reason and cannot start.
-- Start / Run again: `POST /v1/orders/{package_id}/runs` reads the saved ZIP
-  and goes through the exact admission of `POST /v1/jobs` (checksums, frozen
-  bindings, idempotency key, separate run directories). The first start
-  uses idempotency key `package:<package_id>` — the same key the Hub uses —
-  so an order already started from the Hub returns its existing run instead of
-  silently starting a second one. `Run again` uses a fresh `rerun:` key and
-  creates a new run.
-- Runs: state, stage, errors, and the log tail via the existing
-  `GET /v1/runs` and `GET /v1/jobs/{id}/log`. Forecast and verification
-  results open in the existing diagnostics pages
-  (`GET /v1/runs/{id}/files/{entry}`); the console does not redraw them.
+**Start new run** submits the saved revision and freezes its configuration for
+that run. Saving defaults later never rewrites existing runs. Changes to data,
+start times, region or inference models require a new run.
 
-The page refreshes every five seconds while it is open.
+**Repeat inference** in run detail submits the historical run's frozen YAML with
+the current local data folder and resource settings. It creates a new run and
+does not change the saved defaults. It is available only for runs with a frozen
+order, after their active inference finishes. If a response is lost, inspect
+Runs before retrying because the request may already have created a run.
+
+Independent runs of the same order may execute concurrently.
+`runtime.max_concurrent_jobs` in `config.yaml` bounds execution (default `2`);
+extra jobs remain queued and start in FIFO submission order. A repeated
+idempotency key returns the existing run; a new submission identity creates
+a separate run and directory. Execution is not serialized by a global lock.
+Only one writer may work on a given run at a time, including diagnostic retries.
+
+Run detail shows the backend stage, preflight checks and recorded execution
+context (`data_path`, `catalog_path`, and `images`) alongside the frozen order.
+Logs provide actual output; the console does not invent progress percentages.
+
+Each saved-order submission attempt uses a unique `Idempotency-Key`. A retry after an error
+reuses that key while the page remains open; another explicit start after a
+successful response gets a new key. The console requires unsaved changes to be
+saved or discarded before starting the selected order.
+
+Selecting an order filters the run list to that order. Previous/next controls
+request pages of 50, including history beyond the first 500 runs. **All orders**
+clears the filter. Run detail shows the frozen order, request, revision,
+Forecasts, sample records and diagnostic operation history. Logs retain their
+container prefixes and structured output. Results open in the existing viewer.
+
+The run's independent diagnostic form submits new verification and/or
+visualization settings against saved Forecasts. It offers models with saved
+Forecasts; the server checks availability across every sample in a batch. It cannot
+change inference inputs or the order's saved defaults. Old history without a
+frozen YAML order is read-only. The five-second display refresh preserves order
+drafts and diagnostic selections.
+
+Coverage is available in the diagnostics viewer. A static validation does not
+check data coverage: **not probed** means no availability check has been made;
+it does not mean data is missing. Missing data is an observed result of a probe
+or run, and must not be inferred from an unprobed configuration.
+
+CMA metadata preflight checks time windows; regional footprint and pixel
+availability are checked when the adapter reads the window. CMA event IDs must match the
+first sample date in YYYYMMDD format.
+
+## Docker and lifecycle
+
+Opening the page, reading history, editing/importing/exporting YAML and static
+validation need no Docker. Starting inference, running diagnostics and checking
+new data through a reader container do need Docker. The console reports Docker
+readiness and displays submission errors beside the relevant action.
+
+`stop`, `restart` and uninstall do not require Docker to be reachable. The
+Handler rejects shutdown while its local work is active. When Docker answers,
+it also checks for active Handler-owned projects before stopping.
+
+Docker status is visible on the dashboard. **Restart Handler** and
+**Stop Handler** ask for confirmation; a busy response (HTTP 409) leaves the
+Handler running and displays the rejection. Restart reinitializes services in
+the same process, retaining the session token unless its configured value
+changes. The page tolerates downtime and confirms restart only after a different
+`instance_id` reports `running`. After
+60 seconds without confirmation it pauses and offers **Refresh** to try again.
+
+After stop is accepted, automatic polling stops. A lost stop response also
+pauses polling but reports that the outcome is unknown. Use the local launcher
+to start Handler, then **Refresh** to reconnect. Drafts remain in the open tab;
+they are not persisted across closing or reloading the page. Polling otherwise
+runs every five seconds while the tab is visible.
+
+## Local settings
+
+In **Settings**, the dataset list marks each folder **Not set**, **Folder set** or
+**Unsaved**. A saved path does not mean that the data has been inspected.
+Under **Handler**, expand **Installation and runtime paths** to see the local configuration.
+Choose an image source under **Container image source** (official, mirror, or automatic).
+An optional custom registry overrides that choice; clear it to use the preset
+again. This changes where trusted image names are resolved, not which images
+an order can select.
+
+Select a reader in **Dataset folders** to edit its local folder. Save only the
+ones you intend to use. These paths persist across restarts and never leave the
+machine in an exported order. **Inspect** opens a sample with that dataset's
+reader and shows the result or error. Saving a path does not require a successful
+Inspect. A successful probe is not a guarantee about an order's chosen window;
+every manual and scheduled run still performs its own preflight.
+
+Starting the Handler does not download images. Each execution checks its resources again.
 
 ## Triggers
 
-A trigger re-runs one saved order on its own. The Handler owns this: it is the
-only process that can tell whether new data landed or the clock passed. The Hub
-never evaluates a trigger, and a trigger never edits an order — it only
-replaces the start window of the package it points at.
+The Handler owns trigger evaluation. A trigger references a saved YAML order
+and creates a new run; it does not edit that order. Legacy package triggers
+remain visible but cannot execute or resume. They can be paused or deleted.
+Select **New trigger**, choose a saved order, then select **New data arrives**,
+**Fixed interval**, or **Daily at**. Expand **Data window options** to change
+which windows are used. Only writable saved orders are eligible.
 
-Two conditions:
+Triggers can check for new data every configured interval, or run on an interval
+or at a daily local time. A scheduled run can use the order's own times or the
+newest available data. Window selection supports newest-only or all new windows,
+subject to the configured batch limit and one event per batch. Reader-based
+checks need Docker and the configured data folder.
 
-- **New data arrives**: every *N* minutes the Handler asks the data reader for
-  the windows it declares (`--list-samples`, the same call the sample endpoint
-  uses) and runs the ones it has not run yet. Polling needs Docker and the
-  configured data folder for that data source, because the answer comes from the
-  reader container, not from a file timestamp.
-- **On a schedule**: every *N* minutes, or every day at a local `HH:MM`. The
-  start window is either the newest ready data at that moment, or the time
-  frozen in the order itself (that is how you re-run one fixed window).
-
-Each trigger also chooses how many windows one fire covers: **newest only**, or
-**all new windows** in one batch run (bounded by `runtime.max_batch_samples`; a
-batch carries one event id, so windows from another event are reported as
-skipped instead of run).
-
-State lives in `nib-triggers.json` next to `config.yaml`, beside
-`nib-settings.json`. It is not part of an order and not part of `config.yaml`,
-because it changes while the Handler runs.
+The table retains last outcome, errors, next due time, missed runs and
+**Run now**, **Pause / Resume**, and **Delete** controls. Triggers run only while
+the Handler runs. Distinct scheduled points and new data windows can create
+independent runs for the same trigger. Missed scheduled points are reported
+rather than silently caught up. Deleting a trigger asks for confirmation and keeps
+the saved order and its run history.
+Trigger state stays in `nib-triggers.json` beside `config.yaml` and
+`nib-settings.json`; it is not part of the YAML order.
+The trigger cursor records its data source and resets when an edited order
+switches sources, so earlier dates from the new source are not skipped.
 
 Behaviour worth knowing:
 
 - Distinct due points or new data windows may run concurrently, up to
-  `runtime.max_concurrent_jobs` in `config.yaml` (default `2`). Extra runs queue
-  in submission order. `stop` refuses while any job is queued or executing.
+  `runtime.max_concurrent_jobs`. Extra runs queue in submission order.
+  `stop` refuses while any job is queued or executing.
 - A delayed scheduler tick fires only the latest due point. For a five-minute
   interval, a tick at minute 17 handles minute 15; the next point is minute 20.
   Older elapsed points are not replayed on subsequent ticks.
-- Each fire uses the idempotency key `trigger:<id>:<start window>` (or
-  `trigger:<id>:order:<scheduled point>` for the order’s own window). The same
-  data-window key or scheduled-point key returns its existing run, including
-  after a Handler restart.
-- A scheduled point that passed while the Handler was not running is **not**
-  caught up. It is counted in the trigger's `missed_count` and shown in the
-  console ("missed 2 scheduled runs while the Handler was stopped"). `Run now`
-  is the manual catch-up.
-- A failed fire (Docker down, data folder missing, order package deleted by
-  `--purge`) records `last_error` and leaves the trigger enabled; the next point
-  or poll tries again.
-- Triggers only fire while the Handler runs. On Linux and Windows that is the
-  same background window as `Start NiB`.
+- Each fire uses the idempotency key
+  `trigger:<id>:<data-id>:<start window>`, or
+  `trigger:<id>:<data-id>:order:<scheduled point>` for the order's own window.
+  The same key returns its existing run, including after a Handler restart.
+- Scheduled points missed while the Handler was stopped are counted in
+  `missed_count` rather than caught up. **Run now** is the manual catch-up.
+- A failed fire records `last_error` and leaves the trigger enabled; the next
+  point or poll tries again.
 
-The console lists each trigger with its last outcome, next due time, missed
-count, and `Run now` / `Pause` / `Delete`. The API:
+## Handler API
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /v1/triggers` | Stored triggers plus the firing-loop interval. |
-| `POST /v1/triggers` | Create one: `package_id`, `kind`, `poll_minutes` or `interval_minutes`/`daily_at`, `window_mode`, `start_source`. |
-| `PATCH /v1/triggers/{id}` | Change the condition or `enabled`. The order is fixed; delete and re-create to point elsewhere. |
-| `DELETE /v1/triggers/{id}` | Remove it. Runs it already started stay. |
-| `POST /v1/triggers/{id}/fire` | Fire now, regardless of the condition. The outcome is in `last_outcome` / `last_error`. |
+| `GET /` | Embedded console with injected session token; no-store. |
+| `GET /console/fonts/{name}` | Embedded Inter fonts. |
+| `GET /v1/status` | Handler and Docker status. |
+| `POST /v1/control/restart` / `POST /v1/control/stop` | Confirmed lifecycle actions with the same-origin session token; busy returns 409. |
+| `GET /v1/settings` / `PATCH /v1/settings` | List registered datasets, saved folders and image sources. Patch `{image_source, image_override}` or `{data_id, data_root}`. |
+| `POST /v1/datasets/{dataset}/inspect` | Probe a sample in the saved folder with that dataset's reader. Does not start a run. |
+| `POST /v1/orders/import-selection` | Resolve a raw Hub selection into an unsaved local order draft. |
+| `GET /v1/resources?data_id=...` | Cached diagnostics/execution resource groups; add `refresh=true` for deliberate inspection. |
+| `POST /v1/resources/prepare` | Prepare trusted resources selected by `{data_id, models: [...]}`. |
+| `POST /v1/preflight` | Check `{order: object}` or `{yaml: string}`; returns `{ok, checks, execution_context}`. |
+| `GET /v1/order-options` | Supported data/model pairs, methods, fixed fields, bounds and batch limit. |
+| `GET /v1/orders` | `{orders, total}` including saved YAML and read-only history. |
+| `POST /v1/orders` | Create/import from `{order: object}` or `{yaml: string}`. |
+| `GET /v1/orders/{order_id}` | Saved detail, normalized order, YAML and revision. |
+| `PATCH /v1/orders/{order_id}` | Save `{order: object, revision: current}`. |
+| `POST /v1/orders/validate` | Validate `{order: object}` or `{yaml: string}` without saving or Docker. |
+| `GET /v1/orders/{order_id}?download=1` | Download YAML using bearer authentication. |
+| `POST /v1/orders/{order_id}/runs` | Start `{revision: current}` with an `Idempotency-Key` header. |
+| `GET /v1/runs?offset=0&limit=50&order_id=...` | Paged run listing; the order filter is optional. |
+| `GET /v1/runs/{id}` | Frozen order, revision, request, manifest fields and diagnostic operations. |
+| `POST /v1/runs/{id}/rerun` | Repeat frozen YAML with current local paths; returns a new job. |
+| `GET /v1/jobs/{id}/log` | Run log tail. |
+| `GET /v1/runs/{id}/files/{entry}` | Existing diagnostics results and Coverage viewer. |
+| `POST /v1/runs/{id}/diagnostics` | New operation with optional `verification` and `visualization` objects; at least one must be enabled. |
+| `GET /v1/triggers` | Stored triggers and state. |
+| `POST /v1/triggers` | Create a trigger referencing a saved YAML order via `package_id`. |
+| `PATCH /v1/triggers/{id}` | Change conditions or enable/disable. |
+| `DELETE /v1/triggers/{id}` | Delete a trigger; keep its runs. |
+| `POST /v1/triggers/{id}/fire` | Fire an eligible trigger now. |
 
-## Security shape
+Saved-order detail includes `order`, `yaml`, `revision`, `order_id`,
+`package_id` (equal to `order_id`), summary fields, `source: saved` and
+`read_only: false`. History summaries have `read_only: true`; they are not
+editable or executable order definitions. Diagnostic request objects use the
+same fields as the corresponding YAML diagnostic objects.
 
-- Everything stays loopback-only; non-loopback Host headers are refused as
-  before, and the write endpoints keep requiring the session Bearer token.
-- The token is injected only into the `Cache-Control: no-store` page response
-  and lives in page memory; it is not logged or printed.
-- The same-origin page is allowed by the existing "Origin equals request
-  host" rule; the console is not added to `runtime.allowed_origins`, and
-  `/v1/pair` remains Hub-only.
-- Saved file names allow only letters, digits, dot, underscore and dash (no
-  path separators), reject Windows-reserved stems and trailing dots, and are
-  checked to stay inside `paths.orders`. Package contents go through the same
-  `ParseRuntimePackage` validation as a Hub upload, including the 8 MiB
-  bound; nothing from the browser reaches Docker arguments or a shell.
+The console expects status fields `instance_id`, `started_at`, `handler_state`,
+and `active_jobs`, plus the existing Docker and configuration fields. Checks
+use `{id, ok, message}`; run checks and execution context are in `run.job`.
+Resource responses contain `diagnostics` and `execution` groups, each with
+`status`, `message`, and `items`. The repeat action sends an `Idempotency-Key`,
+but retry deduplication depends on the rerun endpoint honoring it.
 
-## Handler API summary
-
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /` | Console page (no-store, token injected). |
-| `GET /console/fonts/{name}` | Embedded Inter glyphs for the page (loopback host check, ETag). |
-| `GET /v1/orders` | Saved packages plus packages of past runs. |
-| `POST /v1/orders` | Save `{package, sha256}` (same body as `POST /v1/jobs`). Idempotent per content; same id with different content is refused. |
-| `POST /v1/orders/{package_id}/runs` | Start a saved package. `Idempotency-Key` header as in `/v1/jobs`. |
-| `GET /v1/triggers` | Stored triggers and their state. |
-| `POST /v1/triggers` | Create a trigger for a saved order. |
-| `PATCH /v1/triggers/{id}` | Change condition or enable/disable. |
-| `DELETE /v1/triggers/{id}` | Remove a trigger. |
-| `POST /v1/triggers/{id}/fire` | Run the trigger now. |
-
-A later Hub slice can call `POST /v1/orders` directly ("save to this
-computer") so the download step disappears; this repository needs no Hub
-change for the manual import flow.
+The Handler remains loopback-only. Requests retain the existing Host and Origin
+checks. The console keeps its injected bearer token in page memory and uses an
+authenticated fetch plus a Blob download for YAML export. Server validation
+remains authoritative for safe identifiers, supported parameters, revisions
+and Forecast availability; browser fields cannot supply Docker arguments or
+shell commands.

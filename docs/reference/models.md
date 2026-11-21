@@ -1,7 +1,7 @@
 # Model contribution contract
 
 Issue #68 defines the shared boundary below. Model declarations live at
-`contracts/models/<data>/<model>.json` and use `schema: "nib.model.v1"`.
+`atlas/contracts/models/<data>/<model>.json` and use `schema: "nib.model.v1"`.
 
 The declaration records identity, version, paired data source, task, status,
 weights, and the physical `input` and `output` requirements. The adapter's query
@@ -35,7 +35,7 @@ read → select exact recent history → validate_input → prepare → predict
 History selection uses the declaration's context length and cadence. It must end
 at the requested initialization time. Missing or incompatible inputs fail;
 neither the runtime nor the model may silently pad, resize or interpolate them.
-The reader must deliver compliant observations. A documented ingestion grid
+The reader must deliver compliant observations. A documented data adapter grid
 transformation is separate from silently repairing input at the model boundary.
 
 Backend choice stays inside the model's Docker image. ONNX Runtime, PyTorch or
@@ -67,10 +67,10 @@ resampling. See [the verification interface](interfaces-we-consume.md).
 
 | Data source | Model | Declaration | Adapter notes |
 | --- | --- | --- | --- |
-| SEVIR VIL | NowcastNet | [JSON](../../contracts/models/sevir/nowcastnet.json) | [README](../../adapters/sevir/nowcastnet/README.md) |
-| SEVIR VIL | exPreCast | [JSON](../../contracts/models/sevir/exprecast.json) | [README](../../adapters/sevir/exprecast/README.md) |
-| SEVIR VIL | WADEPre | [JSON](../../contracts/models/sevir/wadepre.json) | [README](../../adapters/sevir/wadepre/README.md) |
-| CMA Radar | NowcastNet demo | [JSON](../../contracts/models/cma_radar/nowcastnet.json) | [README](../../adapters/cma_radar/nowcastnet/README.md) |
+| SEVIR VIL | NowcastNet | [JSON](../../atlas/contracts/models/sevir/nowcastnet.json) | [README](../../adapters/sevir/nowcastnet/README.md) |
+| SEVIR VIL | exPreCast | [JSON](../../atlas/contracts/models/sevir/exprecast.json) | [README](../../adapters/sevir/exprecast/README.md) |
+| SEVIR VIL | WADEPre | [JSON](../../atlas/contracts/models/sevir/wadepre.json) | [README](../../adapters/sevir/wadepre/README.md) |
+| CMA Radar | NowcastNet demo | [JSON](../../atlas/contracts/models/cma_radar/nowcastnet.json) | [README](../../adapters/cma_radar/nowcastnet/README.md) |
 
 Atlas products are registered manually. A local declaration or adapter does not
 automatically export or publish a Hub product. Weight and image preparation

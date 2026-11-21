@@ -28,8 +28,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PIL import Image
-
 from nib_visualization import make_fixture
 from nib_visualization.artifacts import (
     digest_field_inputs,
@@ -37,6 +35,7 @@ from nib_visualization.artifacts import (
     verify_wmo_checksum_manifest,
 )
 from nib_visualization.cli import main
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 WMO_SOURCE_RECORD = ROOT / "basemap_sources" / "wmo-source.json"

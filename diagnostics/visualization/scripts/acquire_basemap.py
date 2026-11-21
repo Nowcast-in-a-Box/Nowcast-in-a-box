@@ -46,9 +46,7 @@ def sha256_file(path: Path) -> str:
 
 def fetch_json(base_url: str, params: dict[str, str], timeout: int = 120) -> dict:
     query = urllib.parse.urlencode(params)
-    request = urllib.request.Request(
-        f"{base_url}?{query}", headers={"User-Agent": USER_AGENT}
-    )
+    request = urllib.request.Request(f"{base_url}?{query}", headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if isinstance(payload, dict) and "error" in payload:
@@ -104,9 +102,7 @@ def check_unique_ids(features: list[dict], id_field: str) -> int:
     ids = [feature["properties"].get(id_field) for feature in features]
     unique = len(set(ids))
     if unique != len(ids):
-        raise AcquisitionError(
-            f"duplicate ids in '{id_field}': {len(ids)} rows, {unique} unique"
-        )
+        raise AcquisitionError(f"duplicate ids in '{id_field}': {len(ids)} rows, {unique} unique")
     return unique
 
 
@@ -185,14 +181,14 @@ def main(argv: list[str] | None = None) -> int:
                 str(k): int(v) for k, v in gdf[type_field].value_counts().items()
             }
         layer_records[name] = layer_record
-        print(f"[{name}] OK: {unique}/{count} features, {pages} page(s), bounds "
-              f"{layer_record['bounds_wgs84']}")
+        print(
+            f"[{name}] OK: {unique}/{count} features, {pages} page(s), bounds "
+            f"{layer_record['bounds_wgs84']}"
+        )
 
     lines = gpd.read_file(output_path, layer=record["layers"]["boundary_lines"]["gpkg_layer"])
     bounds = lines.total_bounds
-    near_global = bool(
-        (bounds[2] - bounds[0]) > 300 and bounds[3] > 70 and bounds[1] < -50
-    )
+    near_global = bool((bounds[2] - bounds[0]) > 300 and bounds[3] > 70 and bounds[1] < -50)
 
     acquisition = {
         "acquired_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),

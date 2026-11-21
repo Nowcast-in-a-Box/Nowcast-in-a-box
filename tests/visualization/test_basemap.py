@@ -22,8 +22,6 @@ import matplotlib.image as mimg
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from shapely.geometry import LineString, Polygon
-
 from nib_visualization.basemap import (
     BASEMAP_UNAVAILABLE,
     INVALID_EXTENT,
@@ -38,6 +36,7 @@ from nib_visualization.cli import (
     UNCLASSIFIED_LINE_STYLE,
     render_basemap_png,
 )
+from shapely.geometry import LineString, Polygon
 
 REPO_ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 SOURCE_RECORD = REPO_ROOT / "basemap_sources" / "selected-source.json"
@@ -78,7 +77,10 @@ def micro_source_record(tmp_path):
 def micro_gpkg(tmp_path):
     gpkg = tmp_path / "micro.gpkg"
     lines = gpd.GeoDataFrame(
-        {"name": ["inside_coast", "crossing_border", "outside_line"], "bdytyp": [0, 1, 0]},
+        {
+            "name": ["inside_coast", "crossing_border", "outside_line"],
+            "bdytyp": [0, 1, 0],
+        },
         geometry=[
             LineString([(2, 2), (8, 2)]),  # fully inside the viewport
             LineString([(-5, 5), (5, 5)]),  # crosses the west edge
@@ -97,7 +99,9 @@ def micro_gpkg(tmp_path):
 
     lakes = gpd.GeoDataFrame(
         {"name": ["partial_lake"]},
-        geometry=[Polygon([(5, -5), (9, -5), (9, 8), (5, 8)])],  # crosses the south edge
+        geometry=[
+            Polygon([(5, -5), (9, -5), (9, 8), (5, 8)])
+        ],  # crosses the south edge
         crs="EPSG:4326",
     )
     lakes.to_file(gpkg, layer="lakes", driver="GPKG")
@@ -119,14 +123,18 @@ def test_b1_crop_keeps_only_intersecting_geometry(micro_gpkg, micro_source_recor
     assert set(lines["name"]) == {"inside_coast", "crossing_border"}
 
     inside = lines.loc[lines["name"] == "inside_coast", "geometry"].iloc[0]
-    assert inside.equals(LineString([(2, 2), (8, 2)])), "interior feature must survive unclipped"
+    assert inside.equals(LineString([(2, 2), (8, 2)])), (
+        "interior feature must survive unclipped"
+    )
 
     crossing = lines.loc[lines["name"] == "crossing_border", "geometry"].iloc[0]
     expected = LineString([(0, 5), (5, 5)])  # exact intersection with the west edge
     assert crossing.equals(expected), "edge-crossing feature must be clipped exactly"
 
 
-def test_b1_crop_preserves_crs_types_and_exact_polygon_clip(micro_gpkg, micro_source_record):
+def test_b1_crop_preserves_crs_types_and_exact_polygon_clip(
+    micro_gpkg, micro_source_record
+):
     basemap = load_basemap(micro_gpkg, micro_source_record)
     view = crop_basemap(basemap, VIEWPORT)
 
@@ -197,7 +205,9 @@ def test_b1_rejects_invalid_extents(micro_gpkg, micro_source_record):
 def test_f001_line_styles_disable_face_fill_but_keep_lake_fill():
     """Every boundary-line style must explicitly disable face fill (F-001)."""
     for name, style in BOUNDARY_STYLES.items():
-        assert style.get("facecolor") == "none", f"line style '{name}' lacks facecolor='none'"
+        assert style.get("facecolor") == "none", (
+            f"line style '{name}' lacks facecolor='none'"
+        )
     assert UNCLASSIFIED_LINE_STYLE.get("facecolor") == "none"
     # the fix must not strip the optional lake polygon fill
     assert LAKE_STYLE.get("facecolor") not in (None, "none")
@@ -230,7 +240,9 @@ def test_f001_rendered_line_artists_get_no_opaque_facecolor(
             f"line artist received an opaque face fill: {kwargs!r}"
         )
     for kwargs in fill_calls:
-        assert kwargs.get("facecolor") not in (None, "none"), "lake fill must survive the fix"
+        assert kwargs.get("facecolor") not in (None, "none"), (
+            "lake fill must survive the fix"
+        )
 
 
 def test_country_land_uses_neutral_fill_distinct_from_lakes(
@@ -268,7 +280,9 @@ def test_f002_footer_fits_canvas_and_keeps_full_text():
     record = json.loads(SOURCE_RECORD.read_text(encoding="utf-8"))
     attribution, disclaimer = record["attribution"], record["disclaimer"]
 
-    fig = plt.figure(figsize=(10.0, 7.0), facecolor="white")  # render_basemap_png canvas @100dpi
+    fig = plt.figure(
+        figsize=(10.0, 7.0), facecolor="white"
+    )  # render_basemap_png canvas @100dpi
     fig.subplots_adjust(bottom=FOOTER_BOTTOM_MARGIN)
     ax = fig.add_subplot(1, 1, 1)
     artists = _add_footer(fig, attribution, disclaimer)
@@ -285,14 +299,22 @@ def test_f002_footer_fits_canvas_and_keeps_full_text():
 
     for artist in artists:
         bbox = artist.get_window_extent()
-        assert bbox.x0 >= 0 and bbox.x1 <= canvas_w, f"footer line clipped horizontally: {bbox}"
-        assert bbox.y0 >= 0 and bbox.y1 <= canvas_h, f"footer line outside the canvas: {bbox}"
+        assert bbox.x0 >= 0 and bbox.x1 <= canvas_w, (
+            f"footer line clipped horizontally: {bbox}"
+        )
+        assert bbox.y0 >= 0 and bbox.y1 <= canvas_h, (
+            f"footer line outside the canvas: {bbox}"
+        )
     footer_top = max(artist.get_window_extent().y1 for artist in artists)
-    assert footer_top <= ax.bbox.y0, "footer must stay inside the reserved bottom margin"
+    assert footer_top <= ax.bbox.y0, (
+        "footer must stay inside the reserved bottom margin"
+    )
 
     # reading order: wrapped line i must sit ABOVE line i+1 (visual top-to-bottom)
     tops = [artist.get_window_extent().y1 for artist in artists]
-    assert tops == sorted(tops, reverse=True), "footer lines must read top-to-bottom in wrap order"
+    assert tops == sorted(tops, reverse=True), (
+        "footer lines must read top-to-bottom in wrap order"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +332,9 @@ def _require_real_cache() -> Path:
         )
     path = Path(value)
     if not path.is_file():
-        pytest.fail(f"NIB_BASEMAP_PATH={value} does not point to an existing cache file")
+        pytest.fail(
+            f"NIB_BASEMAP_PATH={value} does not point to an existing cache file"
+        )
     return path
 
 
@@ -328,10 +352,14 @@ def _assert_layer_integrity(record: dict, layer: gpd.GeoDataFrame) -> None:
     and carry the same complete, unique OID set as the GeoPackage layer.
     """
     name = record.get("gpkg_layer", "<unnamed layer>")
-    official, collected, written = record["official_count"], record["collected_count"], record[
-        "features_written"
-    ]
-    assert official == collected, f"{name}: official {official} != collected {collected}"
+    official, collected, written = (
+        record["official_count"],
+        record["collected_count"],
+        record["features_written"],
+    )
+    assert official == collected, (
+        f"{name}: official {official} != collected {collected}"
+    )
     assert collected == written, f"{name}: collected {collected} != written {written}"
     assert written == len(layer), (
         f"{name}: cache holds {len(layer)} features, record says {written}"
@@ -354,15 +382,23 @@ def _assert_layer_integrity(record: dict, layer: gpd.GeoDataFrame) -> None:
     assert len(raw_ids) == collected, (
         f"{name}: raw holds {len(raw_ids)} features, collected {collected}"
     )
-    assert all(
-        value is not None for value in raw_ids
-    ), f"{name}: raw has missing {oid_field} values"
-    assert len(set(raw_ids)) == len(raw_ids), f"{name}: raw has duplicate {oid_field} values"
+    assert all(value is not None for value in raw_ids), (
+        f"{name}: raw has missing {oid_field} values"
+    )
+    assert len(set(raw_ids)) == len(raw_ids), (
+        f"{name}: raw has duplicate {oid_field} values"
+    )
 
-    assert oid_field in layer.columns, f"{name}: cache layer lacks the OID column {oid_field}"
-    assert not layer[oid_field].isna().any(), f"{name}: cache has missing {oid_field} values"
+    assert oid_field in layer.columns, (
+        f"{name}: cache layer lacks the OID column {oid_field}"
+    )
+    assert not layer[oid_field].isna().any(), (
+        f"{name}: cache has missing {oid_field} values"
+    )
     gpkg_ids = [int(value) for value in layer[oid_field]]
-    assert len(set(gpkg_ids)) == len(gpkg_ids), f"{name}: cache has duplicate {oid_field} values"
+    assert len(set(gpkg_ids)) == len(gpkg_ids), (
+        f"{name}: cache has duplicate {oid_field} values"
+    )
     assert set(gpkg_ids) == {int(value) for value in raw_ids}, (
         f"{name}: cache OID set differs from the raw export"
     )
@@ -409,7 +445,8 @@ def test_f003_integrity_helper_rejects_off_by_one(tmp_path):
     # a fully consistent record + layer + raw export passes end to end
     raw_path = tmp_path / "mini_lines.geojson"
     features = [
-        {"type": "Feature", "properties": {"oid": oid}, "geometry": None} for oid in (1, 2, 3)
+        {"type": "Feature", "properties": {"oid": oid}, "geometry": None}
+        for oid in (1, 2, 3)
     ]
     raw_path.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
     full_record = {
@@ -426,7 +463,9 @@ def test_b2_layer_integrity_against_raw_and_service_counts():
     basemap = load_basemap(cache, SOURCE_RECORD)
 
     for name, record in acquisition["layers"].items():
-        assert name in basemap.layers, f"acquisition layer {name} missing from the cache"
+        assert name in basemap.layers, (
+            f"acquisition layer {name} missing from the cache"
+        )
         _assert_layer_integrity(record, basemap.layers[name])
 
 
@@ -446,10 +485,12 @@ def test_b2_master_type_distribution_matches_acquisition_record():
     def count_type(label: str) -> int:
         return sum(n for code, n in observed.items() if labels[int(code)] == label)
 
-    assert count_type("coastline") > 0, "required layer type 'coastline' missing from master"
-    assert (
-        count_type("international_boundary") > 0
-    ), "required layer type 'international_boundary' missing from master"
+    assert count_type("coastline") > 0, (
+        "required layer type 'coastline' missing from master"
+    )
+    assert count_type("international_boundary") > 0, (
+        "required layer type 'international_boundary' missing from master"
+    )
 
 
 def test_b2_checksum_and_completeness_evidence():
@@ -476,7 +517,9 @@ def test_b2_global_coverage_of_master():
     recorded = acquisition["observed_global_coverage"]["boundary_lines_bounds_wgs84"]
     np.testing.assert_allclose(bounds, recorded, atol=1e-4)
     assert bounds[2] - bounds[0] > 300, "longitude span must be near-global"
-    assert bounds[3] > 70 and bounds[1] < -50, "latitude span must reach high arctic and far south"
+    assert bounds[3] > 70 and bounds[1] < -50, (
+        "latitude span must reach high arctic and far south"
+    )
 
 
 # ---------------------------------------------------------------------------

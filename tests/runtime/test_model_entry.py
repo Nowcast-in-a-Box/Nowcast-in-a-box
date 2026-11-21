@@ -1,10 +1,10 @@
 """One runtime entry handles independently declared models without real weights."""
 
-from dataclasses import replace
 import importlib.util
 import json
-from pathlib import Path
 import sys
+from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -112,7 +112,7 @@ def model_case(request, tmp_path, monkeypatch):
         "init_time": obs.times[-1],
     }
     directory = create_run(tmp_path, "run", window, obs.grid, atlas_revision="test")
-    path = Path(__file__).resolve().parents[2] / "containers/models/run.py"
+    path = Path(__file__).resolve().parents[2] / "adapters/model_runner.py"
     spec = importlib.util.spec_from_file_location("model_entry", path)
     entry = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(entry)

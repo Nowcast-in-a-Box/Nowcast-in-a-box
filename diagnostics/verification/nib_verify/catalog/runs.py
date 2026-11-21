@@ -1,7 +1,7 @@
 """Run records.
 
 A run config is what the Hub writes and the handler validates before starting a
-container — `contracts/README.md` documents it as a closed YAML v1:
+container in the legacy verification protocol, as a closed YAML v1:
 
 ```yaml
 version: 1
@@ -38,7 +38,7 @@ from .packages import _int, _mapping, _text  # shared tolerant readers
 
 UTC = timezone.utc
 
-#: the closed set `contracts/README.md` defines
+#: Closed set of legacy run config keys.
 TOP_LEVEL_KEYS = frozenset({"version", "data", "model", "run"})
 DATA_KEYS = frozenset({"id"})
 MODEL_KEYS = frozenset({"id"})
@@ -97,7 +97,8 @@ class RunConfig:
             "model": {"id": self.model_id},
             "run": {
                 "start_time": self.start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if self.start_time else None,
+                if self.start_time
+                else None,
                 "sample_id": self.sample_id,
                 "forecast_horizon": self.forecast_horizon,
             },
@@ -105,8 +106,10 @@ class RunConfig:
         }
 
     def describe(self) -> str:
-        return (f"{self.when}  {self.model_id} <- {self.data_id}"
-                f"  horizon={self.forecast_horizon}")
+        return (
+            f"{self.when}  {self.model_id} <- {self.data_id}"
+            f"  horizon={self.forecast_horizon}"
+        )
 
     # -- parsing ---------------------------------------------------------
     @classmethod
@@ -129,10 +132,16 @@ class RunConfig:
         run = _mapping(raw.get("run"))
 
         if strict:
-            for section, allowed in ((data, DATA_KEYS), (model, MODEL_KEYS), (run, RUN_KEYS)):
+            for section, allowed in (
+                (data, DATA_KEYS),
+                (model, MODEL_KEYS),
+                (run, RUN_KEYS),
+            ):
                 bad = sorted(set(section) - allowed)
                 if bad:
-                    raise RunConfigError(f"unknown key(s) {bad} in a run config section")
+                    raise RunConfigError(
+                        f"unknown key(s) {bad} in a run config section"
+                    )
 
         data_id = _text(data.get("id"))
         model_id = _text(model.get("id"))
@@ -188,7 +197,8 @@ def find_candidate_files(root: str | Path) -> list[Path]:
     if base.is_file():
         return [base] if base.suffix.lower() in CANDIDATE_SUFFIXES else []
     return sorted(
-        p for p in base.rglob("*")
+        p
+        for p in base.rglob("*")
         if p.is_file() and p.suffix.lower() in CANDIDATE_SUFFIXES
     )
 
@@ -298,8 +308,13 @@ def discover(roots: Sequence[str | Path], *, strict: bool = True) -> RunBook:
             except RunConfigError as exc:
                 skipped.append(str(exc))
 
-    runs.sort(key=lambda r: (r.start_time or datetime.min.replace(tzinfo=UTC),
-                             r.model_id, str(r.path)))
+    runs.sort(
+        key=lambda r: (
+            r.start_time or datetime.min.replace(tzinfo=UTC),
+            r.model_id,
+            str(r.path),
+        )
+    )
     return RunBook(runs=tuple(runs), roots=tuple(resolved), skipped=tuple(skipped))
 
 
@@ -314,7 +329,5 @@ def _parse_time(value: Any) -> datetime | None:
         try:
             dt = datetime.fromisoformat(text)
         except ValueError:
-            raise RunConfigError(
-                f"run.start_time is not ISO-8601: {value!r}"
-            ) from None
+            raise RunConfigError(f"run.start_time is not ISO-8601: {value!r}") from None
     return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)

@@ -44,14 +44,12 @@ def main() -> None:
     # Replace this fixture with a source adapter's validated VisualizationField.
     # The three leads are example data, not a limit or a Runtime contract.
     fixture = make_fixture("latlon", n_leads=3)
-    field = validate_field(replace(
-        fixture, provenance={**fixture.provenance, "is_real_forecast": False}
-    ))
+    field = validate_field(
+        replace(fixture, provenance={**fixture.provenance, "is_real_forecast": False})
+    )
     basemap = load_wmo_basemap(args.basemap, args.source_record)
     verify_source_identity("wmo", basemap, args.source_record)
-    scene = prepare_scene(
-        field, RenderConfig(notice="SYNTHETIC EXAMPLE — not a forecast"), basemap
-    )
+    scene = prepare_scene(field, RenderConfig(notice="SYNTHETIC EXAMPLE — not a forecast"), basemap)
     fps = 2.0
     outputs = {
         "map": args.output / "map.png",
@@ -68,15 +66,23 @@ def main() -> None:
                 figure.savefig(outputs["map"], dpi=scene.config.dpi)
         write_animation(scene, field, outputs["animation"], fps=fps)
         checks = inspect_outputs(
-            outputs["map"], outputs["animation"], field.values.sizes["lead_time"],
+            outputs["map"],
+            outputs["animation"],
+            field.values.sizes["lead_time"],
             expected_duration_ms=500,
             colorbar_box=axes_pixel_box(scene.figure, scene.colorbar.ax),
         )
         write_manifest(
-            field, scene, provider="wmo", basemap=basemap,
+            field,
+            scene,
+            provider="wmo",
+            basemap=basemap,
             source_record_path=args.source_record,
             acquisition_record_path=args.acquisition_record,
-            outputs=outputs, command=[sys.executable, *sys.argv], fps=fps, checks=checks,
+            outputs=outputs,
+            command=[sys.executable, *sys.argv],
+            fps=fps,
+            checks=checks,
             lockfile_path=ROOT / "requirements-dev.lock.txt",
         )
     finally:

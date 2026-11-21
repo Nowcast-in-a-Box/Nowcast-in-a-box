@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/platform"
+
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -573,7 +575,7 @@ func dockerRunArgs(image, name, runDir string, mounts []inputMount, command []st
 	for _, mount := range mounts {
 		args = append(args, "-v", volumeSpec(mount.Host, mount.Container, true))
 	}
-	if user := containerUser(); user != "" {
+	if user := platform.ContainerUser(); user != "" {
 		args = append(args, "--user", user)
 	}
 	args = append(args, image)

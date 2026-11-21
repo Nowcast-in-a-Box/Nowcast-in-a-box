@@ -17,9 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
-
-from nib_verify.access import Capabilities, Coords, Field, WireError
-from nib_verify.access import wire
+from nib_verify.access import Capabilities, Coords, Field, WireError, wire
 
 UTC = timezone.utc
 T0 = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
@@ -110,7 +108,9 @@ def test_base64_that_is_not_base64_is_refused():
 
 def test_an_unknown_array_encoding_is_refused():
     with pytest.raises(WireError, match="unknown array encoding"):
-        wire.decode_array({"encoding": "protobuf", "dtype": "float64", "shape": [1], "data": ""})
+        wire.decode_array(
+            {"encoding": "protobuf", "dtype": "float64", "shape": [1], "data": ""}
+        )
     with pytest.raises(WireError, match="unknown array encoding"):
         wire.encode_array(np.zeros(1), encoding="protobuf")
 
@@ -169,7 +169,11 @@ def test_a_field_round_trips_with_its_coordinates():
     assert np.array_equal(back.coords.lon, original.coords.lon)
     assert np.array_equal(back.coords.lat, original.coords.lat)
     assert back.valid_time == original.valid_time
-    assert (back.unit, back.variable, back.name) == ("dBZ", "reflectivity", "radar-composite")
+    assert (back.unit, back.variable, back.name) == (
+        "dBZ",
+        "reflectivity",
+        "radar-composite",
+    )
     assert back.mask is None
 
 
@@ -213,7 +217,9 @@ def test_nan_the_payload_did_not_declare_is_widened_into_the_mask():
     data[2, 0] = np.nan
     warned: list[str] = []
 
-    back = wire.decode_field(wire.encode_field(a_field(data=data)), on_warning=warned.append)
+    back = wire.decode_field(
+        wire.encode_field(a_field(data=data)), on_warning=warned.append
+    )
 
     assert back.missing[2, 0], "the NaN was left looking like a value"
     assert len(warned) == 1 and "not declared missing" in warned[0]
@@ -226,8 +232,9 @@ def test_nan_inside_the_declared_mask_is_not_worth_a_warning():
     mask = np.zeros((3, 4), dtype=bool)
     mask[1, 1] = True
     warned: list[str] = []
-    wire.decode_field(wire.encode_field(a_field(data=data, mask=mask)),
-                      on_warning=warned.append)
+    wire.decode_field(
+        wire.encode_field(a_field(data=data, mask=mask)), on_warning=warned.append
+    )
     assert warned == []
 
 
@@ -291,9 +298,7 @@ def test_capabilities_round_trip():
 
 
 def test_an_empty_unit_map_is_allowed_but_visible():
-    back = wire.decode_capabilities(
-        wire.encode_capabilities(caps(units={}))
-    )
+    back = wire.decode_capabilities(wire.encode_capabilities(caps(units={})))
     assert back.units == {}
     assert back.unit_of("radar-composite") is None
 
@@ -301,7 +306,9 @@ def test_an_empty_unit_map_is_allowed_but_visible():
 def test_a_different_protocol_version_is_refused_with_both_numbers():
     obj = wire.encode_capabilities(caps())
     obj["protocol"] = wire.PROTOCOL + 1
-    with pytest.raises(WireError, match=f"protocol {wire.PROTOCOL + 1}.*speaks {wire.PROTOCOL}"):
+    with pytest.raises(
+        WireError, match=f"protocol {wire.PROTOCOL + 1}.*speaks {wire.PROTOCOL}"
+    ):
         wire.decode_capabilities(obj)
 
 
@@ -346,8 +353,11 @@ def test_units_that_are_not_a_mapping_are_refused():
 # errors
 # ======================================================================
 def test_an_error_round_trips():
-    assert wire.decode_error(wire.encode_error("off-cadence", "not on the cadence")) == (
-        "off-cadence", "not on the cadence",
+    assert wire.decode_error(
+        wire.encode_error("off-cadence", "not on the cadence")
+    ) == (
+        "off-cadence",
+        "not on the cadence",
     )
 
 

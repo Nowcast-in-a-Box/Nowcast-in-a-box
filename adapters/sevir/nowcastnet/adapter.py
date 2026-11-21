@@ -15,7 +15,8 @@ from utils.weights import file_sha256
 class NowcastNetAdapter(DeclaredModelAdapter):
     scale = 255.0
     declaration_path = (
-        Path(__file__).resolve().parents[3] / "contracts/models/sevir/nowcastnet.json"
+        Path(__file__).resolve().parents[3]
+        / "atlas/contracts/models/sevir/nowcastnet.json"
     )
 
     def prepare(self, observations):

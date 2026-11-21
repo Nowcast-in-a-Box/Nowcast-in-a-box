@@ -83,7 +83,10 @@ jobs:
                 uninstaller="bin/windows/uninstall.ps1"
                 ;;
             esac
-            for required in "$start" "$uninstall" "$open_console" config.yaml "$launcher" "$uninstaller"; do
+            for required in "$start" "$uninstall" "$open_console" config.yaml "$launcher" "$uninstaller" \
+              resources/atlas/contracts/hub/selection-v1.schema.json \
+              resources/atlas/runtime/products-v1.json \
+              resources/atlas/runtime/products-v2.json; do
               grep -Fxq -- "$required" <<< "$entries" || {
                 echo "::error::$os archive is missing $required"
                 exit 1

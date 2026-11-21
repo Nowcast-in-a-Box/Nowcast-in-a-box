@@ -1,0 +1,50 @@
+{
+  "schema_version": "nib-hub-selection-v1",
+  "catalog_revision": "a3f795a9022f40cb2fdd889f8b483b19a4cc5440d395db1249601b370869c7e6",
+  "items": [
+    {
+      "product_id": "cma-radar",
+      "version_id": "v1",
+      "configuration_schema_ref": {
+        "kind": "configuration_schema",
+        "ref_id": "cma-radar-configuration",
+        "revision": "v1",
+        "sha256": "26d7131a4241cc2e24e0c5d83e27203ad5b19524099d965a6ab8eacdbf1c392b",
+        "path": "catalog/configuration/cma-radar-configuration/v1.json"
+      }
+    },
+    {
+      "product_id": "nowcastnet-cma",
+      "version_id": "v1",
+      "configuration_schema_ref": {
+        "kind": "configuration_schema",
+        "ref_id": "nowcastnet-cma-configuration",
+        "revision": "v1",
+        "sha256": "001d6d1e10c445dea274b2062ef2403f53273c2142b9f8fc608024601ad3b3a6",
+        "path": "catalog/configuration/nowcastnet-cma-configuration/v1.json"
+      }
+    },
+    {
+      "product_id": "cref-verification",
+      "version_id": "v1",
+      "configuration_schema_ref": {
+        "kind": "configuration_schema",
+        "ref_id": "cref-verification-configuration",
+        "revision": "v1",
+        "sha256": "330978a635fa250f537ec02e308390d9d01c1b94d16365efcd48f2d9fa11274b",
+        "path": "catalog/configuration/cref-verification-configuration/v1.json"
+      }
+    },
+    {
+      "product_id": "cref-visualization",
+      "version_id": "v1",
+      "configuration_schema_ref": {
+        "kind": "configuration_schema",
+        "ref_id": "cref-visualization-configuration",
+        "revision": "v1",
+        "sha256": "001d6d1e10c445dea274b2062ef2403f53273c2142b9f8fc608024601ad3b3a6",
+        "path": "catalog/configuration/cref-visualization-configuration/v1.json"
+      }
+    }
+  ]
+}

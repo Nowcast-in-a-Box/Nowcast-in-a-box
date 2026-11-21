@@ -184,7 +184,9 @@ def _port(value: Any, default: int, label: str) -> int:
     try:
         port = int(value)
     except (TypeError, ValueError):
-        raise HostConfigError(f"config.yaml: {label} is not a number: {value!r}") from None
+        raise HostConfigError(
+            f"config.yaml: {label} is not a number: {value!r}"
+        ) from None
     if not (0 < port <= 65535):
         raise HostConfigError(f"config.yaml: {label} out of range: {port}")
     return port

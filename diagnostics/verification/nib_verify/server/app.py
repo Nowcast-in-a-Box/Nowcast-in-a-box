@@ -20,12 +20,11 @@ Three rules the API enforces rather than trusts the page to respect:
 """
 
 from __future__ import annotations
-from collections import OrderedDict
 
 import json
+from collections import OrderedDict
 from collections.abc import Mapping
 from contextlib import contextmanager
-from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -33,16 +32,22 @@ from typing import Any
 from ..catalog.hostconfig import HostConfig, HostConfigError
 from ..catalog.matching import check_pair
 from ..catalog.packages import (
-    ManifestError, discover as discover_packages, ruler_defaults,
+    ManifestError,
+    ruler_defaults,
 )
-from ..catalog.runs import RunConfigError, discover as discover_runs
+from ..catalog.packages import (
+    discover as discover_packages,
+)
+from ..catalog.runs import RunConfigError
+from ..catalog.runs import discover as discover_runs
 from ..config.schema import (
     ConfigError,
     Member,
     MetricGroup,
     VerificationConfig,
 )
-from ..core.metrics import list_families, list_metrics as metric_list
+from ..core.metrics import list_families
+from ..core.metrics import list_metrics as metric_list
 from ..core.planner import plan as plan_tasks
 from ..core.planner import planned_runs
 from ..query.integrity import daily_series, day_detail, integrity
@@ -62,6 +67,7 @@ try:  # pragma: no cover - exercised by whichever branch the environment takes
     from fastapi import Body, FastAPI, Query, Request
     from fastapi.responses import FileResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
+
     HAS_FASTAPI = True
 except ModuleNotFoundError:  # pragma: no cover
     Body = FastAPI = Query = Request = Response = None
@@ -106,7 +112,7 @@ def create_app(
         title="NiB diagnostics",
         version="0.1.0",
         description="Metrics from saved prediction and truth. Thresholds change "
-                    "without rerunning inference.",
+        "without rerunning inference.",
     )
 
     # ---------------------------------------------------------------- errors
@@ -140,7 +146,6 @@ def create_app(
     _AGGREGATES = OrderedDict()
     _AGGREGATES_MAX = 12
 
-
     def _aggregate(key, build):
         """Memoise one aggregation, keyed by the query minus its presentation.
 
@@ -157,7 +162,7 @@ def create_app(
             wal = root / "verify.sqlite-wal"
             stamp = (main, wal.stat().st_size if wal.exists() else 0)
         except OSError:
-            stamp = None                      # no store yet: nothing worth keeping
+            stamp = None  # no store yet: nothing worth keeping
         full = (stamp,) + tuple(key)
         if full in _AGGREGATES:
             _AGGREGATES.move_to_end(full)
@@ -167,7 +172,6 @@ def create_app(
         while len(_AGGREGATES) > _AGGREGATES_MAX:
             _AGGREGATES.popitem(last=False)
         return value
-
 
     @contextmanager
     def store():
@@ -201,7 +205,7 @@ def create_app(
         raise ConfigError(
             access_error
             or "no field provider is configured on this server. Start it with "
-               "--access mock (or --access replay --mock root=DIR)."
+            "--access mock (or --access replay --mock root=DIR)."
         )
 
     def runs_for(body: dict) -> list[RunRef]:
@@ -210,7 +214,9 @@ def create_app(
         if explicit:
             inits = [_parse_time(t) for t in explicit]
             cfg = library.get(body["config"])
-            return [RunRef(member=m.name, init_time=t) for t in inits for m in cfg.members]
+            return [
+                RunRef(member=m.name, init_time=t) for t in inits for m in cfg.members
+            ]
 
         book = discover_runs(run_roots) if run_roots else None
         if book is None:
@@ -268,8 +274,10 @@ def create_app(
             names = (data.get("request") or {}).get("model_names") or {}
             if names:
                 seen = list(dict.fromkeys(str(v) for v in names.values()))
-                return {"member_labels": {str(k): str(v) for k, v in names.items()},
-                        "display_name": " · ".join(seen)}
+                return {
+                    "member_labels": {str(k): str(v) for k, v in names.items()},
+                    "display_name": " · ".join(seen),
+                }
         return {}
 
     @app.get("/api/configs")
@@ -313,8 +321,11 @@ def create_app(
             raise ConfigError("; ".join(problems))
 
         library.create(cfg, overwrite=bool(body.get("overwrite")))
-        return {"created": cfg.group_id, "config": library.summary(cfg),
-                "warnings": problems}
+        return {
+            "created": cfg.group_id,
+            "config": library.summary(cfg),
+            "warnings": problems,
+        }
 
     @app.delete("/api/configs/{group_id}")
     def delete_config(group_id: str):
@@ -322,8 +333,7 @@ def create_app(
         path = library.delete(group_id)
         with store() as s:
             removed = s.delete_group(group_id)
-        return {"deleted": str(path), "removed_rows": removed,
-                "group_id": cfg.group_id}
+        return {"deleted": str(path), "removed_rows": removed, "group_id": cfg.group_id}
 
     @app.post("/api/configs/{group_id}/roster", status_code=201)
     def add_member(group_id: str, body: dict = Body(...)):
@@ -382,8 +392,13 @@ def create_app(
 
         book = discover_runs(run_roots) if run_roots else None
         provider = access if body.get("probe") else None
-        result = plan_tasks(cfg, book or [], catalog=_catalog_or_none(package_roots),
-                            access=provider, probe=bool(body.get("probe") and provider))
+        result = plan_tasks(
+            cfg,
+            book or [],
+            catalog=_catalog_or_none(package_roots),
+            access=provider,
+            probe=bool(body.get("probe") and provider),
+        )
         payload = result.as_dict()
         payload["warnings"] = _validate_against_catalog(cfg, package_roots)
         payload["runs_discovered"] = len(book) if book is not None else 0
@@ -425,16 +440,23 @@ def create_app(
             with SingleInstanceLock(root_dir):
                 s = Store(root_dir / "verify.sqlite")
                 try:
-                    stats = run_tasks(provider, s, cfg, refs, force=force,
-                                      on_progress=report)
+                    stats = run_tasks(
+                        provider, s, cfg, refs, force=force, on_progress=report
+                    )
                 finally:
                     s.close()
             return {"stats": stats.as_dict(), "plan": plan_payload}
 
-        job = jobs.submit("run", f"{cfg.group_id}: {len(refs)} run(s)", work,
-                          group=cfg.group_id)
-        return {"started": True, "job": job.id, "state": job.state,
-                "runs": len(refs), "plan": plan_payload}
+        job = jobs.submit(
+            "run", f"{cfg.group_id}: {len(refs)} run(s)", work, group=cfg.group_id
+        )
+        return {
+            "started": True,
+            "job": job.id,
+            "state": job.state,
+            "runs": len(refs),
+            "plan": plan_payload,
+        }
 
     @app.get("/api/jobs")
     def list_jobs():
@@ -454,16 +476,23 @@ def create_app(
             raise QueryError("method is required")
         cfg = library.get(config_id) if config_id else None
 
-        key = (method, config_id,
-               tuple(sorted((k, tuple(v)) for k, v in params.multi_items())))
+        key = (
+            method,
+            config_id,
+            tuple(sorted((k, tuple(v)) for k, v in params.multi_items())),
+        )
         with store() as s:
-            result = _aggregate(key, lambda: query_scores(
-                s, cfg,
-                method=method,
-                s=_filters_from_query(params),
-                g=params.getlist("g"),
-                limit=int(params.get("limit") or 20000),
-            ))
+            result = _aggregate(
+                key,
+                lambda: query_scores(
+                    s,
+                    cfg,
+                    method=method,
+                    s=_filters_from_query(params),
+                    g=params.getlist("g"),
+                    limit=int(params.get("limit") or 20000),
+                ),
+            )
         return result
 
     @app.get("/api/integrity")
@@ -491,15 +520,24 @@ def create_app(
         days = params.get("days")
         cfg = library.get(config_id)
         with store() as s:
-            series = daily_series(s, cfg, dataset=dataset,
-                                  days=int(days) if days and days.isdigit() else None)
+            series = daily_series(
+                s,
+                cfg,
+                dataset=dataset,
+                days=int(days) if days and days.isdigit() else None,
+            )
         title = f"{dataset} · daily completeness"
         if days and days.isdigit():
             title += f" · last {days} days"
-        return Response(daily_curve_svg(series, width=_int_param(params, "width", 620),
-                                        height=_int_param(params, "height", 200),
-                                        title=title),
-                        media_type="image/svg+xml")
+        return Response(
+            daily_curve_svg(
+                series,
+                width=_int_param(params, "width", 620),
+                height=_int_param(params, "height", 200),
+                title=title,
+            ),
+            media_type="image/svg+xml",
+        )
 
     @app.get("/api/integrity/day.svg")
     def get_integrity_day(request: Request):
@@ -507,7 +545,11 @@ def create_app(
         from ..report.integrity import mesh_svg, obs_mesh_svg
 
         params = request.query_params
-        config_id, dataset, day = params.get("config"), params.get("dataset"), params.get("date")
+        config_id, dataset, day = (
+            params.get("config"),
+            params.get("dataset"),
+            params.get("date"),
+        )
         if not config_id or not dataset or not day:
             raise QueryError("config, dataset and date are required")
         cfg = library.get(config_id)
@@ -515,12 +557,19 @@ def create_app(
             detail = day_detail(s, cfg, dataset=dataset, day=day)
         width = _int_param(params, "width", 620)
         if detail["kind"] == "obs":
-            svg = obs_mesh_svg(detail, width=width,
-                               height=_int_param(params, "height", 260),
-                               title=f"{dataset} · frames on {day}")
+            svg = obs_mesh_svg(
+                detail,
+                width=width,
+                height=_int_param(params, "height", 260),
+                title=f"{dataset} · frames on {day}",
+            )
         else:
-            svg = mesh_svg(detail, width=width, height=_int_param(params, "height", 300),
-                           title=f"{dataset} · init x lead on {day}")
+            svg = mesh_svg(
+                detail,
+                width=width,
+                height=_int_param(params, "height", 300),
+                title=f"{dataset} · init x lead on {day}",
+            )
         return Response(svg, media_type="image/svg+xml")
 
     @app.get("/api/chart")
@@ -536,8 +585,16 @@ def create_app(
         params = request.query_params
         try:
             svg = draw_chart(params)
-        except (QueryError, ConfigError, ConfigNotFound, ManifestError,
-                RunConfigError, HostConfigError, Locked, KeyError):
+        except (
+            QueryError,
+            ConfigError,
+            ConfigNotFound,
+            ManifestError,
+            RunConfigError,
+            HostConfigError,
+            Locked,
+            KeyError,
+        ):
             # A bad request is the caller's mistake or a config that is not there,
             # and it keeps saying so with its own status and its own detail. What
             # gets a picture is the case where nobody knows what went wrong -- a
@@ -546,8 +603,10 @@ def create_app(
             # rather than "this did not work", and there is nothing to read.
             raise
         except Exception as problem:
-            svg = failure_svg(f"{type(problem).__name__}: {problem}",
-                              width=_int_param(params, "width", 760))
+            svg = failure_svg(
+                f"{type(problem).__name__}: {problem}",
+                width=_int_param(params, "width", 760),
+            )
         return Response(
             content=svg,
             media_type="image/svg+xml",
@@ -555,8 +614,14 @@ def create_app(
         )
 
     def draw_chart(params) -> str:
-        from ..report import (chart_for, chart_panels, line_chart, mesh_for,
-                              mesh_svg, small_multiples)
+        from ..report import (
+            chart_for,
+            chart_panels,
+            line_chart,
+            mesh_for,
+            mesh_svg,
+            small_multiples,
+        )
 
         kind = (params.get("kind") or "line").lower()
         if kind not in ("line", "bar", "mesh"):
@@ -570,45 +635,71 @@ def create_app(
         width = _int_param(params, "width", 760)
 
         # Everything that says what to draw is in the key; nothing that says how.
-        key = (kind == "mesh", method, config_id,
-               params.get("x"), tuple(params.getlist("series")),
-               tuple(params.getlist("panel")),
-               tuple(sorted((k, tuple(v)) for k, v in params.multi_items()
-                            if k not in ("kind", "width", "height"))))
+        key = (
+            kind == "mesh",
+            method,
+            config_id,
+            params.get("x"),
+            tuple(params.getlist("series")),
+            tuple(params.getlist("panel")),
+            tuple(
+                sorted(
+                    (k, tuple(v))
+                    for k, v in params.multi_items()
+                    if k not in ("kind", "width", "height")
+                )
+            ),
+        )
         with store() as s:
             if kind == "mesh":
-                mesh = _aggregate(key, lambda: mesh_for(
-                    s, cfg,
-                    method=method,
-                    s=_filters_from_query(params),
-                    time_dim=params.get("x") or "init_time",
-                    lead_dim=params.get("series") or "lead_minutes",
-                    panel_dims=("member", *params.getlist("panel")),
-                ))
+                mesh = _aggregate(
+                    key,
+                    lambda: mesh_for(
+                        s,
+                        cfg,
+                        method=method,
+                        s=_filters_from_query(params),
+                        time_dim=params.get("x") or "init_time",
+                        lead_dim=params.get("series") or "lead_minutes",
+                        panel_dims=("member", *params.getlist("panel")),
+                    ),
+                )
                 return mesh_svg(mesh, width=width)
             if params.getlist("panel"):
-                labels, charts = _aggregate(key, lambda: chart_panels(
-                    s, cfg,
+                labels, charts = _aggregate(
+                    key,
+                    lambda: chart_panels(
+                        s,
+                        cfg,
+                        method=method,
+                        s=_filters_from_query(params),
+                        x=params.get("x") or "lead_minutes",
+                        series=tuple(params.getlist("series")) or ("member",),
+                        panel_dims=tuple(params.getlist("panel")),
+                    ),
+                )
+                return small_multiples(charts, labels, kind=drawing, width=width)
+            chart = _aggregate(
+                key,
+                lambda: chart_for(
+                    s,
+                    cfg,
                     method=method,
                     s=_filters_from_query(params),
                     x=params.get("x") or "lead_minutes",
                     series=tuple(params.getlist("series")) or ("member",),
-                    panel_dims=tuple(params.getlist("panel")),
-                ))
-                return small_multiples(charts, labels, kind=drawing, width=width)
-            chart = _aggregate(key, lambda: chart_for(
-                s, cfg,
-                method=method,
-                s=_filters_from_query(params),
-                x=params.get("x") or "lead_minutes",
-                series=tuple(params.getlist("series")) or ("member",),
-            ))
-            return line_chart(chart, width=width,
-                              height=_int_param(params, "height", 440),
-                              kind=drawing)
+                ),
+            )
+            return line_chart(
+                chart,
+                width=width,
+                height=_int_param(params, "height", 440),
+                kind=drawing,
+            )
 
     # ============================================================== static
     if STATIC_DIR.is_dir():
+
         @app.middleware("http")
         async def revalidate(request: Request, call_next):
             """The page and its files are checked every time, not kept.
@@ -635,6 +726,7 @@ def create_app(
             return FileResponse(str(STATIC_DIR / "index.html"))
 
     else:  # pragma: no cover - only when the package is installed oddly
+
         @app.get("/")
         def index_missing():
             return JSONResponse({"error": "the static files are missing"})
@@ -663,8 +755,10 @@ def series_colours(cfg: VerificationConfig) -> dict[str, str]:
     """
     from ..report import PALETTE
 
-    return {member.name: PALETTE[index % len(PALETTE)]
-            for index, member in enumerate(cfg.members)}
+    return {
+        member.name: PALETTE[index % len(PALETTE)]
+        for index, member in enumerate(cfg.members)
+    }
 
 
 def available_metrics(cfg: VerificationConfig) -> list[dict]:
@@ -672,12 +766,14 @@ def available_metrics(cfg: VerificationConfig) -> list[dict]:
     out = []
     for group in cfg.metrics:
         for item in group.items:
-            out.append({
-                "method": item,
-                "family": group.family,
-                "levels": list(group.levels),
-                "half_windows": list(group.half_windows),
-            })
+            out.append(
+                {
+                    "method": item,
+                    "family": group.family,
+                    "levels": list(group.levels),
+                    "half_windows": list(group.half_windows),
+                }
+            )
     return out
 
 
@@ -718,8 +814,10 @@ def available_leads(catalog, book) -> dict[str, Any]:
         by_model[model_id] = sorted(leads)
     note = None
     if cadence is None and by_model:
-        note = ("no package declares a cadence, so a frame count cannot be turned "
-                "into minutes")
+        note = (
+            "no package declares a cadence, so a frame count cannot be turned "
+            "into minutes"
+        )
     return {"cadence_minutes": cadence, "by_model": by_model, "note": note}
 
 
@@ -753,7 +851,7 @@ def fill_ruler_from_ground_truth(spec: dict, roots) -> dict:
     filled = dict(ruler)
     for field, value in derived.items():
         if field == "variable" or value is None:
-            continue                     # ``variable`` is not part of the ruler
+            continue  # ``variable`` is not part of the ruler
         if filled.get(field) in (None, "", []):
             filled[field] = list(value) if isinstance(value, (list, tuple)) else value
     return {**spec, "ruler": filled}
@@ -788,9 +886,7 @@ def _validate_against_catalog(cfg: VerificationConfig, roots) -> list[str]:
 
     for member in cfg.members:
         if catalog.get(member.name) is None:
-            problems.append(
-                f"member {member.name!r} is not among the packages found"
-            )
+            problems.append(f"member {member.name!r} is not among the packages found")
     return problems
 
 
@@ -862,7 +958,7 @@ def _filters_from_query(params) -> dict:
         # to Y" means and what a single ``lead=`` value does not: that one is a
         # list. Keeping them apart matters -- ``lead=10,60`` is the two leads 10
         # and 60, and ``lead_from=10&lead_to=60`` is every lead between them.
-        out["dtime"] = [_number(lead_from, 0), _number(lead_to, 10 ** 9)]
+        out["dtime"] = [_number(lead_from, 0), _number(lead_to, 10**9)]
     elif params.get("lead"):
         out["dtime"] = _numbers(params["lead"])
     if params.get("level"):
@@ -873,12 +969,16 @@ def _filters_from_query(params) -> dict:
         out["member"] = params.getlist("member")
     time_from, time_to = params.get("time_from"), params.get("time_to")
     if time_from or time_to:
-        out["time"] = [time_from or "0001-01-01T00:00:00Z",
-                       time_to or "9999-12-31T23:59:59Z"]
+        out["time"] = [
+            time_from or "0001-01-01T00:00:00Z",
+            time_to or "9999-12-31T23:59:59Z",
+        ]
     init_from, init_to = params.get("init_from"), params.get("init_to")
     if init_from or init_to:
-        out["init_time"] = [init_from or "0001-01-01T00:00:00Z",
-                            init_to or "9999-12-31T23:59:59Z"]
+        out["init_time"] = [
+            init_from or "0001-01-01T00:00:00Z",
+            init_to or "9999-12-31T23:59:59Z",
+        ]
     return out
 
 

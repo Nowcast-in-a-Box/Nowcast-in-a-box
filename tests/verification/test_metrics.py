@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 
 import pytest
-
 from nib_verify.core.metrics import (
     REGISTRY,
     bias,
@@ -86,8 +85,25 @@ def test_fss_endpoints():
 # the registry
 # ----------------------------------------------------------------------
 def test_every_metric_declares_the_columns_it_needs():
-    allowed = {"H", "F", "M", "C", "T", "E", "A", "S",
-               "MX", "MY", "SX", "SY", "SXY", "pob", "pfo", "fbs", "n_valid"}
+    allowed = {
+        "H",
+        "F",
+        "M",
+        "C",
+        "T",
+        "E",
+        "A",
+        "S",
+        "MX",
+        "MY",
+        "SX",
+        "SY",
+        "SXY",
+        "pob",
+        "pfo",
+        "fbs",
+        "n_valid",
+    }
     for name, spec in REGISTRY.items():
         assert spec.columns, f"{name} declares no columns"
         assert set(spec.columns) <= allowed, f"{name} wants unknown columns"
@@ -123,14 +139,17 @@ def test_alias_ts_and_csi_are_the_same_formula():
 # ----------------------------------------------------------------------
 # dts
 # ----------------------------------------------------------------------
-@pytest.mark.parametrize("hfmc, expected", [
-    # MetEva's own outputs on these cells, so the two implementations can be
-    # talked about with one set of numbers.
-    ((30.0, 10.0, 20.0, 940.0), 0.7345360824742269),
-    ((50.0, 50.0, 50.0, 850.0), 0.6140350877192983),
-    ((20.0, 0.0, 10.0, 970.0), 0.8282312925170068),
-    ((1.0, 1.0, 1.0, 1.0), 1.0 / 3.0),
-])
+@pytest.mark.parametrize(
+    "hfmc, expected",
+    [
+        # MetEva's own outputs on these cells, so the two implementations can be
+        # talked about with one set of numbers.
+        ((30.0, 10.0, 20.0, 940.0), 0.7345360824742269),
+        ((50.0, 50.0, 50.0, 850.0), 0.6140350877192983),
+        ((20.0, 0.0, 10.0, 970.0), 0.8282312925170068),
+        ((1.0, 1.0, 1.0, 1.0), 1.0 / 3.0),
+    ],
+)
 def test_dts_agrees_with_meteva(hfmc, expected):
     assert dts(*hfmc) == pytest.approx(expected)
 

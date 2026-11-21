@@ -7,7 +7,7 @@ on:
       target:
         description: Image to release (one target only)
         type: choice
-        options: [model, diagnostics, ingestion]
+        options: [model, diagnostics]
         required: true
       model:
         description: Model pair, used only for target=model
@@ -24,7 +24,7 @@ on:
         type: string
         required: true
       prepared_run:
-        description: Absolute private path on self-hosted runner to a fresh ingested run
+        description: Absolute private path on self-hosted runner to a fresh adapter-prepared run
         type: string
       weights:
         description: Absolute private path on self-hosted runner to verified weights
@@ -56,6 +56,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          submodules: recursive
 
       - name: Require private release inputs
         shell: bash
@@ -91,12 +92,11 @@ jobs:
           fi
           echo 'Selected model/platform passed validation and was pushed.'
 
-  support-image:
-    if: inputs.target == 'diagnostics' || inputs.target == 'ingestion'
+  diagnostics:
+    if: inputs.target == 'diagnostics'
     runs-on: ${{ inputs.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
-      TARGET: ${{ inputs.target }}
       PLATFORM: ${{ inputs.platform }}
       TAG: ${{ inputs.tag }}
       OWNER: ${{ github.repository_owner }}
@@ -109,15 +109,10 @@ jobs:
           GHCR_USER: ${{ github.actor }}
         shell: bash
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-      - name: Publish selected support image and platform
+      - name: Publish diagnostics for selected platform
         shell: bash
         run: |
           set -euo pipefail
           [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
-          case "$TARGET" in
-            diagnostics) dockerfile=diagnostics/Dockerfile ;;
-            ingestion) dockerfile=adapters/cma_radar/Dockerfile ;;
-            *) exit 1 ;;
-          esac
-          docker buildx build --platform "$PLATFORM" -f "$dockerfile" \
-            -t "ghcr.io/${OWNER,,}/nib-$TARGET:$TAG" --push .
+          docker buildx build --platform "$PLATFORM" -f diagnostics/Dockerfile \
+            -t "ghcr.io/${OWNER,,}/nib-diagnostics:$TAG" --push .

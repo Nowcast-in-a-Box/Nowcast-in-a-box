@@ -1,13 +1,13 @@
 """Backend-independent model contribution contract. Standard library only."""
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Any
 
-from interfaces.fields import Forecast, Observations
 from interfaces.errors import ConstraintError
+from interfaces.fields import Forecast, Observations
 
 
 @dataclass(frozen=True)

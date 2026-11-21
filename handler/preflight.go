@@ -34,3 +34,14 @@ func DockerCheck() Check {
 	}
 	return Check{ID: "docker", OK: true, Message: version}
 }
+
+func (s *Server) dockerCheck() Check {
+	ctx, cancel := context.WithTimeout(s.serviceContext(), 8*time.Second)
+	defer cancel()
+	code, out, err := s.docker(ctx, "version", "--format", "{{.Server.Version}}")
+	version := strings.TrimSpace(string(out))
+	if err != nil || code != 0 || version == "" {
+		return Check{ID: "docker", Message: "Docker daemon unavailable; start Docker and retry"}
+	}
+	return Check{ID: "docker", OK: true, Message: version}
+}

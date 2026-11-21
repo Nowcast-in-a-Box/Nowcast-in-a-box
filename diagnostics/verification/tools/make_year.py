@@ -31,8 +31,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # the package root
-from nib_verify.core.metrics import fss as score_fss   # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # the package root
 
 # ---------------------------------------------------------------- the members
 #
@@ -40,12 +39,22 @@ from nib_verify.core.metrics import fss as score_fss   # noqa: E402
 # forecast that never degrades. The real member keeps whatever the real day had,
 # so it is the reference the other two are read against.
 MEMBERS = [
-    {"name": "nowcastnet",      "depth": 0.00, "far": 1.00, "note": "the real run"},
-    {"name": "nowcastnet-plus", "depth": -0.35, "far": 0.85, "note": "better everywhere"},
-    {"name": "nowcastnet-lite", "depth": 0.55, "far": 1.45, "note": "worse, and decays faster"},
+    {"name": "nowcastnet", "depth": 0.00, "far": 1.00, "note": "the real run"},
+    {
+        "name": "nowcastnet-plus",
+        "depth": -0.35,
+        "far": 0.85,
+        "note": "better everywhere",
+    },
+    {
+        "name": "nowcastnet-lite",
+        "depth": 0.55,
+        "far": 1.45,
+        "note": "worse, and decays faster",
+    },
 ]
 
-TAU = 45.0            # minutes; skill is half gone around here on the real curve
+TAU = 45.0  # minutes; skill is half gone around here on the real curve
 
 
 def parse(ts: str) -> datetime:
@@ -80,7 +89,9 @@ def hour_factor(hour: int) -> float:
     return 0.055 * math.cos(2.0 * math.pi * (hour - 15) / 24.0)
 
 
-def skill(lead: int, member: dict, day: int, hour: int, drifts: dict) -> tuple[float, float]:
+def skill(
+    lead: int, member: dict, day: int, hour: int, drifts: dict
+) -> tuple[float, float]:
     """Return (hit multiplier, false-alarm multiplier) for one task."""
     aging = lead / (lead + TAU)
     degrade = 1.0 - member["depth"] * aging
@@ -110,8 +121,11 @@ def main() -> int:
     # The shapes come from the backup, never from the database being written.
     # Read from the target and a second run treats its own half-finished output
     # as the template: 400k rows in, twenty billion rows out.
-    src = Path(args.template).resolve() if args.template else (
-        backup if backup.exists() else db_path)
+    src = (
+        Path(args.template).resolve()
+        if args.template
+        else (backup if backup.exists() else db_path)
+    )
     print(f"  模板来源: {src.name}")
     tpl = sqlite3.connect(str(src))
     tpl.row_factory = sqlite3.Row
@@ -119,24 +133,50 @@ def main() -> int:
     db.execute("PRAGMA synchronous=OFF")
 
     # ---- read the real day, before anything is touched ----
-    group = db.execute("SELECT DISTINCT group_id FROM q_yes_or_no").fetchone()["group_id"]
-    yon = [dict(r) for r in tpl.execute(
-        "SELECT lead_minutes, level, H, F, M, C FROM q_yes_or_no"
-        " WHERE group_id=? AND member='nowcastnet' ORDER BY lead_minutes, level", (group,))]
-    con = [dict(r) for r in tpl.execute(
-        "SELECT lead_minutes, T, E, A, S FROM q_continuous"
-        " WHERE group_id=? AND member='nowcastnet' ORDER BY lead_minutes", (group,))]
-    spa = [dict(r) for r in tpl.execute(
-        "SELECT lead_minutes, level, half_window, pob, pfo, fbs, n_valid FROM q_spatial"
-        " WHERE group_id=? AND member='nowcastnet' ORDER BY lead_minutes, level, half_window", (group,))]
+    group = db.execute("SELECT DISTINCT group_id FROM q_yes_or_no").fetchone()[
+        "group_id"
+    ]
+    yon = [
+        dict(r)
+        for r in tpl.execute(
+            "SELECT lead_minutes, level, H, F, M, C FROM q_yes_or_no"
+            " WHERE group_id=? AND member='nowcastnet' ORDER BY lead_minutes, level",
+            (group,),
+        )
+    ]
+    con = [
+        dict(r)
+        for r in tpl.execute(
+            "SELECT lead_minutes, T, E, A, S FROM q_continuous"
+            " WHERE group_id=? AND member='nowcastnet' ORDER BY lead_minutes",
+            (group,),
+        )
+    ]
+    spa = [
+        dict(r)
+        for r in tpl.execute(
+            "SELECT lead_minutes, level, half_window, pob, pfo, fbs, n_valid FROM q_spatial"
+            " WHERE group_id=? AND member='nowcastnet' ORDER BY lead_minutes, level, half_window",
+            (group,),
+        )
+    ]
     if not (yon and con and spa):
         print("  库里没有可当模板的真实数据", file=sys.stderr)
         return 1
     leads = sorted({r["lead_minutes"] for r in yon})
-    print(f"  模板: {len(leads)} 个时效 · {len(yon)} 行 yes/no · {len(con)} 行 continuous · {len(spa)} 行 spatial")
+    print(
+        f"  模板: {len(leads)} 个时效 · {len(yon)} 行 yes/no · {len(con)} 行 continuous · {len(spa)} 行 spatial"
+    )
 
     # ---- clear the group so the year is uniform ----
-    for table in ("q_yes_or_no", "q_continuous", "q_spatial", "q_moments", "task", "run_record"):
+    for table in (
+        "q_yes_or_no",
+        "q_continuous",
+        "q_spatial",
+        "q_moments",
+        "task",
+        "run_record",
+    ):
         db.execute(f"DELETE FROM {table} WHERE group_id=?", (group,))
 
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
@@ -146,7 +186,9 @@ def main() -> int:
     while t < now:
         inits.append(t)
         t += timedelta(hours=1)
-    print(f"  起报时刻: {len(inits)} 个（{stamp(inits[0])} … {stamp(inits[-1])}）· 逐小时")
+    print(
+        f"  起报时刻: {len(inits)} 个（{stamp(inits[0])} … {stamp(inits[-1])}）· 逐小时"
+    )
 
     rng = random.Random(args.seed)
     drifts = {"rng": rng}
@@ -180,8 +222,20 @@ def main() -> int:
                     M = obs - H
                     F = round(non * clip(far_rate * far_m, 0.0, 1.0))
                     C = non - F
-                    rows_y.append((group, member["name"], stamp(init), valid, lead,
-                                   r["level"], H, F, M, C))
+                    rows_y.append(
+                        (
+                            group,
+                            member["name"],
+                            stamp(init),
+                            valid,
+                            lead,
+                            r["level"],
+                            H,
+                            F,
+                            M,
+                            C,
+                        )
+                    )
                 for r in con:
                     if r["lead_minutes"] != lead:
                         continue
@@ -189,15 +243,16 @@ def main() -> int:
                     if T <= 0:
                         continue
                     E, A, S = float(r["E"]), float(r["A"]), float(r["S"])
-                    f_hit, f_far = hit_m, far_m
+                    f_hit = hit_m
                     E2 = E * (2.0 - clip(f_hit, 0.1, 2.0))
                     A2 = A / max(f_hit, 0.1)
                     S2 = S / max(f_hit, 0.1) ** 2
                     # the arithmetic has to stay legal: |E| <= A and A^2 <= T*S
                     A2 = max(A2, abs(E2))
                     S2 = max(S2, (A2 * A2) / T)
-                    rows_c.append((group, member["name"], stamp(init), valid, lead,
-                                   T, E2, A2, S2))
+                    rows_c.append(
+                        (group, member["name"], stamp(init), valid, lead, T, E2, A2, S2)
+                    )
                 for r in spa:
                     if r["lead_minutes"] != lead:
                         continue
@@ -213,13 +268,29 @@ def main() -> int:
                     # measured value, so every member came out identical.
                     # So leave pob and pfo alone and move fbs, clamped to their sum.
                     denom = pob + pfo
-                    worse = clip(clip(far_m, 0.1, 2.0) / clip(hit_m, 0.1, 2.0), 0.05, 4.0)
+                    worse = clip(
+                        clip(far_m, 0.1, 2.0) / clip(hit_m, 0.1, 2.0), 0.05, 4.0
+                    )
                     fbs2 = clip(fbs * worse, 0.0, denom) if denom > 0 else fbs
                     pob2, pfo2 = pob, pfo
-                    rows_s.append((group, member["name"], stamp(init), valid, lead,
-                                   r["level"], r["half_window"], pob2, pfo2, fbs2, nv))
-                rows_t.append((group, member["name"], stamp(init), lead, "done", None,
-                               stamp(now)))
+                    rows_s.append(
+                        (
+                            group,
+                            member["name"],
+                            stamp(init),
+                            valid,
+                            lead,
+                            r["level"],
+                            r["half_window"],
+                            pob2,
+                            pfo2,
+                            fbs2,
+                            nv,
+                        )
+                    )
+                rows_t.append(
+                    (group, member["name"], stamp(init), lead, "done", None, stamp(now))
+                )
         if len(rows_y) > 400_000:
             flush(db, rows_y, rows_c, rows_s, rows_t)
             rows_y, rows_c, rows_s, rows_t = [], [], [], []
@@ -233,15 +304,24 @@ def main() -> int:
             "INSERT OR REPLACE INTO run_record (group_id, started_at, finished_at, seconds,"
             " total, ran, skipped, unavailable, failed, obs_missing, messages)"
             " VALUES (?,?,?,?,?,?,0,0,0,0,'')",
-            (group, when, when, round(len(leads) * len(MEMBERS) / 12.0, 3),
-             len(leads) * len(MEMBERS), len(leads) * len(MEMBERS)))
+            (
+                group,
+                when,
+                when,
+                round(len(leads) * len(MEMBERS) / 12.0, 3),
+                len(leads) * len(MEMBERS),
+                len(leads) * len(MEMBERS),
+            ),
+        )
     db.commit()
     print("  ANALYZE …")
     db.execute("ANALYZE")
     db.commit()
 
-    counts = {t: db.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-              for t in ("q_yes_or_no", "q_continuous", "q_spatial", "task", "run_record")}
+    counts = {
+        t: db.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+        for t in ("q_yes_or_no", "q_continuous", "q_spatial", "task", "run_record")
+    }
     size = db_path.stat().st_size / 1e6
     print(f"  完成，用时 {time.time() - started:.0f}s")
     print(f"    q_yes_or_no {counts['q_yes_or_no']:,}")
@@ -270,17 +350,25 @@ def main() -> int:
 def flush(db, rows_y, rows_c, rows_s, rows_t) -> None:
     db.executemany(
         "INSERT OR REPLACE INTO q_yes_or_no (group_id, member, init_time, valid_time,"
-        " lead_minutes, level, H, F, M, C) VALUES (?,?,?,?,?,?,?,?,?,?)", rows_y)
+        " lead_minutes, level, H, F, M, C) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        rows_y,
+    )
     db.executemany(
         "INSERT OR REPLACE INTO q_continuous (group_id, member, init_time, valid_time,"
-        " lead_minutes, T, E, A, S) VALUES (?,?,?,?,?,?,?,?,?)", rows_c)
+        " lead_minutes, T, E, A, S) VALUES (?,?,?,?,?,?,?,?,?)",
+        rows_c,
+    )
     db.executemany(
         "INSERT OR REPLACE INTO q_spatial (group_id, member, init_time, valid_time,"
         " lead_minutes, level, half_window, pob, pfo, fbs, n_valid)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows_s)
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        rows_s,
+    )
     db.executemany(
         "INSERT OR REPLACE INTO task (group_id, member, init_time, lead_minutes, state,"
-        " detail, updated_at) VALUES (?,?,?,?,?,?,?)", rows_t)
+        " detail, updated_at) VALUES (?,?,?,?,?,?,?)",
+        rows_t,
+    )
     db.commit()
 
 

@@ -1,6 +1,6 @@
 # Weights and image preparation
 
-Weight provenance belongs in `contracts/models/<data>/<model>.json`. Record the
+Weight provenance belongs in `atlas/contracts/models/<data>/<model>.json`. Record the
 filename, source, and SHA-256. Release preparation should use an immutable source
 revision; a URL containing `main` is not an immutable revision even when the
 expected file bytes are checksum-pinned. Never commit weights or credentials.

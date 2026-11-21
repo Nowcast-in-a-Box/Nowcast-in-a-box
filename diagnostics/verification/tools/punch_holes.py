@@ -10,6 +10,7 @@ Every hole is a story a real operator would recognise:
 ``--restore`` puts every row back from the backup this script writes, so the
 store can be clean again for the next demo.
 """
+
 from __future__ import annotations
 
 import json
@@ -42,9 +43,9 @@ HOLES_TASK = [
 
 # 实况缺帧：整天里挖两段（dropout）
 GAPS = [
-    ("2026-08-05", 10 * 60, 24),   # 10:00 起 24 帧（144 分钟 ≈ 2.4 小时）
+    ("2026-08-05", 10 * 60, 24),  # 10:00 起 24 帧（144 分钟 ≈ 2.4 小时）
     ("2026-08-05", 18 * 60, 12),
-    ("2026-10-24", 6 * 60, 30),    # 最近一周内，整三小时实况断流
+    ("2026-10-24", 6 * 60, 30),  # 最近一周内，整三小时实况断流
     ("2026-10-24", 15 * 60, 40),
 ]
 
@@ -76,14 +77,24 @@ def apply(db) -> dict:
             if rule == "far":
                 rows = [r for r in rows if int(r["lead_minutes"]) >= 54]
             elif rule == "scatter":
-                rows = [r for r in rows if int(r["lead_minutes"]) in (54, 60, 66, 72, 108)]
+                rows = [
+                    r for r in rows if int(r["lead_minutes"]) in (54, 60, 66, 72, 108)
+                ]
             for row in rows:
                 db.execute(
                     "DELETE FROM task WHERE group_id=? AND member=? AND init_time=? AND lead_minutes=?",
-                    (row["group_id"], row["member"], row["init_time"], row["lead_minutes"]))
+                    (
+                        row["group_id"],
+                        row["member"],
+                        row["init_time"],
+                        row["lead_minutes"],
+                    ),
+                )
                 backup["task"].append(row)
                 deleted += 1
-        print(f"  {day} {hour_range(hours)} {member or 'all members'} → 删 {deleted} 行（累计）")
+        print(
+            f"  {day} {hour_range(hours)} {member or 'all members'} → 删 {deleted} 行（累计）"
+        )
 
     added = 0
     for day, start_minute, count in GAPS:
@@ -93,15 +104,21 @@ def apply(db) -> dict:
             stamp = f"{day}T{total // 60:02d}:{total % 60:02d}:00Z"
             exists = db.execute(
                 "SELECT 1 FROM obs_gap WHERE group_id=(SELECT group_id FROM task LIMIT 1)"
-                " AND obs_name='cma_radar' AND valid_time=?", (stamp,)).fetchone()
+                " AND obs_name='cma_radar' AND valid_time=?",
+                (stamp,),
+            ).fetchone()
             if exists:
                 continue
             db.execute(
                 "INSERT OR IGNORE INTO obs_gap (group_id, obs_name, valid_time)"
-                " SELECT DISTINCT group_id, 'cma_radar', ? FROM task", (stamp,))
+                " SELECT DISTINCT group_id, 'cma_radar', ? FROM task",
+                (stamp,),
+            )
             backup["obs_gap"].append(stamp)
             added += 1
-        print(f"  {day} 实况缺帧 {start_minute//60:02d}:{start_minute%60:02d} 起 {count} 帧")
+        print(
+            f"  {day} 实况缺帧 {start_minute // 60:02d}:{start_minute % 60:02d} 起 {count} 帧"
+        )
     db.commit()
     BACKUP.write_text(json.dumps(backup), encoding="utf-8")
     print(f"  共删除 task {deleted} 行 · 插入 obs_gap {added} 条 → 备份 {BACKUP}")
@@ -122,12 +139,22 @@ def restore(db) -> None:
         db.execute(
             "INSERT OR REPLACE INTO task (group_id, member, init_time, lead_minutes,"
             " state, detail, updated_at) VALUES (?,?,?,?,?,?,?)",
-            (row["group_id"], row["member"], row["init_time"], row["lead_minutes"],
-             row["state"], row["detail"], row["updated_at"]))
+            (
+                row["group_id"],
+                row["member"],
+                row["init_time"],
+                row["lead_minutes"],
+                row["state"],
+                row["detail"],
+                row["updated_at"],
+            ),
+        )
     for stamp in backup["obs_gap"]:
         db.execute("DELETE FROM obs_gap WHERE valid_time = ?", (stamp,))
     db.commit()
-    print(f"  还原 task {len(backup['task'])} 行 · 删除 obs_gap {len(backup['obs_gap'])} 条")
+    print(
+        f"  还原 task {len(backup['task'])} 行 · 删除 obs_gap {len(backup['obs_gap'])} 条"
+    )
     BACKUP.unlink()
 
 

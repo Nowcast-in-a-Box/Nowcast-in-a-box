@@ -23,7 +23,6 @@ COPY diagnostics/verification /app/diagnostics/verification
 RUN pip install --no-cache-dir --no-deps /app/diagnostics/visualization /app/diagnostics/verification
 COPY diagnostics/*.py /app/diagnostics/
 COPY --from=map-viewer /viewer/dist-embed /app/diagnostics/visualization/viewer/dist-embed
-COPY diagnostics/examples /app/diagnostics/examples
 COPY utils utils
 COPY interfaces interfaces
 ENV MPLCONFIGDIR=/tmp/matplotlib

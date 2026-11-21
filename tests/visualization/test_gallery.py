@@ -8,10 +8,9 @@ import re
 from pathlib import Path
 
 import pytest
-from PIL import Image
-
 from nib_visualization.cli import main
 from nib_visualization.gallery import write_gallery
+from PIL import Image
 
 
 def _sha(path: Path) -> str:
@@ -26,7 +25,9 @@ def run(tmp_path: Path) -> tuple[Path, dict]:
     gif_path = root / "animation.gif"
     Image.new("RGB", (8, 6), "teal").save(map_path)
     frames = [Image.new("RGB", (8, 6), color) for color in ("red", "blue")]
-    frames[0].save(gif_path, save_all=True, append_images=frames[1:], duration=500, loop=0)
+    frames[0].save(
+        gif_path, save_all=True, append_images=frames[1:], duration=500, loop=0
+    )
     manifest = {
         "manifest_version": "1",
         "input": {"synthetic": True},
@@ -88,13 +89,25 @@ def test_default_gallery_content_and_inputs_unchanged(run: tuple[Path, dict]) ->
     assert "mm &amp; &quot;h&quot;" in page
     assert "A &amp; B" in page
     assert "<script>alert(1)</script>" not in page
-    for value in ("True", "2026-09-21T00:05:00Z", "2026-09-21T00:10:00Z",
-                  "300", "600", "EPSG:4326", "PlateCarree", "local-test", "pending"):
+    for value in (
+        "True",
+        "2026-09-21T00:05:00Z",
+        "2026-09-21T00:10:00Z",
+        "300",
+        "600",
+        "EPSG:4326",
+        "PlateCarree",
+        "local-test",
+        "pending",
+    ):
         assert value in page
     assert not re.search(r"(?:src|href)=[\"']https?://", page)
     assert [_sha(path) for path in inputs] == before
     assert sorted(path.name for path in manifest_path.parent.iterdir()) == [
-        "animation.gif", "index.html", "manifest.json", "map #1.png"
+        "animation.gif",
+        "index.html",
+        "manifest.json",
+        "map #1.png",
     ]
     assert manifest["outputs"]["map_png"]["path"] == "map #1.png"
 
@@ -123,28 +136,38 @@ def test_mock_and_terrain_provenance_is_visible_without_changing_artifacts(
             "source_semantics": "Observations replayed as pseudo forecast leads",
         },
     }
-    manifest["basemap"].update({
-        "attribution": "Vector attribution & terms",
-        "disclaimer": "No official endorsement",
-        "raster": {
-            "source_id": "test-terrain-source",
-            "attribution": "Terrain <credit> & provider; 30 arc-second derivative",
-            "disclaimer": "Not for navigation <script>alert(2)</script>",
-        },
-    })
-    manifest["checks"]["visual_review"].update({
-        "status": "pass", "reviewer_role": "implementer; not independent review",
-    })
+    manifest["basemap"].update(
+        {
+            "attribution": "Vector attribution & terms",
+            "disclaimer": "No official endorsement",
+            "raster": {
+                "source_id": "test-terrain-source",
+                "attribution": "Terrain <credit> & provider; 30 arc-second derivative",
+                "disclaimer": "Not for navigation <script>alert(2)</script>",
+            },
+        }
+    )
+    manifest["checks"]["visual_review"].update(
+        {
+            "status": "pass",
+            "reviewer_role": "implementer; not independent review",
+        }
+    )
     _save(manifest_path, manifest)
-    inputs = [manifest_path, manifest_path.parent / "map #1.png",
-              manifest_path.parent / "animation.gif"]
+    inputs = [
+        manifest_path,
+        manifest_path.parent / "map #1.png",
+        manifest_path.parent / "animation.gif",
+    ]
     before = [_sha(path) for path in inputs]
 
     page = write_gallery(manifest_path).read_text(encoding="utf-8")
 
     assert "MOCK FORECAST" in page and "not a real forecast" in page
     for label, value in (
-        ("Synthetic input", "False"), ("Mock input", "True"), ("Real forecast", "False"),
+        ("Synthetic input", "False"),
+        ("Mock input", "True"),
+        ("Real forecast", "False"),
         ("Source semantics", "Observations replayed as pseudo forecast leads"),
         ("Terrain source", "test-terrain-source"),
         ("Artifact visual review", "pass"),
@@ -162,7 +185,8 @@ def test_mock_and_terrain_provenance_is_visible_without_changing_artifacts(
 
 @pytest.mark.parametrize("synthetic", [True, False])
 def test_missing_provenance_does_not_imply_real_forecast(
-    run: tuple[Path, dict], synthetic: bool,
+    run: tuple[Path, dict],
+    synthetic: bool,
 ) -> None:
     manifest_path, manifest = run
     manifest["input"] = {"synthetic": synthetic}
@@ -170,8 +194,13 @@ def test_missing_provenance_does_not_imply_real_forecast(
 
     page = write_gallery(manifest_path).read_text(encoding="utf-8")
 
-    for label in ("Mock input", "Real forecast", "Source semantics", "Terrain source",
-                  "Artifact reviewer"):
+    for label in (
+        "Mock input",
+        "Real forecast",
+        "Source semantics",
+        "Terrain source",
+        "Artifact reviewer",
+    ):
         assert f"<dt>{label}</dt><dd>not recorded</dd>" in page
     assert "MOCK FORECAST" not in page
     assert "ETOPO" not in page
