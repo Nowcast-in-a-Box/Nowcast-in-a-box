@@ -32,6 +32,11 @@ and uninstall; a separate process-lifetime lock prevents a second live Handler.
 Repeated startup of the same executable build reuses the actual running address
 without replacing its configuration or URL registration.
 
+For development, stop the installed Handler and run `scripts/dev-handler.sh`. It
+executes `go run ./handler/cmd/nib-handler serve -config config.yaml`, so each
+start recompiles the current source; restart the command after a change. The
+foreground process uses the same configuration and local settings file.
+
 Starting a different executable build automatically stops the old idle Handler,
 retires its service and application registration, and activates this build. The
 executable SHA256 identifies a build; this is replacement, not semantic-version
@@ -94,9 +99,10 @@ source changes remain dynamically reloadable.
 
 The Hub saves the selected folder per data source in `nib-settings.json` next to
 `config.yaml`. The file is gitignored, contains `data_roots` (and accepts the old
-single `data_root`), is written atomically with mode `0600`, and is read after
-`config.yaml` and before the `NIB_DATA_ROOT` fallback. Deleting it returns the
-Handler to the fallback.
+single `data_root`), and can also override `image_source`, `image_registry`,
+`image_mirror`, and `weight_source`. It is written atomically with mode `0600`,
+and is read after `config.yaml` and before the `NIB_DATA_ROOT` fallback. Deleting
+it returns the Handler to the fallback.
 
 Local control ownership is independent of the config filename and release
 directory. `status`, `stop`, `restart` and `uninstall` find the recorded live

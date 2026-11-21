@@ -166,6 +166,9 @@ func Normalize(order Order, resources *resources.Resources, maxSamples int) (Ord
 	}
 	if order.Verification != nil {
 		v := *order.Verification
+		if len(v.Models) == 0 {
+			v.Models = append([]string{}, order.Models...)
+		}
 		if err := ValidateSubset(v.Models, selected); err != nil {
 			return order, request, fmt.Errorf("verification: %w", err)
 		}
@@ -203,6 +206,9 @@ func Normalize(order Order, resources *resources.Resources, maxSamples int) (Ord
 		request.Metrics, request.VerificationModels = groups, v.Models
 	}
 	if order.Visualization != nil {
+		if len(order.Visualization.Models) == 0 {
+			order.Visualization.Models = append([]string{}, order.Models...)
+		}
 		if err := ValidateSubset(order.Visualization.Models, selected); err != nil {
 			return order, request, fmt.Errorf("visualization: %w", err)
 		}

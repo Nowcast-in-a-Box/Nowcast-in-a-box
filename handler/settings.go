@@ -25,6 +25,7 @@ type localSettings struct {
 	ImageSource   string            `json:"image_source,omitempty"`
 	ImageRegistry *string           `json:"image_registry,omitempty"`
 	ImageMirror   *string           `json:"image_mirror,omitempty"`
+	WeightSource  *string           `json:"weight_source,omitempty"`
 }
 
 // localStateDir is where this install keeps the small files next to config.yaml.
@@ -156,6 +157,13 @@ func (c *Config) applySettings() error {
 		}
 		*setting.target = value
 	}
+	if settings.WeightSource != nil {
+		if strings.TrimSpace(*settings.WeightSource) == "" {
+			c.Paths.WeightSource = ""
+		} else {
+			c.Paths.WeightSource = resolve(strings.TrimSpace(*settings.WeightSource))
+		}
+	}
 	return nil
 }
 
@@ -217,7 +225,7 @@ func settingsResponse(config Config, datasets []settingsDataset) map[string]any 
 			roots[""] = config.DataRootFallback
 		}
 	}
-	return map[string]any{"datasets": datasets, "data_roots": roots, "image_override": config.Runtime.ImageOverride, "image_source": config.Runtime.ImageSource, "image_registry": config.Runtime.ImageRegistry, "image_mirror": config.Runtime.ImageMirror, "image_sources": []string{"official", "mirror", "auto"}}
+	return map[string]any{"datasets": datasets, "data_roots": roots, "image_override": config.Runtime.ImageOverride, "image_source": config.Runtime.ImageSource, "image_registry": config.Runtime.ImageRegistry, "image_mirror": config.Runtime.ImageMirror, "weight_source": config.Paths.WeightSource, "image_sources": []string{"official", "mirror", "auto"}}
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -286,6 +294,7 @@ type settingsUpdate struct {
 	ImageSource   *string `json:"image_source"`
 	ImageRegistry *string `json:"image_registry"`
 	ImageMirror   *string `json:"image_mirror"`
+	WeightSource  *string `json:"weight_source"`
 }
 
 func (s *Server) saveImageSource(w http.ResponseWriter, requested string) {
@@ -331,8 +340,8 @@ func (s *Server) lockSettings() (func(), error) {
 
 func (s *Server) saveSettings(w http.ResponseWriter, update settingsUpdate) {
 	hasRoot := update.DataID != "" || update.DataRoot != nil
-	if !hasRoot && update.ImageSource == nil && update.ImageRegistry == nil && update.ImageMirror == nil && update.ImageOverride == nil {
-		runtimeError(w, 400, fmt.Errorf("data_id and data_root, or image settings, are required"))
+	if !hasRoot && update.ImageSource == nil && update.ImageRegistry == nil && update.ImageMirror == nil && update.ImageOverride == nil && update.WeightSource == nil {
+		runtimeError(w, 400, fmt.Errorf("data_id and data_root, or runtime settings, are required"))
 		return
 	}
 	if update.ImageSource != nil {
@@ -357,6 +366,10 @@ func (s *Server) saveSettings(w http.ResponseWriter, update settingsUpdate) {
 			return
 		}
 		*target = &value
+	}
+	if update.WeightSource != nil {
+		value := strings.TrimSpace(*update.WeightSource)
+		update.WeightSource = &value
 	}
 	if hasRoot {
 		if update.DataID == "" || update.DataRoot == nil {
@@ -432,6 +445,22 @@ func (s *Server) saveSettings(w http.ResponseWriter, update settingsUpdate) {
 		settings.ImageOverride = update.ImageOverride
 		cfg.Runtime.ImageOverride = *update.ImageOverride
 	}
+	if update.WeightSource != nil {
+		settings.WeightSource = update.WeightSource
+		cfg.Paths.WeightSource = ""
+		if *update.WeightSource != "" {
+			path, err := settingsPath(cfg)
+			if err != nil {
+				runtimeError(w, 500, err)
+				return
+			}
+			value := *update.WeightSource
+			if !filepath.IsAbs(value) {
+				value = filepath.Join(filepath.Dir(path), value)
+			}
+			cfg.Paths.WeightSource = filepath.Clean(value)
+		}
+	}
 	if err := writeSettings(cfg, settings); err != nil {
 		runtimeError(w, 500, fmt.Errorf("save %s next to config.yaml: %w", settingsFileName, err))
 		return
@@ -442,6 +471,7 @@ func (s *Server) saveSettings(w http.ResponseWriter, update settingsUpdate) {
 	s.Config.Runtime.ImageRegistry = cfg.Runtime.ImageRegistry
 	s.Config.Runtime.ImageMirror = cfg.Runtime.ImageMirror
 	s.Config.Runtime.ImageOverride = cfg.Runtime.ImageOverride
+	s.Config.Paths.WeightSource = cfg.Paths.WeightSource
 	s.resourcesLoaded = false
 	writeJSON(w, 200, settingsResponse(cfg, datasets))
 }
