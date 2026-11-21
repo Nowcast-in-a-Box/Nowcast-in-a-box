@@ -1,0 +1,35 @@
+schema: nib.resource.v1
+kind: model
+id: irene
+product_ids: [irene-dpc-sri-geotiff-ensemble]
+name: IRENE ConvGRU · Italy DPC SRI
+weights:
+  # The upstream image contains the matching artifact manifest.  Handler
+  # provisioners place this pinned inference-only file here before execution.
+  file: irene.pt
+  sha256: "68125f9b7b339fa2b0103ae013f8b1a6ca484cb7a3adf2a15f12e0e8e7b06574"
+  embedded: false
+container:
+  image: ghcr.io/sinapse-inpe/irene-nowcast@sha256:b4f89946c9951a2895092c43588bce70c53708ef064fbb4a71b4d22872b13d03
+  entrypoint:
+    - /opt/venv/bin/irene-nowcast
+    - --config
+    - /run/config/irene.json
+    - --source
+    - local
+    - --input-dir
+    - /run/inputs/dpc
+    - --output-dir
+    - /run/outputs/irene
+    - --steps
+    - "12"
+    - --device
+    - cpu
+  mounts:
+    - name: run
+      target: /run
+      write: true
+    - name: inputs
+      target: /run/inputs
+    - name: weights
+      target: /app/artifacts/v1/irene.pt

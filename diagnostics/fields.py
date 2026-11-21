@@ -52,12 +52,19 @@ def display_grid(field):
     )
 
 
-def visualization_field(directory, model_id):
+def visualization_field(directory, model_id, member=0):
     source = StoredFields(directory)
     descriptor = source.manifest["forecasts"][model_id]
     cube = source.cube(descriptor)
+    if cube["values"].ndim == 4:
+        if not 0 <= member < descriptor["ensemble_members"]:
+            raise ValueError("requested ensemble member is unavailable")
+        cube_values = cube["values"][member]
+        cube_mask = cube["mask"][member]
+    else:
+        cube_values, cube_mask = cube["values"], cube["mask"]
     values = xr.DataArray(
-        np.where(cube["mask"], np.nan, cube["values"]),
+        np.where(cube_mask, np.nan, cube_values),
         dims=("lead_time", "y", "x"),
         coords={
             "lead_time": np.asarray(descriptor["lead_minutes"], dtype="timedelta64[m]"),
@@ -81,6 +88,7 @@ def visualization_field(directory, model_id):
                 "run_id": source.manifest["id"],
                 "sample_id": source.manifest["sample"]["sample_id"],
                 "forecast_sha256": descriptor["sha256"],
+                "ensemble_member": member if cube["values"].ndim == 4 else None,
             },
         )
     )

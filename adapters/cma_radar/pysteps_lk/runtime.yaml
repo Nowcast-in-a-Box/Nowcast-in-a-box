@@ -1,0 +1,23 @@
+schema: nib.resource.v1
+kind: model
+id: pysteps_lk
+product_ids: [pysteps-lk-cma]
+name: pySTEPS LK optical-flow baseline for CMA CREF
+weights:
+  # Compatibility marker for the current Handler.  This is an embedded
+  # algorithm manifest, not learned model weights.
+  file: algorithm-manifest.json
+  sha256: "ccf471fb208660e1f4fd66644f4b56db66cd2c429c92067a46a38df814170367"
+  embedded: true
+container:
+  image: nib-pysteps-lk:cma-1
+  build:
+    context: "."
+    dockerfile: adapters/cma_radar/pysteps_lk/Dockerfile
+  command: ["--run", "/run", "--algorithm-manifest", "/opt/nib/pysteps/algorithm-manifest.json"]
+  mounts:
+    - name: run
+      target: /run
+      write: true
+    - name: inputs
+      target: /run/inputs

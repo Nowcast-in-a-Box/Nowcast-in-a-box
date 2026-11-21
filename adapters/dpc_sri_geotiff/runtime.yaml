@@ -1,0 +1,21 @@
+schema: nib.resource.v1
+kind: data
+id: dpc_sri_geotiff
+product_id: dpc-sri-geotiff
+name: Italy DPC SRI GeoTIFF for IRENE
+data:
+  path: "."
+  kind: directory
+verification:
+  level_min: 0
+  level_max: 205.05
+  unit: mm/h
+container:
+  image: nib-ingestion:dpc-sri-geotiff-local
+  build:
+    context: "."
+    dockerfile: adapters/dpc_sri_geotiff/Dockerfile
+  entrypoint: ["--data", "/inputs/data"]
+  mounts:
+    - name: data
+      target: /inputs/data

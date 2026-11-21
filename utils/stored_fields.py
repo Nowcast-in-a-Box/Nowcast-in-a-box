@@ -55,6 +55,7 @@ def write_cube(
     init_time=None,
     leads=None,
     mask=None,
+    ensemble_members=None,
 ):
     from interfaces.fields import Observations
     from utils.model_contract import utc, validate_field
@@ -62,8 +63,29 @@ def write_cube(
     path = relative_path(Path(root), name)
     values = np.asarray(values, dtype=np.float32)
     mask = ~np.isfinite(values) if mask is None else np.asarray(mask)
-    field = Observations("", variable, unit, values, tuple(times), grid, mask)
-    parsed = validate_field(field)
+    if values.ndim == 4:
+        members = values.shape[0]
+        if members < 1:
+            raise ValueError("cube must contain at least one member")
+        if mask.shape != values.shape:
+            raise ValueError("field mask must match values")
+    else:
+        members = 1
+    if ensemble_members is not None and ensemble_members != members:
+        raise ValueError("ensemble_members disagrees with cube shape")
+    if values.ndim == 4:
+        parsed = validate_field(
+            Observations("", variable, unit, values[0], tuple(times), grid, mask[0])
+        )
+        for member in range(1, members):
+            validate_field(
+                Observations(
+                    "", variable, unit, values[member], tuple(times), grid, mask[member]
+                )
+            )
+    else:
+        field = Observations("", variable, unit, values, tuple(times), grid, mask)
+        parsed = validate_field(field)
     if init_time is not None:
         initial = utc(init_time)
         if (
@@ -92,6 +114,8 @@ def write_cube(
     }
     if init_time is not None:
         descriptor.update(init_time=init_time, lead_minutes=list(leads))
+    if values.ndim == 4:
+        descriptor["ensemble_members"] = members
     return descriptor
 
 
@@ -170,7 +194,8 @@ def add_forecast(directory, model_id, version, weight_sha256, forecast):
         raise ValueError("invalid model identity or weight digest")
     if not isinstance(forecast, Forecast):
         raise TypeError("add_forecast requires a physical Forecast")
-    validate_field(forecast)
+    if np.asarray(forecast.values).ndim != 4:
+        validate_field(forecast)
     access = StoredFields(directory)
     if access.legacy:
         raise ValueError("legacy runs are read-only; prepare a new nib.run.v2 run")
@@ -260,16 +285,31 @@ class StoredFields:
                 or descriptor["dtype"] != "float32"
             ):
                 raise ValueError("stored cube shape/dtype mismatch")
-            field = Observations(
-                self.manifest["data"]["id"],
-                descriptor["variable"],
-                descriptor["unit"],
-                cube["values"],
-                tuple(descriptor["times"]),
-                {**descriptor["grid"], "x": cube["x"], "y": cube["y"]},
-                cube["mask"],
-            )
-            times = validate_field(field)
+            grid = {**descriptor["grid"], "x": cube["x"], "y": cube["y"]}
+            members = descriptor.get("ensemble_members")
+            if members is not None:
+                if (
+                    members < 1
+                    or cube["values"].ndim != 4
+                    or cube["values"].shape[0] != members
+                ):
+                    raise ValueError("stored forecast ensemble shape mismatch")
+                slices = range(members)
+            else:
+                slices = (None,)
+            times = None
+            for member in slices:
+                field = Observations(
+                    self.manifest["data"]["id"],
+                    descriptor["variable"],
+                    descriptor["unit"],
+                    cube["values"][member] if member is not None else cube["values"],
+                    tuple(descriptor["times"]),
+                    grid,
+                    cube["mask"][member] if member is not None else cube["mask"],
+                )
+                member_times = validate_field(field)
+                times = member_times if times is None else times
             if self.legacy:
                 expected = (
                     ("CREF", "dBZ") if field.source == "cma_radar" else ("vil", "raw")
@@ -344,19 +384,25 @@ class StoredFields:
     def list_predictions(self, model_id, init_time):
         return self.forecast(model_id, init_time)["lead_minutes"]
 
-    def get_prediction(self, model_id, init_time, lead_minutes):
+    def get_prediction(self, model_id, init_time, lead_minutes, member=0):
         descriptor = self.forecast(model_id, init_time)
         try:
             index = descriptor["lead_minutes"].index(lead_minutes)
         except ValueError as exc:
             raise FieldUnavailable("forecast lead unavailable") from exc
-        return self.field(descriptor, index)
+        return self.field(descriptor, index, member=member)
 
-    def field(self, descriptor, index):
+    def field(self, descriptor, index, *, member=0):
         cube = self.cube(descriptor)
+        if cube["values"].ndim == 4:
+            if not 0 <= member < descriptor["ensemble_members"]:
+                raise FieldUnavailable("forecast member unavailable")
+            data, mask = cube["values"][member, index], cube["mask"][member, index]
+        else:
+            data, mask = cube["values"][index], cube["mask"][index]
         return {
-            "data": cube["values"][index],
-            "mask": cube["mask"][index],
+            "data": data,
+            "mask": mask,
             "x": cube["x"],
             "y": cube["y"],
             "grid": descriptor["grid"],

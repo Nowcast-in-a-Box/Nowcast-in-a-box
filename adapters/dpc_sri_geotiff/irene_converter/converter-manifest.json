@@ -1,0 +1,6 @@
+{
+  "id": "irene_geotiff_to_forecast",
+  "version": "0.1.0",
+  "input": "irene-geotiff-ensemble.v1",
+  "output": "nib-forecast-field-ensemble.v1"
+}
