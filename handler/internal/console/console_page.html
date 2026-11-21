@@ -353,6 +353,40 @@
   .diagnostic-fields > legend { font-size:12px; font-weight:600; color:var(--muted); }
   .diagnostic-fields .check-field label { font-weight:400; }
 
+  /* ------------------------------------------------------ number inputs */
+  #add-models { margin-top:8px; }
+  .token-control { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:42px; padding:6px 8px; border:1px solid var(--line-strong); border-radius:7px; background:#fff; transition:border-color .12s, box-shadow .12s; }
+  .token-control:focus-within { border-color:#78aaff; box-shadow:0 0 0 3px rgb(120 170 255 / 18%); }
+  .token-field.has-error .token-control { border-color:var(--red); }
+  .token-chips { display:flex; flex-wrap:wrap; gap:5px; }
+  .token-chip { display:inline-flex; align-items:center; gap:2px; min-height:26px; padding:2px 3px 2px 8px; border:1px solid #c9daf1; border-radius:5px; background:#f2f7ff; color:#164d98; font-size:12px; font-variant-numeric:tabular-nums; }
+  .token-remove { width:20px; height:20px; padding:0; border:0; border-radius:4px; background:transparent; color:#4d6b91; font:inherit; font-size:15px; line-height:1; cursor:pointer; }
+  .token-remove:hover { background:#dce9fb; color:#943b32; }
+  .token-entry { flex:1 1 76px; width:auto; min-width:76px; height:26px; padding:0 2px; border:0; outline:0; box-shadow:none; background:transparent; font:inherit; font-size:13px; color:var(--ink); }
+  .token-entry:focus-visible { outline:0; }
+  .token-entry::placeholder { color:#7a8ba1; }
+  .field-error { display:block; margin-top:5px; color:#943b32; font-size:12px; }
+  .field-error[hidden] { display:none; }
+
+  /* ------------------------------------------------------------ run detail */
+  .run-overview { display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px; margin:14px 0 4px; }
+  .run-flags { display:flex; flex-wrap:wrap; gap:6px; }
+  .run-flag { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border:1px solid var(--line); border-radius:999px; background:#fbfcfe; color:var(--muted); font-size:11.5px; }
+  .run-flag-label { color:var(--ink); font-weight:600; }
+  .run-flag--ok { border-color:#cfe7d8; background:#f4fbf6; color:#286448; }
+  .run-flag--fail { border-color:#e6c2be; background:#fff8f7; color:#943b32; }
+  .run-flag--active { border-color:#c9daf1; background:#f3f7fd; color:#164d98; }
+  .run-report { margin-left:auto; }
+  .check-strip { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 12px; }
+  .check-chip { display:inline-flex; align-items:center; gap:5px; min-height:28px; padding:3px 8px; border:1px solid #cfe7d8; border-radius:999px; background:#fbfefc; color:#245a3d; font-size:11.5px; line-height:1.3; }
+  .check-chip--fail { border-color:#e6c2be; background:#fff8f7; color:#943b32; }
+  .check-chip .check-icon { width:16px; height:16px; background:transparent; }
+  .check-chip--fail .check-icon { background:var(--red-soft); color:var(--red); }
+  .check-chip .check-icon svg { width:11px; height:11px; }
+  .run-meta { margin-top:12px; }
+  .run-meta > summary { padding:7px 0; color:var(--muted); font-size:12px; }
+  .run-meta p { margin:4px 0; color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  @media (max-width:680px) { .run-report { margin-left:0; } }
   /* --------------------------------------------------------- readiness */
   .check-summary { display:flex; align-items:center; gap:10px; margin:12px 0 10px; font-size:13px; }
   .check-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; font-size:11.5px; font-weight:600; background:var(--blue-soft); color:var(--blue); }
@@ -360,8 +394,8 @@
   .check-pill--fail { background:var(--red-soft); color:#943b32; }
   .check-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
   .check-card { display:grid; grid-template-columns:24px minmax(0,1fr); gap:9px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; }
-  .check-card--ok { border-left:3px solid var(--green); }
-  .check-card--fail { border-left:3px solid var(--red); background:#fff8f7; }
+  .check-card--ok { border-color:#cfe7d8; }
+  .check-card--fail { border-color:#e6c2be; background:#fff8f7; }
   .check-card--compact { padding:8px 10px; }
   .check-icon { display:flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--green-soft); color:#06733a; }
   .check-card--fail .check-icon { background:var(--red-soft); color:var(--red); }
@@ -378,7 +412,7 @@
   .validation-card h3 { margin:0; font-size:14px; }
   .validation-card p { margin:4px 0 0; color:#286448; font-size:12.5px; }
   .validation-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:12px; }
-  .validation-grid span { display:block; color:#4e6d5c; font-size:11px; text-transform:uppercase; letter-spacing:.4px; }
+  .validation-grid span { display:block; color:#4e6d5c; font-size:11px; }
   .validation-grid strong { display:block; margin-top:2px; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
 
   /* --------------------------------------------------------- run stages */
@@ -508,7 +542,7 @@
                 <span class="field-hint" id="sample-hint">Choose one or more runnable windows from the local dataset.</span>
               </div>
             </div>
-            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div></fieldset>
+            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div><button id="add-models" class="secondary table-button" type="button" hidden>Add model</button></fieldset>
             <fieldset id="order-region" hidden><legend>Region centre</legend><div class="parameter-grid">
               <div class="field"><label for="order-lon">Longitude (°E)</label><input id="order-lon" type="number" step="any"></div>
               <div class="field"><label for="order-lat">Latitude (°N)</label><input id="order-lat" type="number" step="any"></div>
@@ -636,7 +670,7 @@
         <div class="form-actions paging" aria-label="Run history pages"><button id="runs-prev" class="secondary" type="button" disabled>Previous</button><span id="runs-page" role="status"></span><button id="runs-next" class="secondary" type="button" disabled>Next</button></div>
         <section id="run-inspector" aria-labelledby="run-title" hidden>
           <h3 id="run-title" tabindex="-1">Run details</h3>
-          <p class="muted">Inputs are frozen. To change data, times, region or inference models, edit an order and start a new run.</p>
+          <p class="muted">Inputs are frozen. Start a new run to change them.</p>
           <div id="run-detail-error" role="status"></div>
           <div id="run-stage-timeline" class="stage-rail" aria-label="Run stages" hidden></div>
           <div id="run-summary"></div>
@@ -644,7 +678,7 @@
           <p id="repeat-status" role="status"></p>
           <details><summary>Frozen configuration and saved forecasts</summary><pre id="run-config" class="config-output"></pre></details>
           <h3>Diagnostics for this run</h3>
-          <p class="muted">Use saved forecasts from this run. Coverage is in the results viewer; “not probed” does not mean data is missing. Layers, display thresholds and playback are viewer controls.</p>
+          <p class="muted">Uses this run's saved forecasts. Coverage and layers are in the results viewer.</p>
           <form id="run-diagnostics-form"><div id="run-diagnostics"></div><button id="run-diagnostics-submit" class="primary" type="submit" disabled>Run diagnostics</button></form>
           <div id="run-diagnostics-status" role="status"></div>
           <h3>Operation history</h3><div id="run-operations"></div>
@@ -1140,6 +1174,7 @@ async function startOrder(order, button) {
       body: JSON.stringify({ revision: order.revision }),
     });
     startAttempts.delete(attemptId);
+    if ($("order-editor").open) $("order-editor").close();
     await filterRuns(id);
     if (result.id || result.job?.id) await openRun(result.id || result.job.id);
     await loadOrders();
@@ -1191,10 +1226,11 @@ async function saveOrder() {
       showOrder(null, order); markOrderDirty();
       $("editor-status").textContent = "Hub selection imported. Complete the sample times and save the order.";
     } else {
-      const detail = await api("/v1/orders", jsonRequest("POST", { yaml: content }));
-      if (orderOptions) showOrder(detail);
-      await loadOrders(); await filterRuns(detail.order_id);
-      errorBox.append(el("p", "Imported " + detail.order_id + "."));
+      const detail = await api("/v1/orders/validate", jsonRequest("POST", { yaml: content }));
+      if (!detail.order) throw new Error("The YAML order could not be read.");
+      showOrder(null, detail.order); markOrderDirty();
+      $("editor-status").textContent = "YAML imported as a draft. Save settings to keep it.";
+      errorBox.append(el("p", "Imported " + (detail.order.order_id || detail.order_id) + " as a draft."));
     }
     importFile = null; input.value = ""; $("file-name").textContent = "";
   } catch (cause) {
@@ -1202,7 +1238,7 @@ async function saveOrder() {
   } finally {
     input.disabled = false; button.disabled = !importFile; button.textContent = "Import file";
     editorBusy = false; syncEditorActions();
-    if (hub && !importFile) $("order-event").focus();
+    if (!importFile) $("order-event").focus();
   }
 }
 
@@ -1211,6 +1247,7 @@ const $ = id => document.getElementById(id);
 const jsonRequest = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 let orderOptions = null;
 let selectedOrder = null;
+let modelsExpanded = false;
 let editorDirty = false;
 let editorBusy = false;
 let editorGeneration = 0;
@@ -1382,6 +1419,71 @@ function defaultLevels(data) {
   if (standard.length) return standard;
   return Array.from({ length: 5 }, (_, index) => Number((min + (max - min) * (index + 1) / 6).toFixed(1)));
 }
+function tokenField({ id, title, values: initial, min, max, integers, hint }) {
+  const field = el("div"); field.className = "field token-field";
+  const label = el("label", title); label.htmlFor = id + "-entry";
+  const control = el("div"); control.className = "token-control";
+  const chips = el("div"); chips.className = "token-chips";
+  const entry = el("input"); entry.type = "text"; entry.id = id + "-entry"; entry.className = "token-entry"; entry.autocomplete = "off"; entry.inputMode = integers ? "numeric" : "decimal"; entry.placeholder = "Add value";
+  const hidden = el("input"); hidden.type = "hidden"; hidden.id = id;
+  const hintNode = el("span", hint); hintNode.className = "field-hint"; hintNode.id = id + "-hint";
+  const error = el("span"); error.className = "field-error"; error.id = id + "-error"; error.hidden = true;
+  entry.setAttribute("aria-describedby", hintNode.id + " " + error.id);
+  let values = [];
+  const setError = message => {
+    error.textContent = message || ""; error.hidden = !message; entry.setAttribute("aria-invalid", message ? "true" : "false");
+    field.classList.toggle("has-error", Boolean(message));
+  };
+  const sync = () => { hidden.value = values.join(","); };
+  const render = () => {
+    chips.replaceChildren();
+    for (const value of values) {
+      const chip = el("span"); chip.className = "token-chip";
+      const text = el("span", String(value)); text.className = "token-value";
+      const remove = el("button"); remove.type = "button"; remove.className = "token-remove"; remove.textContent = "×"; remove.setAttribute("aria-label", "Remove " + value);
+      remove.addEventListener("click", () => { values = values.filter(item => item !== value); render(); markOrderDirty(); entry.focus(); });
+      chip.append(text, remove); chips.append(chip);
+    }
+    sync();
+  };
+  const add = raw => {
+    const text = String(raw).trim().replace(/^[,\s]+|[,\s]+$/g, "");
+    if (!text) return true;
+    const value = Number(text);
+    if (!Number.isFinite(value)) { setError("Enter a number."); return false; }
+    if (integers && !Number.isInteger(value)) { setError("Use a whole number."); return false; }
+    if ((Number.isFinite(min) && value < min) || (Number.isFinite(max) && value > max)) { setError("Use " + (integers ? "a whole number" : "a number") + " from " + min + " to " + max + "."); return false; }
+    if (values.includes(value)) { setError(value + " is already listed."); return false; }
+    if (values.length >= 16) { setError("Up to 16 values."); return false; }
+    values.push(value); return true;
+  };
+  const commit = () => {
+    const pieces = entry.value.split(/[\s,]+/).filter(Boolean);
+    if (!pieces.length) { entry.value = ""; setError(""); return true; }
+    const failed = [];
+    for (const piece of pieces) if (!add(piece)) failed.push(piece);
+    entry.value = failed.join(", ");
+    setError(failed.length ? error.textContent : "");
+    render();
+    return failed.length === 0;
+  };
+  entry.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === "," || event.key === " ") {
+      event.preventDefault(); if (commit()) markOrderDirty();
+    } else if (event.key === "Backspace" && !entry.value && values.length) {
+      values.pop(); render(); markOrderDirty();
+    }
+  });
+  entry.addEventListener("input", () => { if (/[\s,]/.test(entry.value) && commit()) markOrderDirty(); });
+  entry.addEventListener("blur", () => { if (entry.value.trim()) { commit(); markOrderDirty(); } });
+  control.addEventListener("click", event => { if (event.target === control || event.target === chips) entry.focus(); });
+  for (const value of initial || []) add(value);
+  setError("");
+  field.append(label, control, hidden, hintNode, error);
+  control.append(chips, entry);
+  render();
+  return field;
+}
 function diagnosticFields(holderId, prefix, models, config, data) {
   const holder = $(holderId); holder.replaceChildren();
   const purpose = {
@@ -1413,19 +1515,13 @@ function diagnosticFields(holderId, prefix, models, config, data) {
       choices(methodList, prefix + "-methods", orderOptions.methods, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
       metrics.append(methodList); fields.append(metrics);
       const grid = el("div"); grid.className = "parameter-grid";
-      for (const [key, title] of [["levels", "Threshold levels"], ["half_windows", "Half-window sizes (grid cells)"]]) {
-        const field = el("div"); field.className = "field";
-        const input = el("input"); input.id = prefix + "-" + key; input.type = "text";
-        const defaults = key === "levels" ? defaultLevels(data) : [0, 2];
-        const current = config.verification?.[key];
-        input.value = (current?.length ? current : defaults).join(", ");
-        const label = el("label", title); label.htmlFor = input.id;
-        const hint = el("span", key === "levels" && data?.verification
-          ? "Comma-separated; " + data.verification.level_min + " to " + data.verification.level_max + " " + data.verification.unit + ". Required for threshold and FSS metrics."
-          : "Comma-separated integers from 0 to 16. Required for FSS.");
-        hint.className = "field-hint"; hint.id = input.id + "-hint"; input.setAttribute("aria-describedby", hint.id);
-        field.append(label, input, hint); grid.append(field);
-      }
+      const levelMin = data?.verification ? Number(data.verification.level_min) : 0;
+      const levelMax = data?.verification ? Number(data.verification.level_max) : 75;
+      const levelUnit = data?.verification?.unit || "dBZ";
+      grid.append(
+        tokenField({ id: prefix + "-levels", title: "Threshold levels", values: config.verification?.levels?.length ? config.verification.levels : defaultLevels(data), min: levelMin, max: levelMax, integers: false, hint: levelMin + " to " + levelMax + " " + levelUnit + "; used by threshold and FSS metrics." }),
+        tokenField({ id: prefix + "-half_windows", title: "Half-window sizes (grid cells)", values: config.verification?.half_windows?.length ? config.verification.half_windows : [0, 2], min: 0, max: 16, integers: true, hint: "Whole numbers 0 to 16; used by FSS." })
+      );
       fields.append(grid);
     } else {
       const hint = el("p", "Display layers and playback are configured in the results viewer."); hint.className = "field-hint"; fields.append(hint);
@@ -1474,10 +1570,22 @@ function readDiagnostics(prefix, eligible) {
   }
   return result;
 }
+function renderInferenceModels(order) {
+  const data = orderOptions.data.find(item => item.id === $("order-data").value);
+  if (!data) return;
+  const selected = order.models || [];
+  const available = data.models || [];
+  const known = selected.filter(id => available.some(item => item.id === id));
+  const visible = selected.length && known.length && !modelsExpanded ? available.filter(item => selected.includes(item.id)) : available;
+  choices($("order-models").querySelector(".choice-list"), "inference-models", visible, selected);
+  const add = $("add-models");
+  if (add) add.hidden = !selected.length || modelsExpanded || visible.length >= available.length;
+}
 function populateDataFields(order) {
   const data = orderOptions.data.find(item => item.id === $("order-data").value);
   if (!data) throw new Error("This data source is not available locally.");
-  choices($("order-models").querySelector(".choice-list"), "inference-models", data.models, order.models || []);
+  modelsExpanded = false;
+  renderInferenceModels(order);
   $("order-region").hidden = !data.region;
   for (const axis of ["lon", "lat"]) {
     const input = $("order-" + axis); input.required = Boolean(data.region); input.disabled = !data.region;
@@ -1501,17 +1609,20 @@ function syncDiagnosticModels() {
   const models = checked("inference-models");
   for (const kind of ["verification", "visualization"]) {
     for (const input of document.querySelectorAll('input[name="defaults-' + kind + '-models"]')) {
-      input.disabled = !models.includes(input.value);
-      if (input.disabled) input.checked = false;
+      const selected = models.includes(input.value);
+      input.disabled = !selected;
+      if (!selected) input.checked = false;
+      const field = input.closest(".check-field");
+      if (field) field.hidden = !selected;
     }
   }
 }
 function showOrder(detail, draft) {
-  selectedOrder = detail; editorDirty = false; editorGeneration++;
+  selectedOrder = detail; editorDirty = false; editorGeneration++; modelsExpanded = false;
   invalidatePreflight();
   const order = draft || detail?.order || { data_id: orderOptions.data[0]?.id, models: [] };
   if (!$("order-editor").open) $("order-editor").showModal();
-  $("editor-title").textContent = detail ? "Order settings · " + order.order_id : "Create an order";
+  $("editor-title").textContent = detail ? "Order settings · " + order.order_id : draft?.order_id ? "Imported draft · " + order.order_id : "Create an order";
   $("editor-revision").textContent = detail?.revision ? "Revision " + detail.revision : "Not saved";
   $("order-id").value = order.order_id || ""; $("order-id").readOnly = Boolean(detail);
   $("order-data").value = order.data_id;
@@ -1614,19 +1725,38 @@ async function openRun(id) {
   await loadRunDetail(id);
   $("run-title").focus();
 }
+function runFlag(label, value) {
+  const state = String(value || "not requested");
+  const flag = el("span"); flag.className = "run-flag";
+  if (["succeeded", "complete", "done"].includes(state)) flag.classList.add("run-flag--ok");
+  else if (state === "failed") flag.classList.add("run-flag--fail");
+  else if (["queued", "running", "pending"].includes(state)) flag.classList.add("run-flag--active");
+  const name = el("span", label); name.className = "run-flag-label";
+  flag.setAttribute("aria-label", label + ": " + state);
+  flag.append(name, el("span", state));
+  return flag;
+}
 async function loadRunDetail(id) {
   try {
     const run = await api("/v1/runs/" + encodeURIComponent(id));
     if (id !== selectedRunId) return;
     $("run-detail-error").replaceChildren();
-    const summary = $("run-summary"); summary.replaceChildren(statusBadge(run.status), el("p", "Revision: " + (run.revision || "legacy history")));
-    summary.append(el("p", "Inference: " + (run.inference_status || run.status) + " · Diagnostics: " + (run.diagnostics_status || "not requested")));
-    if (run.job?.error) summary.append(noteBlock(run.job.error));
+    const summary = $("run-summary"); summary.replaceChildren();
+    const overview = el("div"); overview.className = "run-overview";
+    overview.append(statusBadge(run.status));
+    const flags = el("div"); flags.className = "run-flags";
+    flags.append(runFlag("Inference", run.inference_status || run.status), runFlag("Diagnostics", run.diagnostics_status || "not requested"));
+    overview.append(flags);
     const report = reportEntry(run);
-    if (report) { const link = el("a", "Results & Coverage"); link.className = "secondary table-button"; link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; link.title = "Forecast metrics, coverage and data-arrival completeness"; summary.append(link); }
+    if (report) { const link = el("a", "Results & Coverage"); link.className = "secondary table-button run-report"; link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; link.title = "Forecast metrics, coverage and data-arrival completeness"; overview.append(link); }
+    summary.append(overview);
+    if (run.job?.error) summary.append(noteBlock(run.job.error));
     const runChecks = el("div"); summary.append(runChecks);
     renderRunStages(run);
     renderChecks(runChecks, run.job?.preflight || [], true);
+    const meta = el("details"); meta.className = "run-meta";
+    meta.append(el("summary", "Run details"), el("p", "Revision: " + (run.revision || "legacy history")));
+    summary.append(meta);
     $("repeat-inference").disabled = !run.order || repeatBusy || ["queued", "running"].includes(run.status);
     $("run-config").textContent = JSON.stringify({ order: run.order || null, request: run.job?.request, execution_context: run.job?.execution_context, revision: run.revision, forecasts: run.forecasts, samples: run.samples }, null, 2);
     const operations = run.operations?.length ? run.operations : run.operation ? [run.operation] : [];
@@ -2053,6 +2183,18 @@ function renderChecks(holder, checks, compact) {
   holder.replaceChildren();
   if (!checks.length) return;
   const shown = displayChecks(checks);
+  if (compact) {
+    const strip = el("div"); strip.className = "check-strip";
+    for (const check of shown) {
+      const chip = el("span"); chip.className = "check-chip " + (check.ok ? "check-chip--ok" : "check-chip--fail");
+      const mark = el("span"); mark.className = "check-icon"; mark.append(checkMark(check.ok));
+      const text = check.ok ? (check.short || checkDetail(check)) : (check.message || "Failed");
+      chip.append(mark, el("span", checkLabel(check.id) + " · " + text));
+      chip.title = checkLabel(check.id) + ": " + checkDetail(check);
+      strip.append(chip);
+    }
+    holder.append(strip); return;
+  }
   const passed = shown.filter(check => check.ok).length;
   const summary = el("div"); summary.className = "check-summary";
   const pill = el("span", passed + " / " + shown.length + " passed"); pill.className = "check-pill " + (passed === shown.length ? "check-pill--ok" : "check-pill--fail");
@@ -2324,6 +2466,15 @@ $("order-form").addEventListener("input", markOrderDirty);
 $("order-form").addEventListener("change", markOrderDirty);
 $("order-form").addEventListener("submit", event => { event.preventDefault(); submitOrder(false); });
 $("order-data").addEventListener("change", () => { populateDataFields({}); markOrderDirty(); });
+$("add-models").addEventListener("click", () => {
+  const data = orderOptions?.data.find(item => item.id === $("order-data").value);
+  if (!data) return;
+  const selected = checked("inference-models");
+  modelsExpanded = true;
+  choices($("order-models").querySelector(".choice-list"), "inference-models", data.models, selected);
+  $("add-models").hidden = true;
+  syncDiagnosticModels();
+});
 $("order-event").addEventListener("change", () => { const dataId = $("order-data").value, eventId = $("order-event").value; if (dataId && eventId) void loadSampleDay(dataId, eventId, new Set()); markOrderDirty(); });
 $("order-models").addEventListener("change", syncDiagnosticModels);
 $("validate-order").addEventListener("click", () => submitOrder(true));
