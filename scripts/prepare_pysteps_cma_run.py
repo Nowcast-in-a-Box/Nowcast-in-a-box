@@ -24,7 +24,9 @@ from scripts.test_pysteps_cma import load_window
 from utils.stored_fields import create_run
 
 
-def _run_window(raw_window: dict, bbox: tuple[float, float, float, float]) -> tuple[dict, dict]:
+def _run_window(
+    raw_window: dict, bbox: tuple[float, float, float, float]
+) -> tuple[dict, dict]:
     """Make a StoredFields window and an EPSG:4326 grid from one CMA window.
 
     CMA files enumerate latitude north-to-south.  StoredFields requires
@@ -101,8 +103,12 @@ def main() -> None:
         metavar=("WEST", "SOUTH", "EAST", "NORTH"),
         help="CMA crop in longitude/latitude degrees",
     )
-    parser.add_argument("--runs", required=True, help="Existing directory holding NiB runs")
-    parser.add_argument("--id", required=True, help="New run ID: letters, digits, _ and - only")
+    parser.add_argument(
+        "--runs", required=True, help="Existing directory holding NiB runs"
+    )
+    parser.add_argument(
+        "--id", required=True, help="New run ID: letters, digits, _ and - only"
+    )
     parser.add_argument(
         "--atlas-revision",
         default="local-pysteps-cma-bridge-v1",

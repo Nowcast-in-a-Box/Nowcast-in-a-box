@@ -66,8 +66,12 @@ def main() -> None:
     vmin, vmax = max(0.0, vmin), max(1.0, vmax)
     extent = _extent(target)
     figure, axes = plt.subplots(
-        2, len(lead_indices), figsize=(3.5 * len(lead_indices), 6.2),
-        constrained_layout=True, sharex=True, sharey=True,
+        2,
+        len(lead_indices),
+        figsize=(3.5 * len(lead_indices), 6.2),
+        constrained_layout=True,
+        sharex=True,
+        sharey=True,
     )
     if len(lead_indices) == 1:
         axes = np.asarray(axes).reshape(2, 1)
@@ -77,8 +81,13 @@ def main() -> None:
             (("CMA observation", target), ("pySTEPS LK forecast", forecast))
         ):
             image = axes[row, column].imshow(
-                cube["values"][index], origin="lower", extent=extent,
-                cmap="turbo", vmin=vmin, vmax=vmax, aspect="equal",
+                cube["values"][index],
+                origin="lower",
+                extent=extent,
+                cmap="turbo",
+                vmin=vmin,
+                vmax=vmax,
+                aspect="equal",
             )
             axes[row, column].set_title(f"{label}: +{lead} min", fontsize=10)
             axes[row, column].set_xlabel("Longitude (°E)")

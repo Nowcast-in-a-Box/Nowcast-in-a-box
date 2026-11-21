@@ -28,8 +28,13 @@ def _short_time(value: str) -> str:
 
 def _plot_image(ax, field: np.ndarray, title: str, *, vmax: float):
     image = ax.imshow(
-        field, origin="lower", cmap="turbo", vmin=0.0, vmax=vmax,
-        interpolation="nearest", aspect="equal",
+        field,
+        origin="lower",
+        cmap="turbo",
+        vmin=0.0,
+        vmax=vmax,
+        interpolation="nearest",
+        aspect="equal",
     )
     ax.set_title(title, fontsize=8.5)
     ax.set_xticks([])
@@ -107,7 +112,9 @@ def main() -> None:
     for index in range(context.shape[0]):
         axis = figure.add_subplot(grid[0, index])
         image = _plot_image(
-            axis, context[index], f"Input {index + 1}\\n{_short_time(context_times[index])}",
+            axis,
+            context[index],
+            f"Input {index + 1}\\n{_short_time(context_times[index])}",
             vmax=vmax,
         )
     # The seventh position is reserved for the colour bar.
@@ -115,13 +122,17 @@ def main() -> None:
         for member in range(members):
             axis = figure.add_subplot(grid[row, member])
             image = _plot_image(
-                axis, forecast[member, lead_index],
-                f"Member {member + 1}  +{lead_minutes[lead_index]} min", vmax=vmax,
+                axis,
+                forecast[member, lead_index],
+                f"Member {member + 1}  +{lead_minutes[lead_index]} min",
+                vmax=vmax,
             )
         axis = figure.add_subplot(grid[row, 4])
         image = _plot_image(
-            axis, np.nanmean(forecast[:, lead_index], axis=0),
-            f"Ensemble mean  +{lead_minutes[lead_index]} min", vmax=vmax,
+            axis,
+            np.nanmean(forecast[:, lead_index], axis=0),
+            f"Ensemble mean  +{lead_minutes[lead_index]} min",
+            vmax=vmax,
         )
         axis = figure.add_subplot(grid[row, 5])
         axis.axis("off")
@@ -134,34 +145,52 @@ def main() -> None:
         f"Init: {_short_time(access.manifest['sample']['init_time'])}  |  "
         f"{members} members × {leads} leads  |  shared scale: 0–{vmax:.2f} mm/h"
         f"{location}",
-        fontsize=15, fontweight="bold",
+        fontsize=15,
+        fontweight="bold",
     )
     overview_path = output_dir / "input_and_ensemble_overview.png"
     figure.savefig(overview_path, dpi=180, bbox_inches="tight")
     plt.close(figure)
 
     # Page 2: mean and spread make member agreement visible at the same leads.
-    figure, axes = plt.subplots(2, len(selected), figsize=(14, 6), constrained_layout=True)
+    figure, axes = plt.subplots(
+        2, len(selected), figsize=(14, 6), constrained_layout=True
+    )
     if len(selected) == 1:
         axes = np.asarray(axes).reshape(2, 1)
     spread_max = max(0.1, float(np.nanpercentile(np.nanstd(forecast, axis=0), 99.5)))
     for column, lead_index in enumerate(selected):
         _plot_image(
-            axes[0, column], np.nanmean(forecast[:, lead_index], axis=0),
-            f"Mean  +{lead_minutes[lead_index]} min", vmax=vmax,
+            axes[0, column],
+            np.nanmean(forecast[:, lead_index], axis=0),
+            f"Mean  +{lead_minutes[lead_index]} min",
+            vmax=vmax,
         )
         spread_image = axes[1, column].imshow(
-            np.nanstd(forecast[:, lead_index], axis=0), origin="lower", cmap="magma",
-            vmin=0.0, vmax=spread_max, interpolation="nearest", aspect="equal",
+            np.nanstd(forecast[:, lead_index], axis=0),
+            origin="lower",
+            cmap="magma",
+            vmin=0.0,
+            vmax=spread_max,
+            interpolation="nearest",
+            aspect="equal",
         )
-        axes[1, column].set_title(f"Member spread  +{lead_minutes[lead_index]} min", fontsize=9)
+        axes[1, column].set_title(
+            f"Member spread  +{lead_minutes[lead_index]} min", fontsize=9
+        )
         axes[1, column].set_xticks([])
         axes[1, column].set_yticks([])
-    mean_bar = figure.colorbar(axes[0, 0].images[0], ax=axes[0, :], shrink=0.8, pad=0.02)
+    mean_bar = figure.colorbar(
+        axes[0, 0].images[0], ax=axes[0, :], shrink=0.8, pad=0.02
+    )
     mean_bar.set_label("Mean rain rate (mm/h)")
     spread_bar = figure.colorbar(spread_image, ax=axes[1, :], shrink=0.8, pad=0.02)
     spread_bar.set_label("Member standard deviation (mm/h)")
-    figure.suptitle("IRENE ensemble summary — mean and member spread", fontsize=14, fontweight="bold")
+    figure.suptitle(
+        "IRENE ensemble summary — mean and member spread",
+        fontsize=14,
+        fontweight="bold",
+    )
     summary_path = output_dir / "ensemble_mean_and_spread.png"
     figure.savefig(summary_path, dpi=180, bbox_inches="tight")
     plt.close(figure)

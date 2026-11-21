@@ -18,7 +18,8 @@ from interfaces.model import (
     WeightSpec,
 )
 
-from .model import MODEL_ID, MODEL_VERSION, predict as pysteps_predict
+from .model import MODEL_ID, MODEL_VERSION
+from .model import predict as pysteps_predict
 
 _MANIFEST = Path(__file__).with_name("algorithm-manifest.json")
 _MANIFEST_SHA256 = hashlib.sha256(_MANIFEST.read_bytes()).hexdigest()

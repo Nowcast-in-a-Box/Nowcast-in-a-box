@@ -32,7 +32,10 @@ def main() -> None:
         product_type="SRI",
         cache=args.cache_dir,
         retry=RetryPolicy(
-            timeout_seconds=60, attempts=3, retry_delay_seconds=5, max_retry_delay_seconds=30
+            timeout_seconds=60,
+            attempts=3,
+            retry_delay_seconds=5,
+            max_retry_delay_seconds=30,
         ),
         filename=product.filename,
         verify=product.validate,

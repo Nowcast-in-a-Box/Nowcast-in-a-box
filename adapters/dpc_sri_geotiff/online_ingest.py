@@ -20,7 +20,13 @@ from irene_nowcast.source import DpcRadarApi
 from nowcast_runtime.builtin.sources import RetryPolicy
 from nowcast_runtime.ports import Observation
 
-from adapters.dpc_sri_geotiff.ingest import CADENCE_MINUTES, CONTEXT_STEPS, create, stamp, utc
+from adapters.dpc_sri_geotiff.ingest import (
+    CADENCE_MINUTES,
+    CONTEXT_STEPS,
+    create,
+    stamp,
+    utc,
+)
 
 
 def download_window(
@@ -44,12 +50,17 @@ def download_window(
     if anchor is None:
         raise RuntimeError("DPC API returned no latest SRI timestamp")
     anchor = anchor.astimezone(run_time.tzinfo if run_time else anchor.tzinfo)
-    moments = [anchor - timedelta(minutes=CADENCE_MINUTES * step) for step in reversed(range(count))]
+    moments = [
+        anchor - timedelta(minutes=CADENCE_MINUTES * step)
+        for step in reversed(range(count))
+    ]
     for moment in moments:
         name = product.filename(moment)
         # The location is only provenance for DpcRadarApi.fetch; it contains no
         # pre-signed transfer credential and is never written to the NiB run.
-        source.fetch(Observation(time=moment, name=name, location=f"dpc/SRI/{stamp(moment)}"))
+        source.fetch(
+            Observation(time=moment, name=name, location=f"dpc/SRI/{stamp(moment)}")
+        )
     source.prune(timedelta(hours=24))
     return source._directory, anchor
 
@@ -70,10 +81,7 @@ def main() -> None:
     # create() expects the first time of the six-frame input window.
     start = anchor - timedelta(minutes=CADENCE_MINUTES * (CONTEXT_STEPS - 1))
     directory = create(source_directory, args.runs, args.id, start, args.atlas_revision)
-    print(
-        f"Downloaded DPC window ending {stamp(anchor)} and created "
-        f"{directory}"
-    )
+    print(f"Downloaded DPC window ending {stamp(anchor)} and created {directory}")
 
 
 if __name__ == "__main__":

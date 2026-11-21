@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -85,8 +85,7 @@ def load_window(
     )
     bundle = ADAPTER.load(request)
     expected_times = [
-        _stamp(first + timedelta(minutes=CADENCE_MINUTES * i))
-        for i in range(count)
+        _stamp(first + timedelta(minutes=CADENCE_MINUTES * i)) for i in range(count)
     ]
     if sorted(bundle["data"]) != expected_times:
         raise ValueError("CMA DataBundle timestamps do not match requested window")
@@ -134,9 +133,21 @@ def per_lead_scores(
         delta = pred[valid].astype(np.float64) - obs[valid].astype(np.float64)
         metrics["mae_dbz"].append(float(np.mean(np.abs(delta))))
         metrics["rmse_dbz"].append(float(np.sqrt(np.mean(delta**2))))
-        hits = int(np.count_nonzero((pred[valid] >= threshold_dbz) & (obs[valid] >= threshold_dbz)))
-        false_alarm = int(np.count_nonzero((pred[valid] >= threshold_dbz) & (obs[valid] < threshold_dbz)))
-        misses = int(np.count_nonzero((pred[valid] < threshold_dbz) & (obs[valid] >= threshold_dbz)))
+        hits = int(
+            np.count_nonzero(
+                (pred[valid] >= threshold_dbz) & (obs[valid] >= threshold_dbz)
+            )
+        )
+        false_alarm = int(
+            np.count_nonzero(
+                (pred[valid] >= threshold_dbz) & (obs[valid] < threshold_dbz)
+            )
+        )
+        misses = int(
+            np.count_nonzero(
+                (pred[valid] < threshold_dbz) & (obs[valid] >= threshold_dbz)
+            )
+        )
         denom = hits + false_alarm + misses
         metrics["csi"].append(float(hits / denom) if denom else None)
     return metrics
@@ -158,44 +169,78 @@ def plot_results(
     from PIL import Image, ImageDraw
 
     cmap = plt.get_cmap("turbo")
-    plot_indices = sorted(set([0, max(0, len(leads) // 4 - 1),
-                              max(0, len(leads) // 2 - 1), len(leads) - 1]))
-    fig, axes = plt.subplots(2, len(plot_indices), figsize=(3.7 * len(plot_indices), 7), squeeze=False)
+    plot_indices = sorted(
+        set(
+            [
+                0,
+                max(0, len(leads) // 4 - 1),
+                max(0, len(leads) // 2 - 1),
+                len(leads) - 1,
+            ]
+        )
+    )
+    fig, axes = plt.subplots(
+        2, len(plot_indices), figsize=(3.7 * len(plot_indices), 7), squeeze=False
+    )
     for j, idx in enumerate(plot_indices):
-        for row, (label, frames) in enumerate((("Observation", target), ("pySTEPS LK", forecast))):
+        for row, (label, frames) in enumerate(
+            (("Observation", target), ("pySTEPS LK", forecast))
+        ):
             ax = axes[row, j]
             image = ax.imshow(frames[idx], origin="upper", cmap=cmap, vmin=0, vmax=60)
             ax.set_title(f"{label}: +{int(leads[idx])} min")
             ax.axis("off")
-    fig.colorbar(image, ax=axes.ravel().tolist(), fraction=0.02, pad=0.02, label="CREF (dBZ)")
+    fig.colorbar(
+        image, ax=axes.ravel().tolist(), fraction=0.02, pad=0.02, label="CREF (dBZ)"
+    )
     fig.savefig(output_dir / "comparison.png", dpi=145, bbox_inches="tight")
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(7.5, 6))
     ax.imshow(context[-1], origin="upper", cmap=cmap, vmin=0, vmax=60)
     interval = max(1, int(min(context.shape[1:]) // 18))
-    yy, xx = np.mgrid[0:context.shape[1], 0:context.shape[2]]
+    yy, xx = np.mgrid[0 : context.shape[1], 0 : context.shape[2]]
     view = (slice(None, None, interval), slice(None, None, interval))
     if np.any(np.abs(velocity) > 1e-8):
-        ax.quiver(xx[view], yy[view], velocity[0][view], velocity[1][view],
-                  color="white", scale=None, width=0.003)
+        ax.quiver(
+            xx[view],
+            yy[view],
+            velocity[0][view],
+            velocity[1][view],
+            color="white",
+            scale=None,
+            width=0.003,
+        )
     else:
-        ax.text(0.5, 0.05, "No detectable motion", color="white",
-                transform=ax.transAxes, ha="center", va="bottom",
-                bbox={"facecolor": "black", "alpha": 0.7})
+        ax.text(
+            0.5,
+            0.05,
+            "No detectable motion",
+            color="white",
+            transform=ax.transAxes,
+            ha="center",
+            va="bottom",
+            bbox={"facecolor": "black", "alpha": 0.7},
+        )
     ax.set_title("Official pySTEPS LK: estimated motion (pixels / 6 min)")
     ax.axis("off")
     fig.savefig(output_dir / "motion.png", dpi=145, bbox_inches="tight")
     plt.close(fig)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    axes[0].plot(leads, [np.nan if x is None else x for x in scores["mae_dbz"]], label="MAE")
-    axes[0].plot(leads, [np.nan if x is None else x for x in scores["rmse_dbz"]], label="RMSE")
+    axes[0].plot(
+        leads, [np.nan if x is None else x for x in scores["mae_dbz"]], label="MAE"
+    )
+    axes[0].plot(
+        leads, [np.nan if x is None else x for x in scores["rmse_dbz"]], label="RMSE"
+    )
     axes[0].set(ylabel="dBZ", xlabel="Lead time (min)", title="Deterministic error")
     axes[0].legend()
     axes[0].grid(alpha=0.2)
     axes[1].plot(leads, [np.nan if x is None else x for x in scores["csi"]])
-    axes[1].set(xlabel="Lead time (min)", ylabel="CSI", ylim=(0, 1), title="CSI @ 20 dBZ")
+    axes[1].set(
+        xlabel="Lead time (min)", ylabel="CSI", ylim=(0, 1), title="CSI @ 20 dBZ"
+    )
     axes[1].grid(alpha=0.2)
     fig.tight_layout()
     fig.savefig(output_dir / "metrics.png", dpi=145)
@@ -208,14 +253,20 @@ def plot_results(
         # Enlarge small radar crops for visibility, no change to saved data.
         if image.width < 320:
             factor = max(1, int(np.ceil(320 / image.width)))
-            image = image.resize((image.width * factor, image.height * factor), Image.Resampling.NEAREST)
+            image = image.resize(
+                (image.width * factor, image.height * factor), Image.Resampling.NEAREST
+            )
         draw = ImageDraw.Draw(image)
         draw.rectangle((0, 0, 160, 22), fill="black")
         draw.text((7, 5), f"pySTEPS +{int(lead)} min", fill="white")
         gif_frames.append(image)
     gif_frames[0].save(
-        output_dir / "forecast.gif", save_all=True, append_images=gif_frames[1:],
-        duration=250, loop=0, optimize=False,
+        output_dir / "forecast.gif",
+        save_all=True,
+        append_images=gif_frames[1:],
+        duration=250,
+        loop=0,
+        optimize=False,
     )
 
 
@@ -247,10 +298,14 @@ def run(args: argparse.Namespace) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
 
     np.savez_compressed(
-        dest / "forecast.npz", forecast=forecast, velocity=velocity,
-        context=context, target=window["target"],
+        dest / "forecast.npz",
+        forecast=forecast,
+        velocity=velocity,
+        context=context,
+        target=window["target"],
         lead_minutes=window["lead_minutes"],
-        longitude=window["longitude"], latitude=window["latitude"],
+        longitude=window["longitude"],
+        latitude=window["latitude"],
     )
     metadata = {
         "model": "official pySTEPS Lucas-Kanade + semi-Lagrangian extrapolation",
@@ -277,8 +332,15 @@ def run(args: argparse.Namespace) -> Path:
         json.dumps(metadata, indent=2, ensure_ascii=False, allow_nan=False),
         encoding="utf-8",
     )
-    plot_results(dest, context, window["target"], forecast, velocity,
-                 window["lead_minutes"], scores)
+    plot_results(
+        dest,
+        context,
+        window["target"],
+        forecast,
+        velocity,
+        window["lead_minutes"],
+        scores,
+    )
     print(f"Saved official pySTEPS forecast and figures: {dest.resolve()}")
     return dest
 
@@ -287,13 +349,32 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="NiB CMA DataBundle -> official pySTEPS 1.21.5 LK -> 20-step CREF extrapolation (no Docker/Hub)"
     )
-    parser.add_argument("--data-dir", required=True, help="Directory with CMA CREF .bin files")
-    parser.add_argument("--start", default="2024-07-05T00:00:00Z", help="First of 6 context frames (UTC)")
-    parser.add_argument("--bbox", type=float, nargs=4, metavar=("W", "S", "E", "N"),
-                        default=(117.0, 31.0, 119.0, 33.0),
-                        help="Radar crop [west south east north] in degrees")
-    parser.add_argument("--output-dir", default="runs/local-pysteps-lk-cma-20240705", help="Result directory")
-    parser.add_argument("--check-data", action="store_true", help="Read/validate 26 CMA frames; do not require pySTEPS")
+    parser.add_argument(
+        "--data-dir", required=True, help="Directory with CMA CREF .bin files"
+    )
+    parser.add_argument(
+        "--start",
+        default="2024-07-05T00:00:00Z",
+        help="First of 6 context frames (UTC)",
+    )
+    parser.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        metavar=("W", "S", "E", "N"),
+        default=(117.0, 31.0, 119.0, 33.0),
+        help="Radar crop [west south east north] in degrees",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="runs/local-pysteps-lk-cma-20240705",
+        help="Result directory",
+    )
+    parser.add_argument(
+        "--check-data",
+        action="store_true",
+        help="Read/validate 26 CMA frames; do not require pySTEPS",
+    )
     args = parser.parse_args()
     run(args)
 

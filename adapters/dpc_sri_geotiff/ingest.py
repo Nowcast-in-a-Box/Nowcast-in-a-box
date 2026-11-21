@@ -17,8 +17,8 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
-from rasterio.windows import Window
 from rasterio.warp import transform_bounds
+from rasterio.windows import Window
 
 from utils.stored_fields import create_run
 
@@ -66,7 +66,12 @@ def validate_window(window: Window) -> Window:
         raise ValueError("IRENE crop offsets and dimensions must be integer pixels")
     if window.col_off < 0 or window.row_off < 0:
         raise ValueError("IRENE crop offsets must be non-negative")
-    if window.width < 32 or window.height < 32 or window.width % 32 or window.height % 32:
+    if (
+        window.width < 32
+        or window.height < 32
+        or window.width % 32
+        or window.height % 32
+    ):
         raise ValueError("IRENE crop width and height must be positive multiples of 32")
     return window
 
@@ -82,7 +87,9 @@ def window_from_grid(grid: dict) -> Window:
     # DPC native outer grid: west=-600 km, north=650 km, north-first rows.
     col = round((x[0] - 500.0 + 600000.0) / 1000.0)
     row = round((650000.0 - (y[-1] + 500.0)) / 1000.0)
-    return validate_window(Window(col_off=col, row_off=row, width=len(x), height=len(y)))
+    return validate_window(
+        Window(col_off=col, row_off=row, width=len(x), height=len(y))
+    )
 
 
 def irene_config(grid: dict) -> dict:
@@ -120,8 +127,12 @@ def domain_metadata(grid: dict) -> dict:
     config = irene_config(grid)
     projected = dict(config["domain"])
     west, south, east, north = transform_bounds(
-        grid["crs"], "EPSG:4326",
-        projected["west"], projected["south"], projected["east"], projected["north"],
+        grid["crs"],
+        "EPSG:4326",
+        projected["west"],
+        projected["south"],
+        projected["east"],
+        projected["north"],
         densify_pts=21,
     )
     return {
@@ -149,7 +160,9 @@ def scans(data: Path) -> dict[datetime, Path]:
         match = NAME.match(path.name)
         if match is None:
             continue
-        time = datetime.strptime(match["stamp"], "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
+        time = datetime.strptime(match["stamp"], "%Y%m%d%H%M").replace(
+            tzinfo=timezone.utc
+        )
         if time in result:
             raise ValueError(f"duplicate DPC scan time {stamp(time)}")
         result[time] = path
@@ -163,7 +176,10 @@ def available_starts(data: Path) -> list[datetime]:
     return [
         start
         for start in sorted(index)
-        if all(start + timedelta(minutes=CADENCE_MINUTES * i) in index for i in range(CONTEXT_STEPS))
+        if all(
+            start + timedelta(minutes=CADENCE_MINUTES * i) in index
+            for i in range(CONTEXT_STEPS)
+        )
     ]
 
 
@@ -198,7 +214,10 @@ def _read_crop(path: Path, window: Window = IRENE_WINDOW) -> tuple[np.ndarray, d
     with rasterio.open(path) as source:
         if source.count != 1 or source.crs is None:
             raise ValueError(f"{path.name} must be a one-band GeoTIFF with a CRS")
-        if source.width < window.col_off + window.width or source.height < window.row_off + window.height:
+        if (
+            source.width < window.col_off + window.width
+            or source.height < window.row_off + window.height
+        ):
             raise ValueError(f"{path.name} does not cover the requested IRENE domain")
         transform = source.window_transform(window)
         values = source.read(1, window=window).astype(np.float32, copy=False)
@@ -206,7 +225,11 @@ def _read_crop(path: Path, window: Window = IRENE_WINDOW) -> tuple[np.ndarray, d
             values = np.where(values == source.nodata, np.nan, values)
     x = transform.c + (np.arange(values.shape[1], dtype=np.float64) + 0.5) * transform.a
     y = transform.f + (np.arange(values.shape[0], dtype=np.float64) + 0.5) * transform.e
-    return np.flipud(values).copy(), {"crs": source.crs.to_wkt(), "x": x, "y": y[::-1].copy()}
+    return np.flipud(values).copy(), {
+        "crs": source.crs.to_wkt(),
+        "x": x,
+        "y": y[::-1].copy(),
+    }
 
 
 def create(
@@ -220,7 +243,10 @@ def create(
     crop_window: Window | None = None,
 ) -> Path:
     index = scans(data)
-    times = [start + timedelta(minutes=CADENCE_MINUTES * step) for step in range(CONTEXT_STEPS)]
+    times = [
+        start + timedelta(minutes=CADENCE_MINUTES * step)
+        for step in range(CONTEXT_STEPS)
+    ]
     missing = [stamp(item) for item in times if item not in index]
     if missing:
         raise FileNotFoundError("missing consecutive DPC scans: " + ", ".join(missing))
@@ -230,7 +256,11 @@ def create(
         field, next_grid = _read_crop(index[time], crop_window)
         if grid is None:
             grid = next_grid
-        elif grid["crs"] != next_grid["crs"] or not np.array_equal(grid["x"], next_grid["x"]) or not np.array_equal(grid["y"], next_grid["y"]):
+        elif (
+            grid["crs"] != next_grid["crs"]
+            or not np.array_equal(grid["x"], next_grid["x"])
+            or not np.array_equal(grid["y"], next_grid["y"])
+        ):
             raise ValueError("DPC scans disagree on the default IRENE crop grid")
         fields.append(field)
     assert grid is not None
@@ -252,10 +282,14 @@ def create(
             "adapter": "dpc_sri_geotiff",
             "native_input": "six complete DPC SRI GeoTIFF scans",
             "model_domain": domain,
-            "source_files": [str(index[item].relative_to(data)).replace("\\", "/") for item in times],
+            "source_files": [
+                str(index[item].relative_to(data)).replace("\\", "/") for item in times
+            ],
         },
     }
-    directory = create_run(runs, run_id, run_window, grid, atlas_revision=atlas_revision)
+    directory = create_run(
+        runs, run_id, run_window, grid, atlas_revision=atlas_revision
+    )
     raw = directory / "inputs" / "dpc"
     raw.mkdir(parents=True)
     for time in times:
@@ -274,7 +308,9 @@ def main() -> None:
     parser.add_argument("--id", required=True)
     parser.add_argument("--atlas-revision", required=True)
     parser.add_argument(
-        "--domain-size", type=int, default=256,
+        "--domain-size",
+        type=int,
+        default=256,
         help="Square centred IRENE domain; multiple of 32, default 256",
     )
     parser.add_argument("--window-col", type=int, help="DPC native crop column offset")
@@ -293,8 +329,15 @@ def main() -> None:
     start = utc(args.start)
     if args.event and args.event != start.strftime("%Y%m%d"):
         parser.error("event must match the first DPC scan date")
-    requested = (args.window_col, args.window_row, args.window_width, args.window_height)
-    if any(value is not None for value in requested) and any(value is None for value in requested):
+    requested = (
+        args.window_col,
+        args.window_row,
+        args.window_width,
+        args.window_height,
+    )
+    if any(value is not None for value in requested) and any(
+        value is None for value in requested
+    ):
         parser.error("specify all four --window-col/row/width/height values together")
     crop_window = None
     if all(value is not None for value in requested):
@@ -305,11 +348,23 @@ def main() -> None:
             height=args.window_height,
         )
     directory = create(
-        args.data, args.runs, args.id, start, args.atlas_revision,
+        args.data,
+        args.runs,
+        args.id,
+        start,
+        args.atlas_revision,
         domain_size=args.domain_size,
         crop_window=crop_window,
     )
-    print(json.dumps({"run_id": args.id, "directory": str(directory), "sample_id": f"dpc-sri@{stamp(start)}"}))
+    print(
+        json.dumps(
+            {
+                "run_id": args.id,
+                "directory": str(directory),
+                "sample_id": f"dpc-sri@{stamp(start)}",
+            }
+        )
+    )
 
 
 if __name__ == "__main__":
