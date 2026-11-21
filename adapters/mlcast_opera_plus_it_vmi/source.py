@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from adapters.mlcast_common import MLCastZarrSource
 from interfaces.data import ChannelSpec, DataCapabilities, SpatialSpec, VariableSpec
+from utils.mlcast_zarr import MLCastZarrSource
 
 
 class Source(MLCastZarrSource):
@@ -14,9 +14,7 @@ class Source(MLCastZarrSource):
         instrument="radar composite",
         channels=ChannelSpec(
             mode="closed",
-            variables=(
-                VariableSpec("vmi", "vertical_maximum_intensity", "dBZ"),
-            ),
+            variables=(VariableSpec("vmi", "vertical_maximum_intensity", "dBZ"),),
         ),
         spatial=SpatialSpec(crop=True),
         native_cadence_minutes=5,
