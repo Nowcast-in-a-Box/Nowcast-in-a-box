@@ -39,6 +39,11 @@ record() { # name, status
     return 0
 }
 
+echo "== Ruff =="
+if "$PY" -m ruff format --check .; then record "ruff format" "PASS"; else record "ruff format" "FAIL"; fi
+if "$PY" -m ruff check .; then record "ruff check" "PASS"; else record "ruff check" "FAIL"; fi
+echo
+
 echo "== go vet =="
 if go vet ./...; then record "go vet" "PASS"; else record "go vet" "FAIL"; fi
 

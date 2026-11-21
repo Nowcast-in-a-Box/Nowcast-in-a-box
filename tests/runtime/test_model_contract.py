@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 from datetime import timedelta
-import json
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +31,7 @@ class Declaration(DeclaredModelAdapter):
 
 @pytest.mark.parametrize(
     "path",
-    sorted((ROOT / "contracts/models").glob("*/*.json")),
+    sorted((ROOT / "atlas/contracts/models").glob("*/*.json")),
     ids=lambda p: f"{p.parent.name}/{p.stem}",
 )
 def test_queries_and_packaged_metadata(path):
@@ -47,17 +46,6 @@ def test_queries_and_packaged_metadata(path):
     assert runtime["weights"]["sha256"] == weights.sha256
     assert runtime["weights"]["file"] == weights.filename
     assert str(path.relative_to(ROOT)) in (directory / "Dockerfile").read_text()
-    catalog = json.loads((ROOT / "adapters/catalog.json").read_text())
-    source = next(
-        item
-        for item in catalog["data_adapters"]
-        if item["id"] == identity.data_adapter_id
-    )
-    model = next(item for item in source["models"] if item["id"] == identity.id)
-    assert model["version"] == identity.version
-    assert model["weights"] == json.loads(path.read_text())["weights"]
-    atlas_path = ROOT / "atlas" / path.relative_to(ROOT)
-    assert json.loads(atlas_path.read_text()) == json.loads(path.read_text())
 
 
 @pytest.fixture

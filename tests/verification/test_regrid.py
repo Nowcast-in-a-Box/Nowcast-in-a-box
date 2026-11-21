@@ -6,9 +6,14 @@ from datetime import datetime, timezone
 
 import numpy as np
 import pytest
-
 from nib_verify.access.base import Coords, Field
-from nib_verify.core.regrid import align_pair, grid_shape, nearest_index, regrid, target_coords
+from nib_verify.core.regrid import (
+    align_pair,
+    grid_shape,
+    nearest_index,
+    regrid,
+    target_coords,
+)
 
 UTC = timezone.utc
 T = datetime(2026, 1, 1, tzinfo=UTC)
@@ -19,8 +24,15 @@ def _coords(lon0, lon1, nx, lat0, lat1, ny) -> Coords:
 
 
 def _field(data, coords, mask=None, *, unit="dBZ", name="x") -> Field:
-    return Field(data=data, coords=coords, valid_time=T, unit=unit,
-                 variable="reflectivity", name=name, mask=mask)
+    return Field(
+        data=data,
+        coords=coords,
+        valid_time=T,
+        unit=unit,
+        variable="reflectivity",
+        name=name,
+        mask=mask,
+    )
 
 
 # ----------------------------------------------------------------------
@@ -136,9 +148,14 @@ def test_align_pair_refuses_mismatched_units():
 def test_align_pair_refuses_mismatched_valid_times():
     coords = _coords(0.0, 3.0, 4, 0.0, 3.0, 4)
     truth = _field(np.ones((4, 4)), coords)
-    pred = Field(data=np.ones((4, 4)), coords=coords,
-                 valid_time=datetime(2026, 1, 1, 1, tzinfo=UTC),
-                 unit="dBZ", variable="reflectivity", name="y")
+    pred = Field(
+        data=np.ones((4, 4)),
+        coords=coords,
+        valid_time=datetime(2026, 1, 1, 1, tzinfo=UTC),
+        unit="dBZ",
+        variable="reflectivity",
+        name="y",
+    )
     with pytest.raises(ValueError, match="different valid times"):
         align_pair(truth, pred, coords)
 

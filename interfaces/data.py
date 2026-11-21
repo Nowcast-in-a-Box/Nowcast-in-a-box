@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping
 
 from interfaces.errors import ConstraintError
@@ -83,6 +84,10 @@ class DataAdapter(ABC):
     def load(self, request: DataRequest) -> DataBundle:
         """Read local files and return a DataBundle. Do not download."""
 
+    @abstractmethod
+    def inspect_sample(self, root: Path) -> dict[str, Any]:
+        """Read a bounded sample from local data and return JSON-compatible values."""
+
 
 class DeclaredDataAdapter(DataAdapter):
     """Data adapter whose capabilities are a class constant."""
@@ -99,6 +104,46 @@ class DeclaredDataAdapter(DataAdapter):
 
     def validate(self, request: DataRequest) -> None:
         validate_request(request, self.capabilities())
+
+
+class RuntimeDataAdapter(DeclaredDataAdapter):
+    """Data source that supplies selected windows for model runs."""
+
+    @abstractmethod
+    def list_samples(
+        self,
+        path: Path,
+        *,
+        catalog: Path | None = None,
+        offset: int = 0,
+        limit: int = 100,
+        day: str | None = None,
+    ) -> dict:
+        """List selectable sample windows from local metadata."""
+
+    @abstractmethod
+    def check_window(
+        self,
+        path: Path,
+        event_id: str,
+        start: str,
+        *,
+        catalog: Path | None = None,
+    ) -> dict:
+        """Check availability without reading the full pixel arrays."""
+
+    @abstractmethod
+    def read_window(
+        self,
+        path: Path,
+        event_id: str,
+        start: str,
+        *,
+        catalog: Path | None = None,
+        center_lon: float | None = None,
+        center_lat: float | None = None,
+    ) -> tuple[dict, dict]:
+        """Read observations and grid metadata for StoredFields serialization."""
 
 
 def request_from_mapping(

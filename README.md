@@ -21,7 +21,7 @@
 
 **Nowcast-in-a-Box (NiB)** is a local runtime for AI precipitation nowcasting. It connects your radar or satellite files to models, runs them in Docker, and saves the forecasts. You don't write code, and you don't install Python.
 
-The Hub webpage makes the selection. The Handler, a small local program, does the work.
+Hub exports order configuration. The local Handler webpage lets you edit it, run models and inspect results.
 
 ## What you get
 
@@ -45,12 +45,12 @@ Missing container images are pulled from the configured registry before executio
 2. Download the release package for your system from [Releases](https://github.com/Nowcast-in-a-Box/Nowcast-in-a-box/releases). Use `Nowcast-in-a-Box-<version>-macos.zip`, `-linux.zip`, or `-windows.zip`.
 3. Extract the zip to a folder where you keep your work.
 4. Start the Handler from that folder. Use the launcher for your system under [Start and Stop](#start-and-stop).
-5. Open the Hub and allow the browser to open the local Handler when your system asks. If this is your first run, the launcher registers the `nib://` link for later starts.
-6. Choose a data source, then a model, select the sample window, and run the job.
+5. Use `Open NiB.<os>` to open the local control panel. Import a YAML order from Hub, or create one locally.
+6. Choose the local data folder, models and sample windows, then save the order and start a run. Verification and visualization settings are edited on the local page.
 
 The package holds the launchers for its own system and the amd64 and arm64 Handler binaries. It also holds `config.yaml`, the generated `resources/` tree, and empty `artifacts/` and `runs/` folders. It holds no Go source and no tests.
 
-> If Docker pulls are slow, open the Local page in the Hub and select "China mirror (NJU)". The mirror is optional and read-only.
+> If Docker pulls are slow, select "China mirror (NJU)" in the local Handler settings. The mirror is optional and read-only.
 
 ## Start and stop
 
@@ -111,12 +111,14 @@ The satellite readers record the region from the file and do not crop it. The CM
 ## How it works
 
 ```text
-NiB Hub (browser)          selects data, model, and sample window
+NiB Hub (browser)          exports YAML configuration
       │
       ▼
+Handler local console     edits orders, starts runs, shows history
+      │
 Handler (local program)    preflight, container start, run records
       │  Docker Compose
-      ├── Data Ingestion       reads files under a read-only mount
+      ├── Data Adapter       reads files under a read-only mount
       ├── Model Container      one image per algorithm, no network
       └── Diagnostics          comparison images, animation, metrics
       │
@@ -134,7 +136,7 @@ Diagnostics run after the models finish. A model can be selected without diagnos
 | --- | --- |
 | `artifacts/` | External weight files and generated Docker files. Keep a verified source for weights before removing this cache. |
 | `runs/` | One folder per run: forecast files, `job.json`, container logs, and diagnostic output. |
-| `orders/` | Order packages (`<package_id>.zip`) saved for offline start from the local console. |
+| `orders/` | Editable YAML definitions (`<order_id>.yaml`); each new run freezes its own `order.yaml` snapshot. |
 | `nib-settings.json` | The data folder that you selected for each data source. Written with mode 0600. |
 | `config.yaml` | Host settings for this installation. |
 
@@ -142,7 +144,7 @@ These paths are relative to `config.yaml`. Delete `nib-settings.json` to make th
 
 ## Configuration
 
-`config.yaml` holds host settings only. It never selects a dataset, a data file, or a container image. The Hub makes that selection, and the manifests under `resources/` define each container.
+`config.yaml` holds host settings only. Orders select data, models and diagnostics; the local console edits these choices. The manifests under `resources/` define each container.
 
 | Key | Meaning |
 | --- | --- |
@@ -175,7 +177,7 @@ go test ./...
 scripts/cross-build.sh
 ```
 
-The Handler code is in `handler/`. Data readers and model programs are in `adapters/`, one folder per data source, with each model below its data source. `adapters/catalog.json` is the index that the Hub reads. Container definitions live next to the code that they run, in `runtime.yaml` and `Dockerfile` under each data and model folder. Python formatting uses `scripts/format-python.sh` with `black.toml`.
+The Handler code is in `handler/`. Data readers and model programs are in `adapters/`, one folder per data source, with each model below its data source. `atlas/runtime/adapters-catalog.json` is the index that the Hub reads. Container definitions live next to the code that they run, in `runtime.yaml` and `Dockerfile` under each data and model folder. Contributors use `ruff format .` and `ruff check .` for Python.
 
 The release packages are built by the release workflow from a `v*` tag on `main`. The package script is `scripts/package-resources.sh`, and the zip holds user files only.
 

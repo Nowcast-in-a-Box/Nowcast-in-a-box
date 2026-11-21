@@ -1,11 +1,10 @@
 """Land masking preserves geographic identity, values and sparse-tile semantics."""
 
 import numpy as np
-from shapely.geometry import box
-
 from nib_visualization.basemap import RasterBasemapView
 from nib_visualization.terrain import ETOPO_COLORS
 from nib_visualization.viewer_basemap import land_only_terrain, paint_land_tile
+from shapely.geometry import box
 
 
 def test_fine_ocean_replaces_parent_land_without_touching_other_cells():

@@ -27,7 +27,7 @@ type concurrentRunner struct {
 
 func (r *concurrentRunner) Run(ctx context.Context, args ...string) (int, []byte, error) {
 	joined := " " + strings.Join(args, " ") + " "
-	if strings.Contains(joined, " up ") && (strings.Contains(joined, "compose-ingestion.yaml") || r.diagnostics && strings.Contains(joined, "diagnostics-")) {
+	if strings.Contains(joined, " up ") && (strings.Contains(joined, "compose-read-inputs.yaml") || r.diagnostics && strings.Contains(joined, "diagnostics-")) {
 		r.entered <- joined
 		select {
 		case <-r.release:
@@ -46,6 +46,7 @@ func concurrentServer(t *testing.T, limit int, diagnostics bool) (*handler.Serve
 	server := handler.NewServer(cfg)
 	runner := &concurrentRunner{base: &runtimeRunner{root: cfg.Paths.Runs}, entered: make(chan string, 16), release: make(chan struct{}), done: make(chan struct{}), diagnostics: diagnostics}
 	server.Runner = runner
+	writeExecutionWeights(t, server)
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(runner.done) }) }
 	t.Cleanup(func() { unblock(); waitExecutionIdle(t, server) })
@@ -129,8 +130,8 @@ func TestQueuedJobsStartInAdmissionOrder(t *testing.T) {
 	}
 }
 
-func postJobPackage(server *handler.Server, raw []byte, hash, key string) (*httptest.ResponseRecorder, handler.Job) {
-	body, _ := json.Marshal(map[string]any{"package": raw, "sha256": hash})
+func postJobPackage(t *testing.T, server *handler.Server, raw []byte, hash, key string) (*httptest.ResponseRecorder, handler.Job) {
+	body, _ := json.Marshal(map[string]any{"order": orderFromPackage(t, raw, hash)})
 	request := httptest.NewRequest("POST", "http://127.0.0.1/v1/jobs", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+server.Token)
 	request.Header.Set("Idempotency-Key", key)
@@ -154,7 +155,7 @@ func TestConcurrentIdempotencyAndDistinctRequests(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			response, job := postJobPackage(server, raw, hash, "same-key")
+			response, job := postJobPackage(t, server, raw, hash, "same-key")
 			replies <- result{response.Code, job}
 		}()
 	}
@@ -173,7 +174,7 @@ func TestConcurrentIdempotencyAndDistinctRequests(t *testing.T) {
 		}
 	}
 	awaitExecution(t, runner)
-	response, second := postJobPackage(server, raw, hash, "distinct-key")
+	response, second := postJobPackage(t, server, raw, hash, "distinct-key")
 	if response.Code != 202 || second.ID == firstID {
 		t.Fatalf("independent request blocked: %d %s", response.Code, response.Body.String())
 	}
@@ -222,6 +223,11 @@ func TestDiagnosticsShareCapacityAndReserveEachRun(t *testing.T) {
 	for _, id := range []string{"saved-one", "saved-two", "saved-three"} {
 		dir := filepath.Join(cfg.Paths.Runs, id)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		order := orderFixture()
+		order.DataID, order.EventID, order.Models = "cma_radar", "20170627", []string{"nowcastnet"}
+		if err := os.WriteFile(filepath.Join(dir, "order.yaml"), []byte(orderYAML(t, order)), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		raw := fmt.Sprintf(`{"schema":"nib.run.v2","id":%q,"data":{"id":"cma_radar"},"forecasts":{"nowcastnet":{}},"diagnostics":[]}`, id)

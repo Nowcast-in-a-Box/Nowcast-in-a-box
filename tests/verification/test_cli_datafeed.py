@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from nib_verify.access.factory import NO_ADDRESS
 from nib_verify.cli import EXIT_FAILURE, EXIT_OK, main
 
@@ -35,8 +34,10 @@ def test_check_exercises_the_missing_data_checks_when_there_is_missing_data(caps
     main(["datafeed", "check", "--access", "mock"])
     assert "[skip] missing points come back as NaN" in capsys.readouterr().out
 
-    assert main(["datafeed", "check", "--access", "mock",
-                 "--mock", "missing_points=99"]) == EXIT_OK
+    assert (
+        main(["datafeed", "check", "--access", "mock", "--mock", "missing_points=99"])
+        == EXIT_OK
+    )
     out = capsys.readouterr().out
     assert "[ok  ] missing points come back as NaN" in out
     assert "99 missing" in out
@@ -56,8 +57,12 @@ def test_check_fails_on_a_provider_that_does_not_conform(monkeypatch, capsys):
 
     class NoCadence:
         def capabilities(self):
-            return Capabilities(cadence_minutes=0, observation_names=("a",),
-                                model_ids=(), units={"a": "dBZ"})
+            return Capabilities(
+                cadence_minutes=0,
+                observation_names=("a",),
+                model_ids=(),
+                units={"a": "dBZ"},
+            )
 
     import nib_verify.cli as cli
 
@@ -83,7 +88,9 @@ def test_check_says_where_it_looked_when_nothing_is_there(capsys):
     assert "could not reach" in out
 
 
-def test_check_reports_a_bad_address_as_unreachable_but_keeps_going(data_service, capsys):
+def test_check_reports_a_bad_address_as_unreachable_but_keeps_going(
+    data_service, capsys
+):
     """``--url`` is optional and the address may be wrong; either way the command
     answers with a report rather than a traceback."""
     url, _ = data_service
@@ -98,8 +105,11 @@ def test_serve_binds_where_it_is_told(monkeypatch, capsys):
     import uvicorn
 
     seen = {}
-    monkeypatch.setattr(uvicorn, "run",
-                        lambda app, host, port, log_level: seen.update(host=host, port=port))
+    monkeypatch.setattr(
+        uvicorn,
+        "run",
+        lambda app, host, port, log_level: seen.update(host=host, port=port),
+    )
 
     assert main(["datafeed", "serve", "--access", "mock", "--port", "9100"]) == EXIT_OK
     assert seen == {"host": "127.0.0.1", "port": 9100}
@@ -110,8 +120,18 @@ def test_serve_says_what_it_is_serving(monkeypatch, capsys):
     import uvicorn
 
     monkeypatch.setattr(uvicorn, "run", lambda app, host, port, log_level: None)
-    main(["datafeed", "serve", "--access", "mock", "--mock", "model_ids=a,b",
-          "--mock", "observation_names=x"])
+    main(
+        [
+            "datafeed",
+            "serve",
+            "--access",
+            "mock",
+            "--mock",
+            "model_ids=a,b",
+            "--mock",
+            "observation_names=x",
+        ]
+    )
     out = capsys.readouterr().out
     assert "cadence=10min" in out
     assert "'x'" in out and "'a'" in out
@@ -121,18 +141,23 @@ def test_serve_can_be_quiet(monkeypatch, capsys):
     import uvicorn
 
     monkeypatch.setattr(uvicorn, "run", lambda app, host, port, log_level: None)
-    assert main(["datafeed", "serve", "--access", "mock",
-                 "--progress", "quiet"]) == EXIT_OK
+    assert (
+        main(["datafeed", "serve", "--access", "mock", "--progress", "quiet"])
+        == EXIT_OK
+    )
     assert capsys.readouterr().out == ""
 
 
 # ======================================================================
 # --access real is an address, not a hole
 # ======================================================================
-@pytest.mark.parametrize("command", [
-    ["datafeed", "check"],
-    ["datafeed", "serve"],
-])
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["datafeed", "check"],
+        ["datafeed", "serve"],
+    ],
+)
 def test_real_without_an_address_is_refused(command, capsys):
     code = main([*command, "--access", "real"])
     assert code == EXIT_FAILURE, command
@@ -140,29 +165,54 @@ def test_real_without_an_address_is_refused(command, capsys):
 
 
 def test_a_verification_run_refuses_a_real_provider_with_no_address(
-        tmp_path, platform, capsys):
+    tmp_path, platform, capsys
+):
     """Every command that can build a provider has to refuse identically, or the
     one that does not becomes the hole."""
     config = _write_config(tmp_path)
-    code = main(["task", "run", "--config", str(config),
-                 "--root", str(tmp_path / "store"),
-                 "--runs", str(platform.runs_root), "--access", "real"])
+    code = main(
+        [
+            "task",
+            "run",
+            "--config",
+            str(config),
+            "--root",
+            str(tmp_path / "store"),
+            "--runs",
+            str(platform.runs_root),
+            "--access",
+            "real",
+        ]
+    )
     assert code == EXIT_FAILURE
     assert "does not guess one" in capsys.readouterr().err
 
 
 def test_a_plan_refuses_a_real_provider_with_no_address_when_probing(
-        tmp_path, platform, capsys):
+    tmp_path, platform, capsys
+):
     config = _write_config(tmp_path)
-    code = main(["task", "plan", "--config", str(config),
-                 "--runs", str(platform.runs_root), "--access", "real", "--probe"])
+    code = main(
+        [
+            "task",
+            "plan",
+            "--config",
+            str(config),
+            "--runs",
+            str(platform.runs_root),
+            "--access",
+            "real",
+            "--probe",
+        ]
+    )
     assert code == EXIT_FAILURE
     assert "does not guess one" in capsys.readouterr().err
 
 
 def _write_config(tmp_path):
-    from .conftest import make_config
     from nib_verify.config.schema import dump
+
+    from .conftest import make_config
 
     path = tmp_path / "cfg.json"
     dump(make_config(), path)
@@ -207,17 +257,47 @@ def test_a_run_reads_its_fields_over_http(tmp_path, platform, capsys):
     config = _write_config(tmp_path)
 
     with serve_data(make_access(missing_points=150)) as url:
-        assert main([
-            "task", "run", "--config", str(config), "--root", str(tmp_path / "store"),
-            "--runs", str(platform.runs_root),
-            "--access", "real", "--data-url", url, "--progress", "quiet",
-        ]) == EXIT_OK
+        assert (
+            main(
+                [
+                    "task",
+                    "run",
+                    "--config",
+                    str(config),
+                    "--root",
+                    str(tmp_path / "store"),
+                    "--runs",
+                    str(platform.runs_root),
+                    "--access",
+                    "real",
+                    "--data-url",
+                    url,
+                    "--progress",
+                    "quiet",
+                ]
+            )
+            == EXIT_OK
+        )
 
-    assert main([
-        "query", "--method", "ts", "--config", str(config),
-        "--root", str(tmp_path / "store"), "--json",
-        "-s", "level=181,219", "-g", "lead_minutes",
-    ]) == EXIT_OK
+    assert (
+        main(
+            [
+                "query",
+                "--method",
+                "ts",
+                "--config",
+                str(config),
+                "--root",
+                str(tmp_path / "store"),
+                "--json",
+                "-s",
+                "level=181,219",
+                "-g",
+                "lead_minutes",
+            ]
+        )
+        == EXIT_OK
+    )
     payload = json.loads(capsys.readouterr().out)
     assert payload["sample"]["n_records"] == 3
     assert all(r["n_valid"] > 0 for r in payload["records"])
@@ -228,27 +308,89 @@ def test_the_same_run_gives_the_same_numbers_either_way(tmp_path, platform, caps
     config = _write_config(tmp_path)
     # Every parameter that shapes the field has to match, sigma included: this
     # test is only worth having because a mismatch shows up in the readings.
-    mock_args = ["--mock", "peak=250", "--mock", "unit=kg m-2", "--mock", "variable=vil",
-                 "--mock", "sigma=0.14",
-                 "--mock", "obs_shape=24,32", "--mock", "model_shape=20,26",
-                 "--mock", "horizon_minutes=60", "--mock", "missing_points=150"]
+    mock_args = [
+        "--mock",
+        "peak=250",
+        "--mock",
+        "unit=kg m-2",
+        "--mock",
+        "variable=vil",
+        "--mock",
+        "sigma=0.14",
+        "--mock",
+        "obs_shape=24,32",
+        "--mock",
+        "model_shape=20,26",
+        "--mock",
+        "horizon_minutes=60",
+        "--mock",
+        "missing_points=150",
+    ]
 
     def readings(root):
-        assert main([
-            "query", "--method", "ts", "--config", str(config), "--root", str(root),
-            "--json", "-s", "level=181,219", "-g", "lead_minutes", "-g", "level",
-        ]) == EXIT_OK
+        assert (
+            main(
+                [
+                    "query",
+                    "--method",
+                    "ts",
+                    "--config",
+                    str(config),
+                    "--root",
+                    str(root),
+                    "--json",
+                    "-s",
+                    "level=181,219",
+                    "-g",
+                    "lead_minutes",
+                    "-g",
+                    "level",
+                ]
+            )
+            == EXIT_OK
+        )
         return json.loads(capsys.readouterr().out)["records"]
 
-    common = ["task", "run", "--config", str(config),
-              "--runs", str(platform.runs_root), "--progress", "quiet"]
-    assert main([*common, "--root", str(tmp_path / "over-http"),
-                 "--access", "mock", *mock_args]) == EXIT_OK
+    common = [
+        "task",
+        "run",
+        "--config",
+        str(config),
+        "--runs",
+        str(platform.runs_root),
+        "--progress",
+        "quiet",
+    ]
+    assert (
+        main(
+            [
+                *common,
+                "--root",
+                str(tmp_path / "over-http"),
+                "--access",
+                "mock",
+                *mock_args,
+            ]
+        )
+        == EXIT_OK
+    )
     over_http = readings(tmp_path / "over-http")
 
     with serve_data(make_access(missing_points=150)) as url:
-        assert main([*common, "--root", str(tmp_path / "over-socket"),
-                     "--access", "real", "--data-url", url]) == EXIT_OK
+        assert (
+            main(
+                [
+                    *common,
+                    "--root",
+                    str(tmp_path / "over-socket"),
+                    "--access",
+                    "real",
+                    "--data-url",
+                    url,
+                ]
+            )
+            == EXIT_OK
+        )
     over_socket = readings(tmp_path / "over-socket")
 
     assert over_http == over_socket

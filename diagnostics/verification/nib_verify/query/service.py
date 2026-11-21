@@ -17,9 +17,7 @@ from ..core.quantities import FAMILIES
 from ..store.db import Between, Store, iso_utc
 
 #: how many valid samples each family contributes, from the family itself
-SAMPLE_COLUMNS: dict[str, tuple[str, ...]] = {
-    f.name: f.samples for f in FAMILIES
-}
+SAMPLE_COLUMNS: dict[str, tuple[str, ...]] = {f.name: f.samples for f in FAMILIES}
 
 DEFAULT_LIMIT = 20_000
 

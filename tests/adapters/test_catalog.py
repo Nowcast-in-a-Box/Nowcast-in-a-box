@@ -7,9 +7,15 @@ import re
 import unittest
 from pathlib import Path
 
+import pytest
+
+from adapters import __main__ as readers
+from adapters.__main__ import adapter_ids
+from interfaces.errors import ConstraintError
+
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTERS = ROOT / "adapters"
-CONTRACTS = ROOT / "contracts"
+CONTRACTS = ROOT / "atlas" / "contracts"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 IDS = ("cma_radar", "gk2a", "himawari9", "fy4b", "mtg", "sevir") + tuple(
     f"mlcast_{item}"
@@ -25,6 +31,29 @@ IDS = ("cma_radar", "gk2a", "himawari9", "fy4b", "mtg", "sevir") + tuple(
 )
 
 
+def test_dispatch_discovers_local_sources_without_atlas(tmp_path, monkeypatch):
+    monkeypatch.setattr(readers, "__file__", str(tmp_path / "__main__.py"))
+    for name in ("new_reader", "invalid-name", "no_source"):
+        (tmp_path / name).mkdir()
+    for name in ("new_reader", "invalid-name"):
+        (tmp_path / name / "source.py").touch()
+    assert readers.adapter_ids() == ["new_reader"]
+
+    imported = []
+    adapter = object()
+
+    def import_module(name):
+        imported.append(name)
+        return type("ReaderModule", (), {"ADAPTER": adapter})
+
+    monkeypatch.setattr(readers.importlib, "import_module", import_module)
+    assert readers.adapter_for("new_reader") is adapter
+    for invalid in ("invalid-name", "../new_reader", "no_source"):
+        with pytest.raises(ConstraintError, match="Unsupported source"):
+            readers.adapter_for(invalid)
+    assert imported == ["adapters.new_reader.source"]
+
+
 def _load(path: Path) -> dict:
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
@@ -32,27 +61,13 @@ def _load(path: Path) -> dict:
 
 class CatalogTests(unittest.TestCase):
     def test_ids_and_contracts_match(self) -> None:
-        catalog = _load(ADAPTERS / "catalog.json")
-        self.assertEqual(catalog["version"], 1)
-        listed = [item["id"] for item in catalog["data_adapters"]]
-        self.assertEqual(listed, list(IDS))
-        for item in catalog["data_adapters"]:
-            self.assertTrue(SEMVER.match(item["version"]), item["id"])
-            self.assertFalse(re.search(r"loader|_v\d", item["id"]))
-            contract = _load(CONTRACTS / "data" / f"{item['id']}.json")
-            for key in (
-                "id",
-                "version",
-                "title",
-                "instrument",
-                "channels",
-                "spatial",
-                "native_cadence_minutes",
-                "formats",
-            ):
-                self.assertEqual(item[key], contract[key], f"{item['id']}.{key}")
-            self.assertTrue((ADAPTERS / item["path"] / "source.py").is_file())
-            requirements = (ADAPTERS / item["requirements"]).read_text()
+        self.assertLessEqual(set(IDS), set(adapter_ids()))
+        for source in adapter_ids():
+            contract = _load(CONTRACTS / "data" / f"{source}.json")
+            self.assertEqual(contract["id"], source)
+            self.assertTrue(SEMVER.fullmatch(contract["version"]), source)
+            self.assertFalse(re.search(r"loader|_vd", source))
+            requirements = (ADAPTERS / source / "requirements.txt").read_text()
             # A Python environment marker (e.g. python_version >= "3.9")
             # is not an unpinned runtime dependency. Check only package specs.
             package_specs = [
@@ -61,44 +76,23 @@ class CatalogTests(unittest.TestCase):
                 if line.strip() and not line.lstrip().startswith("#")
             ]
             self.assertTrue(all(">=" not in line for line in package_specs))
-            if item["id"] == "cma_radar":
-                self.assertEqual(
-                    [model["id"] for model in item["models"]], ["nowcastnet"]
-                )
-                model = item["models"][0]
-                paired = _load(CONTRACTS / "models" / "cma_radar" / "nowcastnet.json")
-                self.assertEqual(model["weights"], paired["weights"])
-                self.assertEqual(paired["input"]["variable_id"], "CREF")
-            elif item["id"] == "sevir":
+            if source == "sevir":
                 self.assertIn("h5py==", requirements)
                 self.assertNotIn("satpy", requirements)
-                self.assertEqual(
-                    [model["id"] for model in item["models"]],
-                    ["nowcastnet", "exprecast", "wadepre"],
-                )
-            elif item["id"].startswith("mlcast_"):
+            elif source.startswith("mlcast_"):
                 self.assertIn("zarr==", requirements)
                 self.assertNotIn("satpy", requirements)
-                self.assertEqual(item["models"], [])
-            else:
+            elif source in {"fy4b", "gk2a", "himawari9", "mtg"}:
                 self.assertIn("satpy==", requirements)
-                self.assertEqual(item["models"], [])
 
     def test_sevir_model_contracts(self) -> None:
-        catalog = _load(ADAPTERS / "catalog.json")
-        sevir = next(item for item in catalog["data_adapters"] if item["id"] == "sevir")
-        for model in sevir["models"]:
-            contract = _load(CONTRACTS / "models" / "sevir" / f"{model['id']}.json")
-            self.assertEqual(model["weights"], contract["weights"])
+        for path in sorted((CONTRACTS / "models/sevir").glob("*.json")):
+            weights = _load(path)["weights"]
             self.assertTrue(
-                str(model["weights"]["download_url"]).startswith(
-                    "https://huggingface.co/"
-                )
+                weights["download_url"].startswith("https://huggingface.co/")
             )
-            self.assertTrue(
-                str(model["weights"]["artifacts_relpath"]).startswith("sevir/")
-            )
-            text = (ADAPTERS / model["path"] / "requirements.txt").read_text()
+            self.assertTrue(weights["artifacts_relpath"].startswith("sevir/"))
+            text = (ADAPTERS / "sevir" / path.stem / "requirements.txt").read_text()
             self.assertIn("onnxruntime==", text)
             self.assertNotIn(">=", text)
 

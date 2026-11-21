@@ -55,9 +55,9 @@ def observations(
 
 
 def mock_onnx(monkeypatch, tmp_path, adapter, output):
-    from dataclasses import replace
     import hashlib
     import sys
+    from dataclasses import replace
     from types import SimpleNamespace
     from unittest.mock import Mock
 

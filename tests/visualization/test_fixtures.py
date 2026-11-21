@@ -25,10 +25,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import xarray as xr
-from pyproj import CRS, Transformer
-
 from nib_visualization import make_fixture
 from nib_visualization.field import validate_field
+from pyproj import CRS, Transformer
 
 # Fixed fixture contract, restated independently of the implementation.
 START_LON, START_LAT = 8.5, 50.0
@@ -96,7 +95,11 @@ def test_s1_default_fixture_satisfies_field_contract(grid, epsg):
     assert values.shape == (DEFAULT_N_LEADS, N_Y, N_X)
     assert values.name == "synthetic_scalar"
     assert values.attrs["units"] == "1"
-    assert set(values.coords) == {"lead_time", "y", "x"}  # no duplicate 2D lon/lat coords
+    assert set(values.coords) == {
+        "lead_time",
+        "y",
+        "x",
+    }  # no duplicate 2D lon/lat coords
     assert field.crs == CRS.from_epsg(epsg)
     assert field.init_time == INIT_TIME
     assert field.temporal_statistic == "instantaneous"
@@ -105,7 +108,9 @@ def test_s1_default_fixture_satisfies_field_contract(grid, epsg):
     np.testing.assert_array_equal(
         values.coords["lead_time"].values, expected_leads(DEFAULT_N_LEADS)
     )
-    np.testing.assert_array_equal(field.valid_time, INIT_TIME + expected_leads(DEFAULT_N_LEADS))
+    np.testing.assert_array_equal(
+        field.valid_time, INIT_TIME + expected_leads(DEFAULT_N_LEADS)
+    )
     assert field.provenance == {
         "synthetic": True,
         "generator": "moving_gaussian",
@@ -119,10 +124,16 @@ def test_s1_default_fixture_satisfies_field_contract(grid, epsg):
 def test_s1_latlon_grid_coordinates():
     values = make_fixture("latlon").values
     np.testing.assert_allclose(
-        values.coords["x"].values, np.linspace(*LATLON_X_ENDPOINTS, N_X), rtol=0, atol=1e-12
+        values.coords["x"].values,
+        np.linspace(*LATLON_X_ENDPOINTS, N_X),
+        rtol=0,
+        atol=1e-12,
     )
     np.testing.assert_allclose(
-        values.coords["y"].values, np.linspace(*LATLON_Y_ENDPOINTS, N_Y), rtol=0, atol=1e-12
+        values.coords["y"].values,
+        np.linspace(*LATLON_Y_ENDPOINTS, N_Y),
+        rtol=0,
+        atol=1e-12,
     )
     assert values.coords["x"].values[0] == LATLON_X_ENDPOINTS[0]  # endpoints included
     assert values.coords["x"].values[-1] == LATLON_X_ENDPOINTS[1]
@@ -200,7 +211,9 @@ def test_s1_invalid_arguments_raise_value_error(grid, n_leads):
 def test_s2_repeated_generation_is_identical(grid):
     first = make_fixture(grid)
     second = make_fixture(grid)
-    xr.testing.assert_identical(first.values, second.values)  # values/dims/coords/attrs/name
+    xr.testing.assert_identical(
+        first.values, second.values
+    )  # values/dims/coords/attrs/name
     assert first.crs == second.crs
     assert first.init_time == second.init_time
     assert first.temporal_statistic == second.temporal_statistic
@@ -307,5 +320,10 @@ def test_s3_non_peak_cells_match_analytical_gaussian(grid, lead_index):
             lon, lat = to_lonlat.transform(float(x[ix]), float(y[iy]))
         expected = expected_gaussian(lon, lat, lead_index, DEFAULT_N_LEADS)
         actual = float(values.isel(lead_time=lead_index, y=iy, x=ix))
-        assert actual == pytest.approx(expected, rel=1e-9, abs=1e-12), (grid, lead_index, iy, ix)
+        assert actual == pytest.approx(expected, rel=1e-9, abs=1e-12), (
+            grid,
+            lead_index,
+            iy,
+            ix,
+        )
         assert actual < 1.0  # sampled cells are genuinely off-peak

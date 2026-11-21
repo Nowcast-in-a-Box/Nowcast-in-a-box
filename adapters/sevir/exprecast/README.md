@@ -1,7 +1,7 @@
 # exPreCast
 
 This pairing follows the [model contract](../../../docs/reference/models.md).
-Its [declaration](../../../contracts/models/sevir/exprecast.json) supplies identity,
+Its [declaration](../../../atlas/contracts/models/sevir/exprecast.json) supplies identity,
 physical requirements and weight provenance.
 
 - Input: five physical float32 frames of SEVIR VIL in raw units at five-minute cadence,

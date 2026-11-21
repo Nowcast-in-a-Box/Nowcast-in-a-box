@@ -2,7 +2,7 @@
 
 This demo uses July 2026 national CMA CREF mosaics and the existing local
 SEVIR-pretrained NowcastNet ONNX weight. It exercises the complete local chain:
-Hub selection and configuration → frozen package → handler → ingestion → ONNX →
+Hub selection and configuration → frozen package → Handler → data adapter → ONNX →
 saved Forecasts → comparison images, animation and optional verification.
 
 ## Data and grid
@@ -10,8 +10,7 @@ saved Forecasts → comparison images, animation and optional verification.
 The data directory contains `202607DD/CREF/Z_RADA_..._CREF_202607DD_HHMMSS.bin`.
 The reader matches the observation timestamp at the end of the filename, then
 chooses the latest generation for duplicate observations. It discovers nested
-files and supports cross-day windows. This demo deliberately indexes July only;
-August files can remain on disk without appearing in sample listings.
+files and supports windows that cross day and month boundaries.
 
 The reference window begins **2026-07-01 00:00 UTC**. Six context frames end at
 **00:30 UTC**. Runtime selects the latest five declared history frames before
@@ -58,7 +57,7 @@ repository root when preparing the development demo:
 
 ```sh
 git submodule update --init --recursive
-docker build -f adapters/cma_radar/Dockerfile -t nib-ingestion:cma-demo .
+docker build -f adapters/cma_radar/Dockerfile -t nib-reader-cma-radar:local-v1 .
 docker build --build-context weights=./artifacts/cma_radar/nowcastnet -f adapters/cma_radar/nowcastnet/Dockerfile -t nib-nowcastnet:cma-demo-embedded .
 docker build -f diagnostics/Dockerfile -t nib-diagnostics:automatic-flow .
 ```
@@ -87,7 +86,7 @@ checksum. Do not put credentials in source or image build arguments. Local
 builds can instead use the existing checked weight directory as above.
 
 A Handler release tag alone does not run this manual image workflow. Publish
-the matching diagnostics, ingestion and embedded model images before testing a
+the matching diagnostics, reader and embedded model images before testing a
 fresh installation; local cached images are not evidence of registry availability.
 
 Use [the example configuration](../../tests/runtime/cma-demo.config.yaml). The

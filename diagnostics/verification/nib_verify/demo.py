@@ -124,24 +124,57 @@ class Exercise:
 SOURCES: tuple[Product, ...] = (
     # 雷达回波。dBZ 是反射率自己的量，20 到 60 是它自己的等级；旧版本的 kg m-2
     # 配 16/74/133 是错的，一个 VIL 产品没有 dBZ 的阈值。
-    Product("radar-composite", "dbz", "dBZ", scale=0.27, offset=0.0,
-            vmin=0.0, vmax=70.0, noise=1.5,
-            missing_kind="range", missing_points=200,
-            frames=18, resolution=0.1,
-            extent=(110.0, 30.0, 120.0, 42.0), shape=(120, 100)),
+    Product(
+        "radar-composite",
+        "dbz",
+        "dBZ",
+        scale=0.27,
+        offset=0.0,
+        vmin=0.0,
+        vmax=70.0,
+        noise=1.5,
+        missing_kind="range",
+        missing_points=200,
+        frames=18,
+        resolution=0.1,
+        extent=(110.0, 30.0, 120.0, 42.0),
+        shape=(120, 100),
+    ),
     # 降水。0.1 到 250 是雨强的常用等级。
-    Product("satellite-rain", "rain_rate", "mm h-1", scale=0.16, offset=0.0,
-            vmin=0.0, vmax=45.0, noise=6.0,
-            missing_kind="random", missing_points=150,
-            frames=18, resolution=0.2,
-            extent=(104.0, 24.0, 126.0, 48.0), shape=(120, 110)),
+    Product(
+        "satellite-rain",
+        "rain_rate",
+        "mm h-1",
+        scale=0.16,
+        offset=0.0,
+        vmin=0.0,
+        vmax=45.0,
+        noise=6.0,
+        missing_kind="random",
+        missing_points=150,
+        frames=18,
+        resolution=0.2,
+        extent=(104.0, 24.0, 126.0, 48.0),
+        shape=(120, 110),
+    ),
     # 卫星亮温。物理上深对流顶是**冷**的，而生成器造的是强度团块，所以这个产品用
     # 负的 scale 加一个暖的 offset：强度 0 → 290 K（晴空），强度满值 → 170 K（云顶）。
-    Product("satellite-bt", "bt", "K", scale=-0.5, offset=290.0,
-            vmin=170.0, vmax=300.0, noise=3.0,
-            missing_kind="random", missing_points=90,
-            frames=18, resolution=0.2,
-            extent=(104.0, 24.0, 126.0, 48.0), shape=(120, 110)),
+    Product(
+        "satellite-bt",
+        "bt",
+        "K",
+        scale=-0.5,
+        offset=290.0,
+        vmin=170.0,
+        vmax=300.0,
+        noise=3.0,
+        missing_kind="random",
+        missing_points=90,
+        frames=18,
+        resolution=0.2,
+        extent=(104.0, 24.0, 126.0, 48.0),
+        shape=(120, 110),
+    ),
 )
 
 #: The domain every model's grid covers. Not either product's: a forecast model
@@ -172,19 +205,49 @@ WINDOWS = (5, 10, 15, 20, 25, 30)
 #: 亮温是 K。三条的时效都排到 180 分钟，雷达 10 分钟一个点，另两条 30 分钟一个点
 #: ——四个点的折线看不出什么形状。
 EXERCISES: tuple[Exercise, ...] = (
-    Exercise(CONFIG_ID, DEMO_NAME, "radar-composite",
-             leads=(10, 20, 30, 40, 50, 60, 70, 80, 90,
-                    100, 110, 120, 130, 140, 150, 160, 170, 180),
-             levels=(20.0, 30.0, 40.0, 50.0, 60.0),
-             window=WINDOWS),
-    Exercise("rain-demo", "Rain rate", "satellite-rain",
-             leads=(30, 60, 90, 120, 150, 180),
-             levels=(0.1, 1.0, 10.0, 25.0, 50.0, 100.0, 250.0),
-             window=WINDOWS),
-    Exercise("bt-demo", "Brightness temperature", "satellite-bt",
-             leads=(30, 60, 90, 120, 150, 180),
-             levels=(200.0, 210.0, 220.0, 230.0, 240.0, 250.0, 260.0, 270.0),
-             window=WINDOWS),
+    Exercise(
+        CONFIG_ID,
+        DEMO_NAME,
+        "radar-composite",
+        leads=(
+            10,
+            20,
+            30,
+            40,
+            50,
+            60,
+            70,
+            80,
+            90,
+            100,
+            110,
+            120,
+            130,
+            140,
+            150,
+            160,
+            170,
+            180,
+        ),
+        levels=(20.0, 30.0, 40.0, 50.0, 60.0),
+        window=WINDOWS,
+    ),
+    Exercise(
+        "rain-demo",
+        "Rain rate",
+        "satellite-rain",
+        leads=(30, 60, 90, 120, 150, 180),
+        levels=(0.1, 1.0, 10.0, 25.0, 50.0, 100.0, 250.0),
+        window=WINDOWS,
+    ),
+    Exercise(
+        "bt-demo",
+        "Brightness temperature",
+        "satellite-bt",
+        leads=(30, 60, 90, 120, 150, 180),
+        levels=(200.0, 210.0, 220.0, 230.0, 240.0, 250.0, 260.0, 270.0),
+        window=WINDOWS,
+    ),
 )
 
 
@@ -302,17 +365,19 @@ def data_manifest(source: Product) -> dict:
         "id": source.id,
         "offers": ["precip-nowcast.v1"],
         "region": "east-china",
-        "fields": [{
-            "name": source.variable,
-            "unit": source.unit,
-            "dtype": "float32",
-            "shape": list(source.shape),
-            "cadence_minutes": CADENCE_MINUTES,
-            "frame_count": CONTEXT_FRAMES + source.frames,
-            "target_frame_count": source.frames,
-            "extent": list(source.extent),
-            "resolution": source.resolution,
-        }],
+        "fields": [
+            {
+                "name": source.variable,
+                "unit": source.unit,
+                "dtype": "float32",
+                "shape": list(source.shape),
+                "cadence_minutes": CADENCE_MINUTES,
+                "frame_count": CONTEXT_FRAMES + source.frames,
+                "target_frame_count": source.frames,
+                "extent": list(source.extent),
+                "resolution": source.resolution,
+            }
+        ],
     }
 
 
@@ -322,28 +387,36 @@ def model_manifest(forecast: Forecast, source: Product) -> dict:
         "requires": "precip-nowcast.v1",
         "region": "east-china",
         "context_frames": {"required_count": CONTEXT_FRAMES, "mode": "latest"},
-        "input": [{"name": source.variable, "unit": source.unit, "dtype": "float32",
-                   "shape": list(source.shape)}],
-        "output": [{
-            "name": source.variable,
-            "unit": source.unit,
-            "dtype": "float32",
-            # The product's shape, not ``MODEL_SHAPE``, because the Matcher refuses
-            # a pair whose shapes differ and this module resamples onto a ruler.
-            # The two cannot both be right. The provider generates the model's
-            # field on ``MODEL_EXTENT``/``MODEL_SHAPE`` -- a coarser grid of its
-            # own -- and this manifest then declares the product's; a manifest
-            # that does not describe what the provider makes is a lie the Matcher
-            # currently requires.
-            "shape": list(source.shape),
-            "cadence_minutes": CADENCE_MINUTES,
-            "frame_count": source.frames,
-        }],
+        "input": [
+            {
+                "name": source.variable,
+                "unit": source.unit,
+                "dtype": "float32",
+                "shape": list(source.shape),
+            }
+        ],
+        "output": [
+            {
+                "name": source.variable,
+                "unit": source.unit,
+                "dtype": "float32",
+                # The product's shape, not ``MODEL_SHAPE``, because the Matcher refuses
+                # a pair whose shapes differ and this module resamples onto a ruler.
+                # The two cannot both be right. The provider generates the model's
+                # field on ``MODEL_EXTENT``/``MODEL_SHAPE`` -- a coarser grid of its
+                # own -- and this manifest then declares the product's; a manifest
+                # that does not describe what the provider makes is a lie the Matcher
+                # currently requires.
+                "shape": list(source.shape),
+                "cadence_minutes": CADENCE_MINUTES,
+                "frame_count": source.frames,
+            }
+        ],
     }
 
 
 def run_config_text(forecast: Forecast, source: Product, start: str) -> str:
-    """A run config, byte for byte the shape ``contracts/README.md`` describes.
+    """A run config in the legacy verification format.
 
     The horizon is the product's, in frames: the number that becomes minutes is
     the config's time step, and a run cannot reach a lead the model never claimed.
@@ -353,7 +426,7 @@ def run_config_text(forecast: Forecast, source: Product, start: str) -> str:
         f"data:\n  id: {source.id}\n"
         f"model:\n  id: {forecast.id}\n"
         "run:\n"
-        f"  start_time: \"{start}\"\n"
+        f'  start_time: "{start}"\n'
         f"  forecast_horizon: {source.frames}\n"
     )
 
@@ -385,9 +458,13 @@ def catalogue(scenario: str) -> dict:
         "model_shape": MODEL_SHAPE,
         "sources": {
             s.id: {
-                "variable": s.variable, "unit": s.unit,
-                "scale": s.scale, "offset": s.offset,
-                "vmin": s.vmin, "vmax": s.vmax, "noise": s.noise,
+                "variable": s.variable,
+                "unit": s.unit,
+                "scale": s.scale,
+                "offset": s.offset,
+                "vmin": s.vmin,
+                "vmax": s.vmax,
+                "noise": s.noise,
                 "missing_kind": s.missing_kind,
                 "missing_points": s.missing_points,
                 "extent": s.extent,
@@ -424,22 +501,33 @@ def verification_config(spec: Exercise | None = None):
         group_id=spec.id,
         name=spec.name,
         ruler=Ruler(
-            ground_truth=spec.source, unit=source.unit,
-            time_step_minutes=CADENCE_MINUTES, extent=source.extent,
+            ground_truth=spec.source,
+            unit=source.unit,
+            time_step_minutes=CADENCE_MINUTES,
+            extent=source.extent,
             resolution=source.resolution,
         ),
         members=tuple(
-            Member(name=f.id, variable=source.variable, unit=source.unit, leads=spec.leads)
-            for f in FORECASTS if f.source == spec.source
+            Member(
+                name=f.id, variable=source.variable, unit=source.unit, leads=spec.leads
+            )
+            for f in FORECASTS
+            if f.source == spec.source
         ),
         metrics=(
-            MetricGroup(family="yes_or_no",
-                        items=("ts", "bias", "ets", "pod", "far", "dts"),
-                        levels=spec.levels),
+            MetricGroup(
+                family="yes_or_no",
+                items=("ts", "bias", "ets", "pod", "far", "dts"),
+                levels=spec.levels,
+            ),
             MetricGroup(family="continuous", items=("me", "mae", "rmse")),
             MetricGroup(family="moments", items=("corr",)),
-            MetricGroup(family="spatial", items=("fss",), levels=spec.levels,
-                        half_windows=spec.window),
+            MetricGroup(
+                family="spatial",
+                items=("fss",),
+                levels=spec.levels,
+                half_windows=spec.window,
+            ),
         ),
     )
 
@@ -475,9 +563,15 @@ platform's own service. Nothing in this tree is read as a data file.
 # ======================================================================
 # build
 # ======================================================================
-def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
-          init_times: int | None = None,
-          force: bool = False, say: Callable[[str], None] = print) -> Demo:
+def build(
+    root: Path,
+    *,
+    scenario: str = "convective",
+    review_port: int = 8766,
+    init_times: int | None = None,
+    force: bool = False,
+    say: Callable[[str], None] = print,
+) -> Demo:
     """Lay out the whole workspace. Does not start anything."""
     from .access import scenario as scenarios
 
@@ -495,8 +589,15 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
         # store behind would leave the old quantities in place under the old
         # names — a workspace that looks rebuilt and answers every query with a
         # gap. Only paths the demo itself writes are ever removed.
-        for name in ("config.yaml", "README.md", "configs", "inputs", "packages",
-                     "workspace", ".store"):
+        for name in (
+            "config.yaml",
+            "README.md",
+            "configs",
+            "inputs",
+            "packages",
+            "workspace",
+            ".store",
+        ):
             victim = root / name
             if victim.is_dir():
                 shutil.rmtree(victim, ignore_errors=True)
@@ -504,33 +605,52 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
                 victim.unlink()
 
     say(f"  1/6  platform     fabricating a workspace in {root}")
-    demo = Demo(root=root, scenario=scenario, review_port=review_port,
-                configs=root / "configs", store=root / ".store")
+    demo = Demo(
+        root=root,
+        scenario=scenario,
+        review_port=review_port,
+        configs=root / "configs",
+        store=root / ".store",
+    )
 
     _write(Path(root / "config.yaml"), host_config_text(review_port))
     _write(Path(root / "inputs" / "data" / ".keep"), "")
     demo.config_path = root / "config.yaml"
-    say("         config.yaml         review 127.0.0.1:%d, data root inputs/data"
-        % review_port)
+    say(
+        "         config.yaml         review 127.0.0.1:%d, data root inputs/data"
+        % review_port
+    )
 
     # Manifests in unrelated directories, on purpose: they are found by what they
     # declare, not by where they were put, and the tree says so by not looking
     # like a catalogue.
-    places = [root / "packages" / "bundle-a",
-              root / "packages" / "bundle-b",
-              root / "packages" / "deep" / "nested" / "down" / "here"]
+    places = [
+        root / "packages" / "bundle-a",
+        root / "packages" / "bundle-b",
+        root / "packages" / "deep" / "nested" / "down" / "here",
+    ]
     writes: list[tuple[Path, dict]] = []
     for index, source in enumerate(SOURCES):
-        writes.append((places[index % len(places)] / source.id / "manifest.json",
-                       data_manifest(source)))
+        writes.append(
+            (
+                places[index % len(places)] / source.id / "manifest.json",
+                data_manifest(source),
+            )
+        )
     for index, forecast in enumerate(FORECASTS):
-        writes.append((places[(index + 1) % len(places)] / forecast.id / "manifest.json",
-                       model_manifest(forecast, source_of(forecast.source))))
+        writes.append(
+            (
+                places[(index + 1) % len(places)] / forecast.id / "manifest.json",
+                model_manifest(forecast, source_of(forecast.source)),
+            )
+        )
     for path, payload in writes:
         _json(path, payload)
     demo.packages = [root / "packages"]
-    say("         packages            %d manifests (%d products, %d models), "
-        "in unrelated directories" % (len(writes), len(SOURCES), len(FORECASTS)))
+    say(
+        "         packages            %d manifests (%d products, %d models), "
+        "in unrelated directories" % (len(writes), len(SOURCES), len(FORECASTS))
+    )
     for source in SOURCES:
         say("         %-18s %s [%s]" % (source.id, source.variable, source.unit))
 
@@ -542,12 +662,15 @@ def build(root: Path, *, scenario: str = "convective", review_port: int = 8766,
         for forecast, source in pairs():
             _write(
                 demo.runs_root
-                / f"{moment.replace(':', '')}-{source.id}-{forecast.id}" / "run.yaml",
+                / f"{moment.replace(':', '')}-{source.id}-{forecast.id}"
+                / "run.yaml",
                 run_config_text(forecast, source, moment),
             )
             count += 1
-    say(f"         run configs         {count} runs ({init_times or INIT_TIMES} init times x "
-        f"{len(pairs())} model/source pairs)")
+    say(
+        f"         run configs         {count} runs ({init_times or INIT_TIMES} init times x "
+        f"{len(pairs())} model/source pairs)"
+    )
 
     demo.configs.mkdir(parents=True, exist_ok=True)
     for spec in EXERCISES:
@@ -576,19 +699,29 @@ def survey(demo: Demo, *, say: Callable[[str], None] = print):
     book = discover_runs([demo.runs_root])
 
     say("  2/6  catalog      read by content, not by layout")
-    say("         data packages       %d   %s"
-        % (len(catalog.data_packages), ", ".join(catalog.data_ids) or "none"))
-    say("         model packages      %d   %s"
-        % (len(catalog.model_packages), ", ".join(catalog.model_ids) or "none"))
+    say(
+        "         data packages       %d   %s"
+        % (len(catalog.data_packages), ", ".join(catalog.data_ids) or "none")
+    )
+    say(
+        "         model packages      %d   %s"
+        % (len(catalog.model_packages), ", ".join(catalog.model_ids) or "none")
+    )
 
     from .catalog.matching import compatible_pairs
 
     every = len(catalog.data_packages) * len(catalog.model_packages)
     pairs = compatible_pairs(catalog.data_packages, catalog.model_packages)
     say("         compatible pairs    %d of %d pass the Matcher" % (len(pairs), every))
-    say("         runs                %d, %s" % (len(book), ", ".join(book.model_ids) or "none"))
+    say(
+        "         runs                %d, %s"
+        % (len(book), ", ".join(book.model_ids) or "none")
+    )
     if catalog.problems():
-        say("         skipped             %d unreadable manifest(s)" % len(catalog.problems()))
+        say(
+            "         skipped             %d unreadable manifest(s)"
+            % len(catalog.problems())
+        )
     return catalog, book
 
 
@@ -601,15 +734,31 @@ def show_configs(demo: Demo, *, say: Callable[[str], None] = print) -> list:
     for spec in EXERCISES:
         cfg = load(demo.configs / f"{spec.id}.json")
         out.append(cfg)
-        say("         %-10s ruler %s  %s [%s] @ %g"
-            % (cfg.group_id, cfg.ruler.fingerprint, cfg.ruler.ground_truth,
-               cfg.ruler.unit, cfg.ruler.resolution))
-        say("         %-10s %d members %s, leads %s, levels %s"
-            % ("", len(cfg.members), "/".join(m.name for m in cfg.members),
-               list(spec.leads), list(spec.levels)))
+        say(
+            "         %-10s ruler %s  %s [%s] @ %g"
+            % (
+                cfg.group_id,
+                cfg.ruler.fingerprint,
+                cfg.ruler.ground_truth,
+                cfg.ruler.unit,
+                cfg.ruler.resolution,
+            )
+        )
+        say(
+            "         %-10s %d members %s, leads %s, levels %s"
+            % (
+                "",
+                len(cfg.members),
+                "/".join(m.name for m in cfg.members),
+                list(spec.leads),
+                list(spec.levels),
+            )
+        )
         families = sorted({g.family for g in cfg.metrics})
-        say("         %-10s %d metric families: %s"
-            % ("", len(families), ", ".join(families)))
+        say(
+            "         %-10s %d metric families: %s"
+            % ("", len(families), ", ".join(families))
+        )
     return out
 
 
@@ -650,8 +799,7 @@ def _describe(caps) -> str:
     )
 
 
-def verify(demo: Demo, *, access, data_url: str,
-           say: Callable[[str], None] = print):
+def verify(demo: Demo, *, access, data_url: str, say: Callable[[str], None] = print):
     """Plan from the run configs, then verify through the HTTP client."""
     from .access import build_access
     from .access.probe import CountingAccess
@@ -682,20 +830,33 @@ def verify(demo: Demo, *, access, data_url: str,
             before = dict(client.log.calls)
             run_tasks(client, store, cfg, planned_runs(result))
             facts = store.task_counts(cfg.group_id)
-            say("         %-11s planned %3d tasks over %d init time(s)"
-                % (spec.id, len(result.tasks), len(result.init_times())))
-            say("         %-11s ran     %3d done, %d unavailable, %d failed, %d skipped"
-                % ("", facts.get("done", 0), facts.get("unavailable", 0),
-                   facts.get("failed", 0), facts.get("skipped", 0)))
+            say(
+                "         %-11s planned %3d tasks over %d init time(s)"
+                % (spec.id, len(result.tasks), len(result.init_times()))
+            )
+            say(
+                "         %-11s ran     %3d done, %d unavailable, %d failed, %d skipped"
+                % (
+                    "",
+                    facts.get("done", 0),
+                    facts.get("unavailable", 0),
+                    facts.get("failed", 0),
+                    facts.get("skipped", 0),
+                )
+            )
             # The counters matter: they are what the acceptance condition is
             # stated in. Adding a threshold has to leave this second number
             # exactly where it is.
-            say("         %-11s fetches %3d observation, %d prediction, over the socket"
-                % ("",
-                   client.log.calls.get("get_observation", 0)
-                   - before.get("get_observation", 0),
-                   client.log.calls.get("get_prediction", 0)
-                   - before.get("get_prediction", 0)))
+            say(
+                "         %-11s fetches %3d observation, %d prediction, over the socket"
+                % (
+                    "",
+                    client.log.calls.get("get_observation", 0)
+                    - before.get("get_observation", 0),
+                    client.log.calls.get("get_prediction", 0)
+                    - before.get("get_prediction", 0),
+                )
+            )
     finally:
         store.close()
     return client.log
@@ -722,18 +883,29 @@ def headline(demo: Demo, *, say: Callable[[str], None] = print) -> list[dict]:
         for spec in EXERCISES:
             cfg = load(demo.configs / f"{spec.id}.json")
             level = spec.headline_level
-            result = query_scores(store, cfg, method="ts", s={"level": [level]},
-                                  g=["member", "lead_minutes"])
+            result = query_scores(
+                store,
+                cfg,
+                method="ts",
+                s={"level": [level]},
+                g=["member", "lead_minutes"],
+            )
             rows = _pivot(result["records"], spec.leads)
             out.extend(rows)
             say("")
-            say("         %s: CSI at %g %s, by lead time"
-                % (spec.id, level, cfg.ruler.unit))
+            say(
+                "         %s: CSI at %g %s, by lead time"
+                % (spec.id, level, cfg.ruler.unit)
+            )
             say("           " + "".join("%7s" % lead for lead in spec.leads))
             for row in rows:
                 cells = "".join(
-                    "%7s" % ("--" if row["values"].get(lead) is None
-                             else f"{row['values'][lead]:.3f}")
+                    "%7s"
+                    % (
+                        "--"
+                        if row["values"].get(lead) is None
+                        else f"{row['values'][lead]:.3f}"
+                    )
                     for lead in spec.leads
                 )
                 say("         %-11s%s" % (row["member"], cells))
@@ -745,7 +917,9 @@ def headline(demo: Demo, *, say: Callable[[str], None] = print) -> list[dict]:
 def _pivot(records: Sequence[dict], leads: Sequence[int]) -> list[dict]:
     tables: dict[str, dict[int, float | None]] = {}
     for record in records:
-        tables.setdefault(record["member"], {})[int(record["lead_minutes"])] = record["value"]
+        tables.setdefault(record["member"], {})[int(record["lead_minutes"])] = record[
+            "value"
+        ]
     return [
         {"member": member, "values": {lead: table.get(lead) for lead in leads}}
         for member, table in sorted(tables.items())
@@ -761,22 +935,28 @@ def next_steps(demo: Demo, *, say: Callable[[str], None] = print) -> None:
     say("               The chart below the table is the same query, drawn.")
     say("    Results  - set Levels to 133 and Run query again. The numbers change")
     say("               and nothing is recomputed: that is the acceptance condition.")
-    say("    Configs  - open %s. The ruler cannot be edited; metrics can only be" % CONFIG_ID)
+    say(
+        "    Configs  - open %s. The ruler cannot be edited; metrics can only be"
+        % CONFIG_ID
+    )
     say("               added to. Both are refused by the service, not the page.")
     say("    New config - the wizard, end to end, including the catalog picker.")
     say("")
     say("  And from another terminal, while this runs:")
     say("    curl %s/capabilities" % (demo.data_url or "<data-url>"))
     say("    python -m nib_verify host show --host-config %s" % demo.config_path)
-    say("    python -m nib_verify task plan --config %s --runs %s --probe"
-        % (demo.config_file, demo.runs_root))
+    say(
+        "    python -m nib_verify task plan --config %s --runs %s --probe"
+        % (demo.config_file, demo.runs_root)
+    )
 
 
 # ======================================================================
 # the one command
 # ======================================================================
-def serve_review(demo: Demo, *, data_url: str, access: str = "real",
-                 log_level: str = "warning") -> None:
+def serve_review(
+    demo: Demo, *, data_url: str, access: str = "real", log_level: str = "warning"
+) -> None:
     """Bring up the review page, pointed at the same data service. Blocks."""
     import uvicorn
 
@@ -790,8 +970,9 @@ def serve_review(demo: Demo, *, data_url: str, access: str = "real",
         packages=demo.packages,
         runs=[demo.runs_root],
         host=load_host(demo.config_path),
-        access=build_access(access, base_url=data_url) if access == "real" else
-        build_access(access, **catalogue(demo.scenario)),
+        access=build_access(access, base_url=data_url)
+        if access == "real"
+        else build_access(access, **catalogue(demo.scenario)),
     )
     # From config.yaml, the same way ``serve`` does it. The demo would otherwise
     # be the one place that quietly does the thing AGENTS.md forbids.

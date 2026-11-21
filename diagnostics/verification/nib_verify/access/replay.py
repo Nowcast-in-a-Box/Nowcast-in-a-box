@@ -77,8 +77,14 @@ class ReplayAccess:
             raise FieldUnavailable(f"no observation file for {valid_time.isoformat()}")
         data = np.load(path)
         coords = self._coords(self._obs_dir(name))
-        return Field(data=data, coords=coords, valid_time=valid_time,
-                     unit=self.unit, variable=self.variable, name=name)
+        return Field(
+            data=data,
+            coords=coords,
+            valid_time=valid_time,
+            unit=self.unit,
+            variable=self.variable,
+            name=name,
+        )
 
     # -- predictions ----------------------------------------------------
     def list_predictions(self, model_id, init_time) -> list[int]:
@@ -99,8 +105,14 @@ class ReplayAccess:
             data = z[key]
             coords = Coords(lon=z["lon"], lat=z["lat"])
         valid_time = init_time + timedelta(minutes=int(lead_minutes))
-        return Field(data=data, coords=coords, valid_time=valid_time,
-                     unit=self.unit, variable=self.variable, name=model_id)
+        return Field(
+            data=data,
+            coords=coords,
+            valid_time=valid_time,
+            unit=self.unit,
+            variable=self.variable,
+            name=model_id,
+        )
 
     # -- internals ------------------------------------------------------
     def _obs_dir(self, name: str) -> Path:

@@ -37,6 +37,7 @@ type Addr struct {
 // Paths are host filesystem locations from config.yaml.
 // Relative values resolve against the directory that contains the file.
 type Paths struct {
+	DataRoot     string `yaml:"data_root,omitempty" json:"-"`
 	Artifacts    string `yaml:"artifacts" json:"artifacts"`
 	Runs         string `yaml:"runs,omitempty" json:"runs,omitempty"`
 	Orders       string `yaml:"orders,omitempty" json:"orders,omitempty"`
@@ -50,6 +51,7 @@ type Runtime struct {
 	ImageRegistry     string   `yaml:"image_registry,omitempty" json:"image_registry,omitempty"`
 	ImageMirror       string   `yaml:"image_mirror,omitempty" json:"image_mirror,omitempty"`
 	ImageSource       string   `yaml:"image_source,omitempty" json:"image_source,omitempty"`
+	ImageOverride     string   `yaml:"image_override,omitempty" json:"image_override,omitempty"`
 	AllowedOrigins    []string `yaml:"allowed_origins" json:"allowed_origins"`
 	Token             string   `yaml:"token,omitempty" json:"-"`
 	AtlasRevision     string   `yaml:"atlas_revision" json:"atlas_revision"`
@@ -96,10 +98,9 @@ func Load(explicit string) (Config, error) {
 				cwd = "."
 			}
 			cfg.resolvePaths(cwd)
-			if err := cfg.applySettings(); err != nil {
+			if err := cfg.applySettingsAndEnv(); err != nil {
 				return Config{}, err
 			}
-			cfg.applyDataRootEnv()
 			return cfg, nil
 		}
 		path = found
@@ -139,10 +140,9 @@ func Load(explicit string) (Config, error) {
 	cfg.applyDefaults()
 	cfg.Source = path
 	cfg.resolvePaths(filepath.Dir(path))
-	if err := cfg.applySettings(); err != nil {
+	if err := cfg.applySettingsAndEnv(); err != nil {
 		return Config{}, err
 	}
-	cfg.applyDataRootEnv()
 	return cfg, nil
 }
 
@@ -202,6 +202,7 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) resolvePaths(baseDir string) {
+	c.DataRootFallback = resolveAgainst(baseDir, c.Paths.DataRoot)
 	c.Paths.Artifacts = resolveAgainst(baseDir, c.Paths.Artifacts)
 	c.Paths.Runs = resolveAgainst(baseDir, c.Paths.Runs)
 	c.Paths.Orders = resolveAgainst(baseDir, c.Paths.Orders)
@@ -209,10 +210,21 @@ func (c *Config) resolvePaths(baseDir string) {
 	c.Paths.WeightSource = resolveAgainst(baseDir, c.Paths.WeightSource)
 }
 
-func (c *Config) applyDataRootEnv() {
+func (c *Config) applySettingsAndEnv() error {
+	if err := c.applySettings(); err != nil {
+		return err
+	}
 	if env := os.Getenv("NIB_DATA_ROOT"); env != "" {
 		c.DataRootFallback = env
 	}
+	if env := os.Getenv("NIB_IMAGE_OVERRIDE"); env != "" {
+		value, err := normalizeImagePrefix(env)
+		if err != nil {
+			return fmt.Errorf("NIB_IMAGE_OVERRIDE: %w", err)
+		}
+		c.Runtime.ImageOverride = value
+	}
+	return nil
 }
 
 // ResolveDataDir joins a request data_dir onto the host data root.

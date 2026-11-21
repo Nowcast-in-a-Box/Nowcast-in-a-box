@@ -126,11 +126,7 @@ def make_fixture(grid: str, n_leads: int = DEFAULT_N_LEADS) -> VisualizationFiel
     """
     if grid not in ("latlon", "projected"):
         raise ValueError(f"grid must be 'latlon' or 'projected', got {grid!r}")
-    if (
-        isinstance(n_leads, bool)
-        or not isinstance(n_leads, (int, np.integer))
-        or n_leads < 1
-    ):
+    if isinstance(n_leads, bool) or not isinstance(n_leads, (int, np.integer)) or n_leads < 1:
         raise ValueError(f"n_leads must be a positive integer, got {n_leads!r}")
 
     if grid == "latlon":
@@ -141,9 +137,7 @@ def make_fixture(grid: str, n_leads: int = DEFAULT_N_LEADS) -> VisualizationFiel
         crs = PROJECTED_CRS
 
     lead_time = np.arange(1, n_leads + 1) * LEAD_STEP
-    frames = np.stack(
-        [_sample_analytical(lon, lat, index, n_leads) for index in range(n_leads)]
-    )
+    frames = np.stack([_sample_analytical(lon, lat, index, n_leads) for index in range(n_leads)])
     values = xr.DataArray(
         frames,
         dims=("lead_time", "y", "x"),

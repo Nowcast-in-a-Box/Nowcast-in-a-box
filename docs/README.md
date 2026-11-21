@@ -20,12 +20,10 @@ prebuilt Handler; model inference and diagnostics run inside Docker.
 - [Runtime resources and manifests](reference/runtime-resources.md)
 - [Runtime integration and stored fields](reference/runtime-integration.md)
 - [Verification field interface](reference/interfaces-we-consume.md)
-- [Contracts](../contracts/README.md)
+- [Runtime contracts](reference/contracts.md)
 - [Adapter source](../adapters/README.md)
 - [Diagnostics](../diagnostics/README.md)
 
 ## Historical records
 
-The [archive](archive/README.md) retains verification evidence and past plans.
-Its results describe the versions and platforms tested at the time, not current
-release acceptance. Draft documents and images remain in their existing locations.
+- [Archived checks and plans](archive/README.md)

@@ -20,10 +20,17 @@ from pyproj import CRS
 from nib_visualization.basemap import RasterBasemapView, _validate_extent
 
 ETOPO_COLORS = (
-    (-10000, "#173955"), (-6000, "#32678a"), (-3000, "#75a5bc"),
-    (-1, "#d8eaf0"), (0, "#cad9b5"), (500, "#d5dbb5"),
-    (1500, "#e4d3ae"), (3000, "#c2a580"), (5000, "#8d8070"),
-    (6500, "#c5c0b6"), (8500, "#faf8f1"),
+    (-10000, "#173955"),
+    (-6000, "#32678a"),
+    (-3000, "#75a5bc"),
+    (-1, "#d8eaf0"),
+    (0, "#cad9b5"),
+    (500, "#d5dbb5"),
+    (1500, "#e4d3ae"),
+    (3000, "#c2a580"),
+    (5000, "#8d8070"),
+    (6500, "#c5c0b6"),
+    (8500, "#faf8f1"),
 )
 
 
@@ -67,15 +74,21 @@ class EtopoTerrain:
         dx = float(self.longitude[1] - self.longitude[0])
         dy = float(self.latitude[1] - self.latitude[0])
         extent = (
-            float(self.longitude[x0] - dx / 2), float(self.longitude[x1 - 1] + dx / 2),
-            float(self.latitude[y0] - dy / 2), float(self.latitude[y1 - 1] + dy / 2),
+            float(self.longitude[x0] - dx / 2),
+            float(self.longitude[x1 - 1] + dx / 2),
+            float(self.latitude[y0] - dy / 2),
+            float(self.latitude[y1 - 1] + dy / 2),
         )
         return RasterBasemapView(values, extent, ETOPO_COLORS, self.alpha)
 
 
 def load_etopo(
-    path: Path | str, source_record: Path | str, *, expected_sha256: str,
-    max_width: int = 1200, alpha: float = 0.56,
+    path: Path | str,
+    source_record: Path | str,
+    *,
+    expected_sha256: str,
+    max_width: int = 1200,
+    alpha: float = 0.56,
 ) -> EtopoTerrain:
     """Verify a local ETOPO global file or native crop and open its coordinate metadata."""
     path, source_record = Path(path), Path(source_record)
@@ -105,17 +118,29 @@ def load_etopo(
         if not grid_crs.equals(CRS.from_epsg(4326)):
             raise ValueError("terrain file CRS does not match its WGS84 source record")
     return EtopoTerrain(
-        path, lat, lon, record["citation"], record["disclaimer"],
+        path,
+        lat,
+        lon,
+        record["citation"],
+        record["disclaimer"],
         {
-            "source_id": record["source_id"], "path": str(path.resolve()), "sha256": actual,
+            "source_id": record["source_id"],
+            "path": str(path.resolve()),
+            "sha256": actual,
             "source_record": {
-                "path": str(source_record.resolve()), "sha256": _sha256(source_record),
+                "path": str(source_record.resolve()),
+                "sha256": _sha256(source_record),
             },
-            "horizontal_crs": "EPSG:4326", "vertical_crs": record["vertical_crs"],
-            "units": "m", "native_shape": [len(lat), len(lon)],
-            "max_display_width": max_width, "alpha": alpha,
+            "horizontal_crs": "EPSG:4326",
+            "vertical_crs": record["vertical_crs"],
+            "units": "m",
+            "native_shape": [len(lat), len(lon)],
+            "max_display_width": max_width,
+            "alpha": alpha,
             "sampling": "nearest native cell at each regular display-pixel centre; display only",
-            "attribution": record["citation"], "disclaimer": record["disclaimer"],
+            "attribution": record["citation"],
+            "disclaimer": record["disclaimer"],
         },
-        max_width, alpha,
+        max_width,
+        alpha,
     )

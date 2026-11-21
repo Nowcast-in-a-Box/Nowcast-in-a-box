@@ -5,7 +5,7 @@ The host handler does not import this tree. A model image installs that
 reader's `requirements.txt` plus the paired model's `requirements.txt`.
 
 ```text
-adapters/catalog.json            web index
+atlas/runtime/adapters-catalog.json            web index
 adapters/<data-id>/source.py     one data source
 adapters/<data-id>/<model-id>/   one model. Its program is adapter.py.
 artifacts/                       downloaded weight files, not committed
@@ -18,14 +18,19 @@ reader. Each model directory has the same pair. See
 dataset or image. Build images from the repository root, for example:
 
 ```sh
-docker build -f adapters/sevir/Dockerfile -t nib-ingestion:dev .
+docker build -f adapters/sevir/Dockerfile -t nib-reader-sevir:local-v1 .
 docker build -f adapters/sevir/nowcastnet/Dockerfile -t nib-nowcastnet:dev .
 ```
 
-Contracts live outside this tree: `contracts/data/<id>.json` and
-`contracts/models/<data-id>/<model-id>.json`. The Python contracts are
+Contracts live outside this tree: `atlas/contracts/data/<id>.json` and
+`atlas/contracts/models/<data-id>/<model-id>.json`. The Python contracts are
 `interfaces/`. Path resolution and the Hugging Face weight fetch are
 `utils/`.
+
+Each data source implements `DataAdapter.inspect_sample(root)` in `source.py`.
+It reads a bounded sample and returns a JSON-compatible object with a `sample`
+path relative to `root`. The console uses the offline reader probe image for
+this check. It does not create a run or validate an inference time window.
 
 ## Boundary
 

@@ -2,19 +2,18 @@ from datetime import timedelta
 
 import numpy as np
 import pytest
-
-from utils.stored_fields import add_forecast
-from test_stored_fields import fixture_forecast
-from test_stored_fields import fixture_window, START
+from test_stored_fields import START, fixture_forecast, fixture_window
 from test_stored_fields import (
     run as run,
 )  # noqa: F811 — pytest fixture shared by these tests
 
+from utils.stored_fields import add_forecast
+
 
 def test_prediction_gap_does_not_mark_observation_gap(run):
     from nib_verify.access.stored import RunAccess
-    from nib_verify.config.schema import Ruler, Member, MetricGroup, VerificationConfig
-    from nib_verify.runner import run_tasks, RunRef
+    from nib_verify.config.schema import Member, MetricGroup, Ruler, VerificationConfig
+    from nib_verify.runner import RunRef, run_tasks
     from nib_verify.store import Store
 
     init = START + timedelta(minutes=25)
@@ -34,6 +33,7 @@ def test_prediction_gap_does_not_mark_observation_gap(run):
 
 def test_three_models_are_all_scored_in_one_verification(run):
     import json
+
     from diagnostics.verification_run import verification
 
     models = ("nowcastnet", "exprecast", "wadepre")
@@ -61,6 +61,7 @@ def test_three_models_are_all_scored_in_one_verification(run):
 
 def test_verification_attempts_preserve_previous_reports(run):
     import json
+
     from diagnostics.verification_run import verification
 
     add_forecast(
@@ -85,9 +86,10 @@ def test_verification_attempts_preserve_previous_reports(run):
 
 def test_added_threshold_is_computed_from_saved_fields(run):
     from dataclasses import replace
+
     from nib_verify.access.stored import RunAccess
-    from nib_verify.config.schema import Ruler, Member, MetricGroup, VerificationConfig
-    from nib_verify.runner import run_tasks, RunRef
+    from nib_verify.config.schema import Member, MetricGroup, Ruler, VerificationConfig
+    from nib_verify.runner import RunRef, run_tasks
     from nib_verify.store import Store
 
     add_forecast(
@@ -118,10 +120,11 @@ def test_added_threshold_is_computed_from_saved_fields(run):
 
 def test_stored_provider_and_visualization_share_scientific_identity(run):
     from nib_verify.access.stored import RunAccess
-    from nib_verify.config.schema import Ruler, Member, MetricGroup, VerificationConfig
-    from nib_verify.runner import run_tasks, RunRef
-    from nib_verify.store import Store
+    from nib_verify.config.schema import Member, MetricGroup, Ruler, VerificationConfig
     from nib_verify.query import query_scores
+    from nib_verify.runner import RunRef, run_tasks
+    from nib_verify.store import Store
+
     from diagnostics.fields import visualization_field
 
     values = np.ones((20, 4, 4), np.float32) * 2

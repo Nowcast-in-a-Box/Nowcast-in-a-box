@@ -5,17 +5,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from datetime import datetime, timedelta, timezone
 import re
-
-FY4B_RE = re.compile(
-    r"^FY4B-_AGRI--_N_(DISK|REGC|AREA)_([0-9A-Z]+)_L1-_"
-    r"(FDI|GEO)-_MULT_NOM_(\d{14})_(\d{14})_"
-    r"(\d{4}M)_V\d{4}\.HDF$",
-    re.IGNORECASE,
-)
-
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from interfaces.data import (
     ChannelSpec,
@@ -24,10 +16,17 @@ from interfaces.data import (
     DataRequest,
     DeclaredDataAdapter,
     SpatialSpec,
-    VariableSpec,
     bundle_from_parts,
     loader_config,
 )
+
+FY4B_RE = re.compile(
+    r"^FY4B-_AGRI--_N_(DISK|REGC|AREA)_([0-9A-Z]+)_L1-_"
+    r"(FDI|GEO)-_MULT_NOM_(\d{14})_(\d{14})_"
+    r"(\d{4}M)_V\d{4}\.HDF$",
+    re.IGNORECASE,
+)
+
 
 # Dataset. Fixed before any request runs.
 ID = "fy4b"
@@ -161,9 +160,7 @@ def find_fy4b_files(records, requested_time):
         )
 
         raise FileNotFoundError(
-            "\nFY-4B requested time not found\n"
-            "requested_time = {}\n"
-            "available_times = {}".format(
+            "\nFY-4B requested time not found\nrequested_time = {}\navailable_times = {}".format(
                 requested_time.isoformat(),
                 available_times[:20],
             )
@@ -173,8 +170,9 @@ def find_fy4b_files(records, requested_time):
 
     if not fdi_records:
         raise FileNotFoundError(
-            "\nFY-4B FDI file not found at requested time\n"
-            "requested_time = {}".format(requested_time.isoformat())
+            "\nFY-4B FDI file not found at requested time\nrequested_time = {}".format(
+                requested_time.isoformat()
+            )
         )
 
     # Minimal rule:
@@ -332,7 +330,7 @@ def load_fy4b(config):
     if bbox is None:
         print("region           : full disk")
     else:
-        print("region           : {} " "(west, south, east, north)".format(bbox))
+        print("region           : {} (west, south, east, north)".format(bbox))
 
     print("requested_times  :")
     for t in requested_times:
@@ -377,14 +375,23 @@ def load_fy4b(config):
 
     if bbox is not None:
         print(
-            "Note            : region is recorded only; "
-            "actual spatial crop is not performed in v1."
+            "Note            : region is recorded only; actual spatial crop is not performed in v1."
         )
 
     return results
 
 
 class Source(DeclaredDataAdapter):
+    def inspect_sample(self, root: Path) -> dict:
+        from utils.hdf_sample import inspect_hdf
+        from utils.sample_files import first_file
+
+        path = first_file(
+            root,
+            lambda p: p.name.lower().startswith("fy4b") and p.suffix.lower() == ".hdf",
+        )
+        return inspect_hdf(root, path, (f"Data/NOMChannel{i:02}" for i in range(1, 16)))
+
     CAPABILITIES = DataCapabilities(
         id=ID,
         version=VERSION,

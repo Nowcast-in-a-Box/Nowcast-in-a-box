@@ -54,12 +54,18 @@ func (s *Server) diagnosticsProxy() *httputil.ReverseProxy {
 	}
 	return proxy
 }
+func (s *Server) diagnosticsViewerAlive() bool {
+	ctx, cancel := context.WithTimeout(s.serviceContext(), 5*time.Second)
+	defer cancel()
+	code, out, err := s.docker(ctx, "container", "inspect", "--format", "{{.State.Running}}", s.diagnosticsViewerContainer)
+	return err == nil && code == 0 && strings.TrimSpace(string(out)) == "true"
+}
 
 func (s *Server) ensureDiagnosticsViewer(runID string, inspectManifest bool) error {
 	s.diagnosticsViewerMu.Lock()
 	defer s.diagnosticsViewerMu.Unlock()
 
-	reusable := s.diagnosticsViewerRun == runID && s.diagnosticsViewerContainer != "" && s.diagnosticsViewerHealthy()
+	reusable := s.diagnosticsViewerRun == runID && s.diagnosticsViewerContainer != "" && s.diagnosticsViewerAlive() && s.diagnosticsViewerHealthy()
 	// Assets reuse the viewer; result navigation checks the latest diagnostic
 	// report so retries refresh both the metric root and required map mounts.
 	if reusable && !inspectManifest {
@@ -79,6 +85,12 @@ func (s *Server) ensureDiagnosticsViewer(runID string, inspectManifest bool) err
 		return fmt.Errorf("diagnostics image is not available")
 	}
 
+	pullCtx, pullCancel := context.WithTimeout(s.serviceContext(), imagePullTimeout)
+	_, pullErr := s.ensureImage(pullCtx, image)
+	pullCancel()
+	if pullErr != nil {
+		return fmt.Errorf("prepare diagnostics viewer image: %w", pullErr)
+	}
 	name := "nib-diagnostics-result-" + strings.ReplaceAll(runID, "_", "-")
 	port := strconv.Itoa(cfg.Diagnostics.Port)
 	args := []string{
@@ -119,7 +131,7 @@ func (s *Server) ensureDiagnosticsViewer(runID string, inspectManifest bool) err
 		"--port", port,
 	)
 	s.stopDiagnosticsViewerLocked()
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(s.serviceContext(), 60*time.Second)
 	defer cancel()
 	code, out, err := s.docker(ctx, args...)
 	if err != nil {

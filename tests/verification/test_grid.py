@@ -11,7 +11,6 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 
 import pytest
-
 from nib_verify.report import Chart, Series
 from nib_verify.report.grid import columns_for, small_multiples
 
@@ -21,8 +20,15 @@ SVG = "{http://www.w3.org/2000/svg}"
 def chart(values, xs=(10.0, 20.0, 30.0, 60.0), series=("alpha", "beta")):
     made = []
     for index, name in enumerate(series):
-        made.append(Series(name, tuple(
-            (x, None if v is None else v + index * 0.01) for x, v in zip(xs, values))))
+        made.append(
+            Series(
+                name,
+                tuple(
+                    (x, None if v is None else v + index * 0.01)
+                    for x, v in zip(xs, values)
+                ),
+            )
+        )
     return Chart("t", "lead minutes", "score", tuple(made))
 
 
@@ -34,8 +40,11 @@ def texts(svg: str) -> list[str]:
 # it parses
 # ======================================================================
 def test_the_grid_is_well_formed_xml():
-    ET.fromstring(small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * 3,
-                                  ["level 1", "level 2", "level 3"]))
+    ET.fromstring(
+        small_multiples(
+            [chart([0.5, 0.6, 0.7, 0.8])] * 3, ["level 1", "level 2", "level 3"]
+        )
+    )
 
 
 def test_a_label_with_xml_in_it_does_not_break_the_document():
@@ -45,8 +54,11 @@ def test_a_label_with_xml_in_it_does_not_break_the_document():
 
 @pytest.mark.parametrize("count", [1, 2, 3, 4, 5, 6, 9])
 def test_every_panel_count_still_produces_a_document(count):
-    ET.fromstring(small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * count,
-                                  [f"p{i}" for i in range(count)]))
+    ET.fromstring(
+        small_multiples(
+            [chart([0.5, 0.6, 0.7, 0.8])] * count, [f"p{i}" for i in range(count)]
+        )
+    )
 
 
 def test_a_grid_of_nothing_still_says_what_it_is():
@@ -121,8 +133,9 @@ def test_columns_grow_with_the_panel_count():
 
 def test_the_canvas_is_wide_enough_for_the_cells_it_holds():
     for count in (1, 2, 3, 4, 6):
-        svg = small_multiples([chart([0.5, 0.6, 0.7, 0.8])] * count,
-                              [f"p{i}" for i in range(count)])
+        svg = small_multiples(
+            [chart([0.5, 0.6, 0.7, 0.8])] * count, [f"p{i}" for i in range(count)]
+        )
         root = ET.fromstring(svg)
         width = float(root.get("width"))
         cells = root.findall(f"{SVG}svg")

@@ -223,55 +223,86 @@ func serve(cfg Config, release func()) int {
 		return 1
 	}
 	defer unlock()
-	address := net.JoinHostPort(cfg.Handler.Host, strconv.Itoa(cfg.Handler.Port))
-	reviewAddress := net.JoinHostPort(cfg.Review.Host, strconv.Itoa(cfg.Review.Port))
-	apiListener, err := net.Listen("tcp", address)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: handler listener %s: %v\n", address, err)
+	if err := registerInstall(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	defer apiListener.Close()
-	reviewListener, err := net.Listen("tcp", reviewAddress)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: review listener %s: %v\n", reviewAddress, err)
-		return 1
-	}
-	defer reviewListener.Close()
-
-	srv := NewServer(cfg)
-	defer srv.stopDiagnosticsViewer()
 	digest, err := executableDigest()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if err := saveSession(cfg, localSession{ConfigID: configID(cfg), InstanceID: srv.instanceID, URL: addressURL(cfg.Handler), ReviewURL: addressURL(cfg.Review), PID: os.Getpid(), Token: srv.Token, BinarySHA256: digest, ConfigSource: cfg.Source}); err != nil {
-		fmt.Fprintf(os.Stderr, "error: cannot create private local control session: %v\n", err)
-		return 1
-	}
-	defer removeSession(cfg, srv.instanceID)
-	if err := registerInstall(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	release()
-	apiServer := &http.Server{Handler: srv.Routes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
-	reviewServer := &http.Server{Handler: srv.ReviewRoutes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
-	defer apiServer.Close()
-	defer reviewServer.Close()
-	errs := make(chan error, 2)
-	go func() { errs <- apiServer.Serve(apiListener) }()
-	go func() { errs <- reviewServer.Serve(reviewListener) }()
-	srv.note("handler ready at " + addressURL(cfg.Handler))
-	go srv.RefreshResources()
-	go srv.StartTriggers()
-	go srv.ensureDiagnosticsImage()
-	fmt.Fprintf(os.Stderr, "nib-handler %s ready on %s (config %s); results %s\n", Version, addressURL(cfg.Handler), sourceName(cfg), addressURL(cfg.Review))
-	fmt.Fprintf(os.Stdout, "console %s/\n", addressURL(cfg.Handler))
-
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(signals)
+	srv := NewServer(cfg)
+	for srv != nil {
+		srv, err = serveInstance(srv, digest, release, signals, srv.StartTriggers)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "handler lifecycle failed: %v\n", err)
+			return 1
+		}
+		release = func() {}
+	}
+	return 0
+}
+
+// serveInstance owns one generation; the caller retains the process singleton
+// lock across generations. Tests can supply background tasks without Docker.
+func serveInstance(srv *Server, digest string, ready func(), signals <-chan os.Signal, background ...func()) (next *Server, result error) {
+	cfg := srv.currentConfig()
+	defer srv.serviceCancel()
+	apiListener, err := net.Listen("tcp", net.JoinHostPort(cfg.Handler.Host, strconv.Itoa(cfg.Handler.Port)))
+	if err != nil {
+		return nil, fmt.Errorf("handler listener: %w", err)
+	}
+	defer apiListener.Close()
+	reviewListener, err := net.Listen("tcp", net.JoinHostPort(cfg.Review.Host, strconv.Itoa(cfg.Review.Port)))
+	if err != nil {
+		return nil, fmt.Errorf("review listener: %w", err)
+	}
+	defer reviewListener.Close()
+	if err := saveSession(cfg, localSession{ConfigID: configID(cfg), InstanceID: srv.instanceID, URL: addressURL(cfg.Handler), ReviewURL: addressURL(cfg.Review), PID: os.Getpid(), Token: srv.Token, BinarySHA256: digest, ConfigSource: cfg.Source}); err != nil {
+		return nil, fmt.Errorf("cannot create private local control session: %w", err)
+	}
+	defer removeSession(cfg, srv.instanceID)
+	apiServer := &http.Server{Handler: srv.Routes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
+	reviewServer := &http.Server{Handler: srv.ReviewRoutes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: time.Minute}
+	defer func() {
+		srv.jobsMu.Lock()
+		if !srv.stopping {
+			srv.stopping = true
+			close(srv.shutdown)
+		}
+		srv.serviceCancel()
+		srv.jobsMu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		apiErr := apiServer.Shutdown(ctx)
+		reviewErr := reviewServer.Shutdown(ctx)
+		closeErr := errors.Join(apiServer.Close(), reviewServer.Close())
+		srv.background.Wait()
+		viewerErr := srv.closeLifecycleViewer()
+		result = errors.Join(result, apiErr, reviewErr, closeErr, viewerErr)
+		if result != nil && next != nil {
+			next.serviceCancel()
+			next = nil
+		}
+	}()
+	errs := make(chan error, 2)
+	go func() { errs <- apiServer.Serve(apiListener) }()
+	go func() { errs <- reviewServer.Serve(reviewListener) }()
+	for _, task := range background {
+		srv.background.Add(1)
+		go func(task func()) {
+			defer srv.background.Done()
+			task()
+		}(task)
+	}
+	ready()
+	srv.note("handler ready at " + addressURL(cfg.Handler))
+	fmt.Fprintf(os.Stderr, "nib-handler %s ready on %s (config %s); results %s\n", Version, addressURL(cfg.Handler), sourceName(cfg), addressURL(cfg.Review))
+	fmt.Fprintf(os.Stdout, "console %s/\n", addressURL(cfg.Handler))
 	for {
 		select {
 		case sig := <-signals:
@@ -279,17 +310,15 @@ func serve(cfg Config, release func()) int {
 				fmt.Fprintf(os.Stderr, "refusing shutdown on %s: %v\n", sig, err)
 			}
 		case <-srv.shutdown:
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			_ = apiServer.Shutdown(ctx)
-			_ = reviewServer.Shutdown(ctx)
-			cancel()
-			srv.note("handler stopped")
-			return 0
+			srv.jobsMu.Lock()
+			next = srv.restartServer
+			srv.jobsMu.Unlock()
+			return next, nil
 		case err := <-errs:
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				fmt.Fprintf(os.Stderr, "handler stopped: %v\n", err)
-				return 1
+			if err == nil {
+				err = fmt.Errorf("HTTP listener stopped unexpectedly")
 			}
+			return nil, err
 		}
 	}
 }

@@ -165,14 +165,20 @@ def axes_pixel_box(figure, axes) -> tuple[int, int, int, int]:
     width, height = figure.canvas.get_width_height()
     x0, y0, x1, y1 = axes.get_window_extent().extents
     return (
-        max(0, ceil(x0) + 2), max(0, ceil(height - y1) + 2),
-        min(width, floor(x1) - 2), min(height, floor(height - y0) - 2),
+        max(0, ceil(x0) + 2),
+        max(0, ceil(height - y1) + 2),
+        min(width, floor(x1) - 2),
+        min(height, floor(height - y0) - 2),
     )
 
 
 def inspect_outputs(
-    map_path: Path | str, animation_path: Path | str, expected_frames: int, *,
-    expected_duration_ms: int | None = None, colorbar_box=None,
+    map_path: Path | str,
+    animation_path: Path | str,
+    expected_frames: int,
+    *,
+    expected_duration_ms: int | None = None,
+    colorbar_box=None,
 ) -> list[dict]:
     """Decode the freshly written PNG/GIF and report what was actually found.
 
@@ -233,15 +239,21 @@ def inspect_outputs(
     if colorbar_box is not None:
         if len(bars) != 1:
             raise ValueError(f"GIF colorbar changed across {len(bars)} decoded versions")
-        checks.append({
-            "name": "static_colorbar_across_gif", "result": "pass",
-            "detail": f"one pixel-identical colorbar across {frames} fully decoded frames",
-        })
+        checks.append(
+            {
+                "name": "static_colorbar_across_gif",
+                "result": "pass",
+                "detail": f"one pixel-identical colorbar across {frames} fully decoded frames",
+            }
+        )
     if expected_duration_ms is not None:
-        checks.append({
-            "name": "gif_frame_duration", "result": "pass",
-            "detail": f"{expected_duration_ms} ms for each decoded frame",
-        })
+        checks.append(
+            {
+                "name": "gif_frame_duration",
+                "result": "pass",
+                "detail": f"{expected_duration_ms} ms for each decoded frame",
+            }
+        )
     return checks
 
 
@@ -258,9 +270,7 @@ def _load_record_json(source_record_path: Path) -> dict:
         raise ValueError(f"source record unreadable at {source_record_path}: {err}") from err
 
 
-def verify_source_identity(
-    provider: str, basemap: object, source_record_path: Path | str
-) -> dict:
+def verify_source_identity(provider: str, basemap: object, source_record_path: Path | str) -> dict:
     """Cross-check the selected loader, provider name and source record.
 
     The provider identity comes from the loader that was actually invoked, and
@@ -343,7 +353,8 @@ def _basemap_section(
                 "display_shape": list(view.raster.values.shape),
                 "color_stops": view.raster.color_stops,
             }
-            for view in scene.basemap_views if view.raster is not None
+            for view in scene.basemap_views
+            if view.raster is not None
         ]
         return section
     identity = verify_source_identity(provider, basemap, source_record_path)

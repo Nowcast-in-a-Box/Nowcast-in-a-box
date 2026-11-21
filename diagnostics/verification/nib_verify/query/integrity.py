@@ -58,11 +58,15 @@ def _span(store, cfg) -> tuple[datetime, datetime] | None:
 
 def _hours_in_day(day: date, start: datetime, stop: datetime) -> float:
     lo = max(datetime(day.year, day.month, day.day, tzinfo=UTC), start)
-    hi = min(datetime(day.year, day.month, day.day, tzinfo=UTC) + timedelta(days=1), stop)
+    hi = min(
+        datetime(day.year, day.month, day.day, tzinfo=UTC) + timedelta(days=1), stop
+    )
     return max(0.0, (hi - lo).total_seconds() / 3600.0)
 
 
-def _probe_days(store, dataset: str, start: datetime, stop: datetime) -> dict[str, dict[str, int]]:
+def _probe_days(
+    store, dataset: str, start: datetime, stop: datetime
+) -> dict[str, dict[str, int]]:
     """Rows the probe wrote, per day: arrived/missing counts, or empty when none."""
     out: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     try:
@@ -72,7 +76,7 @@ def _probe_days(store, dataset: str, start: datetime, stop: datetime) -> dict[st
             " GROUP BY day, state",
             (dataset, _stamp(start), _stamp(stop)),
         ).fetchall()
-    except Exception:                     # a store written before the table existed
+    except Exception:  # a store written before the table existed
         return {}
     for day, state, count in rows:
         out[str(day)][str(state)] = int(count)
@@ -83,13 +87,16 @@ def _quantity_table(store, group_id: str) -> str:
     """Whichever quantities table carries valid_time rows for this group."""
     for table in ("q_continuous", "q_yes_or_no", "q_spatial"):
         row = store.conn.execute(
-            f"SELECT 1 FROM {table} WHERE group_id = ? LIMIT 1", (group_id,)).fetchone()
+            f"SELECT 1 FROM {table} WHERE group_id = ? LIMIT 1", (group_id,)
+        ).fetchone()
         if row:
             return table
     return ""
 
 
-def _counts(store, cfg: VerificationConfig, start: datetime, stop: datetime) -> dict[str, Any]:
+def _counts(
+    store, cfg: VerificationConfig, start: datetime, stop: datetime
+) -> dict[str, Any]:
     """Per day: what each dataset has, and what that day should have held.
 
     Aggregated in SQL and not in Python: reading 534k rows to call strptime on
@@ -148,8 +155,10 @@ def _counts(store, cfg: VerificationConfig, start: datetime, stop: datetime) -> 
             "hours": round(hours, 2),
             "obs": {"done": min(frames, expected_obs), "expected": expected_obs},
             "members": {
-                name: {"done": min(fore_done[key].get(name, 0), int(round(hours * leads))),
-                       "expected": int(round(hours * leads))}
+                name: {
+                    "done": min(fore_done[key].get(name, 0), int(round(hours * leads))),
+                    "expected": int(round(hours * leads)),
+                }
                 for name, leads in member_leads.items()
             },
         }
@@ -161,11 +170,18 @@ def integrity(store, cfg: VerificationConfig) -> dict[str, Any]:
     """The table: one row per dataset, all time and the last seven days."""
     span = _span(store, cfg)
     if span is None:
-        return {"config": cfg.group_id, "name": cfg.name, "rows": [], "span": None,
-                "last_week": None, "note": "nothing recorded for this config yet"}
+        return {
+            "config": cfg.group_id,
+            "name": cfg.name,
+            "rows": [],
+            "span": None,
+            "last_week": None,
+            "note": "nothing recorded for this config yet",
+        }
     start, stop = span
-    week_start = datetime(stop.date().year, stop.date().month, stop.date().day,
-                         tzinfo=UTC) - timedelta(days=6)
+    week_start = datetime(
+        stop.date().year, stop.date().month, stop.date().day, tzinfo=UTC
+    ) - timedelta(days=6)
     week_start = max(start, week_start)
     days = _counts(store, cfg, start, stop)
 
@@ -178,19 +194,32 @@ def integrity(store, cfg: VerificationConfig) -> dict[str, Any]:
             if kind == "obs":
                 done, expected = bucket["obs"]["done"], bucket["obs"]["expected"]
             else:
-                done, expected = bucket["members"][key]["done"], bucket["members"][key]["expected"]
+                done, expected = (
+                    bucket["members"][key]["done"],
+                    bucket["members"][key]["expected"],
+                )
             total_done += done
             total_expected += expected
             if _parse(f"{day_key}T00:00:00Z") >= week_start:
                 week_done += done
                 week_expected += expected
-        rows.append({
-            "key": key, "kind": kind, "label": label,
-            "all_time": {"done": total_done, "expected": total_expected,
-                         "pct": _pct(total_done, total_expected)},
-            "last_week": {"done": week_done, "expected": week_expected,
-                          "pct": _pct(week_done, week_expected)},
-        })
+        rows.append(
+            {
+                "key": key,
+                "kind": kind,
+                "label": label,
+                "all_time": {
+                    "done": total_done,
+                    "expected": total_expected,
+                    "pct": _pct(total_done, total_expected),
+                },
+                "last_week": {
+                    "done": week_done,
+                    "expected": week_expected,
+                    "pct": _pct(week_done, week_expected),
+                },
+            }
+        )
     probed_days = len(_probe_days(store, cfg.ruler.ground_truth, start, stop))
     return {
         "config": cfg.group_id,
@@ -205,15 +234,20 @@ def integrity(store, cfg: VerificationConfig) -> dict[str, Any]:
     }
 
 
-def daily_series(store, cfg: VerificationConfig, *, dataset: str, days: int | None = None) -> dict[str, Any]:
+def daily_series(
+    store, cfg: VerificationConfig, *, dataset: str, days: int | None = None
+) -> dict[str, Any]:
     """One value per day: the curve a number in the table opens."""
     span = _span(store, cfg)
     if span is None:
         return {"dataset": dataset, "days": []}
     start, stop = span
     if days:
-        start = max(start, datetime(stop.date().year, stop.date().month, stop.date().day,
-                                    tzinfo=UTC) - timedelta(days=days - 1))
+        start = max(
+            start,
+            datetime(stop.date().year, stop.date().month, stop.date().day, tzinfo=UTC)
+            - timedelta(days=days - 1),
+        )
     buckets = _counts(store, cfg, start, stop)
     out = []
     for day_key in sorted(buckets):
@@ -225,12 +259,20 @@ def daily_series(store, cfg: VerificationConfig, *, dataset: str, days: int | No
             if entry is None:
                 continue
             done, expected = entry["done"], entry["expected"]
-        out.append({"date": day_key, "done": done, "expected": expected,
-                    "pct": _pct(done, expected)})
+        out.append(
+            {
+                "date": day_key,
+                "done": done,
+                "expected": expected,
+                "pct": _pct(done, expected),
+            }
+        )
     return {"dataset": dataset, "days": out, "from": _stamp(start), "to": _stamp(stop)}
 
 
-def day_detail(store, cfg: VerificationConfig, *, dataset: str, day: str) -> dict[str, Any]:
+def day_detail(
+    store, cfg: VerificationConfig, *, dataset: str, day: str
+) -> dict[str, Any]:
     """Inside one day: which frames, or which (init, lead) cells, have a record."""
     step = max(1, int(cfg.ruler.time_step_minutes))
     start = datetime.fromisoformat(day).replace(tzinfo=UTC)
@@ -241,10 +283,13 @@ def day_detail(store, cfg: VerificationConfig, *, dataset: str, day: str) -> dic
         " WHERE group_id = ? AND state = 'done' AND init_time >= ? AND init_time < ?",
         (cfg.group_id, _stamp(start - timedelta(hours=6)), _stamp(stop)),
     ).fetchall()
-    gaps = {str(r[0]) for r in store.conn.execute(
-        "SELECT valid_time FROM obs_gap WHERE group_id = ? AND valid_time >= ? AND valid_time < ?",
-        (cfg.group_id, _stamp(start), _stamp(stop)),
-    )}
+    gaps = {
+        str(r[0])
+        for r in store.conn.execute(
+            "SELECT valid_time FROM obs_gap WHERE group_id = ? AND valid_time >= ? AND valid_time < ?",
+            (cfg.group_id, _stamp(start), _stamp(stop)),
+        )
+    }
 
     if dataset == OBS:
         total = (24 * 60) // step
@@ -267,12 +312,25 @@ def day_detail(store, cfg: VerificationConfig, *, dataset: str, day: str) -> dic
         frames = []
         for index in range(total):
             stamp = _stamp(start + timedelta(minutes=index * step))
-            here = (probed[stamp] == "arrived") if stamp in probed else (stamp in present)
-            frames.append({"time": stamp, "present": here,
-                           "source": "probe" if stamp in probed else "derived"})
-        return {"dataset": dataset, "day": day, "kind": "obs", "step_minutes": step,
-                "frames": frames, "done": sum(1 for f in frames if f["present"]),
-                "expected": len(frames)}
+            here = (
+                (probed[stamp] == "arrived") if stamp in probed else (stamp in present)
+            )
+            frames.append(
+                {
+                    "time": stamp,
+                    "present": here,
+                    "source": "probe" if stamp in probed else "derived",
+                }
+            )
+        return {
+            "dataset": dataset,
+            "day": day,
+            "kind": "obs",
+            "step_minutes": step,
+            "frames": frames,
+            "done": sum(1 for f in frames if f["present"]),
+            "expected": len(frames),
+        }
 
     member = next((m for m in cfg.members if m.name == dataset), None)
     if member is None:
@@ -284,7 +342,13 @@ def day_detail(store, cfg: VerificationConfig, *, dataset: str, day: str) -> dic
         if str(name) == dataset and str(init_time) in inits and int(lead) in leads:
             have.add((str(init_time), int(lead)))
     cells = [[1 if (init, lead) in have else 0 for init in inits] for lead in leads]
-    return {"dataset": dataset, "day": day, "kind": "forecast",
-            "inits": inits, "leads": leads, "cells": cells,
-            "done": sum(sum(row) for row in cells),
-            "expected": len(inits) * len(leads)}
+    return {
+        "dataset": dataset,
+        "day": day,
+        "kind": "forecast",
+        "inits": inits,
+        "leads": leads,
+        "cells": cells,
+        "done": sum(sum(row) for row in cells),
+        "expected": len(inits) * len(leads),
+    }

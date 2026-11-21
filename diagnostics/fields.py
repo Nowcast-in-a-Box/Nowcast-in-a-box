@@ -4,10 +4,10 @@ from dataclasses import replace
 
 import numpy as np
 import xarray as xr
+from nib_visualization.field import VisualizationField, validate_field
 from pyproj import Transformer
 
 from utils.stored_fields import StoredFields
-from nib_visualization.field import VisualizationField, validate_field
 
 
 def display_grid(field):

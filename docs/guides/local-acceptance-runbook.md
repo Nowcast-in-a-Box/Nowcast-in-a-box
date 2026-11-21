@@ -12,7 +12,7 @@ Run inference with network none; this check has no accuracy gate.
 
 - Docker is running. With `runtime.image_registry` set, the Handler pulls the
   diagnostics image at startup and the data/model images during Validate.
-  Local tags `nib-ingestion:cma-demo`, `nib-nowcastnet:cma-demo-embedded` and
+  Local tags `nib-reader-cma-radar:local-v1`, `nib-nowcastnet:cma-demo-embedded` and
   `nib-diagnostics:automatic-flow-basemap-v1` are also accepted when prebuilt.
 - A CMA Radar data folder, for example `/Users/you/data/cma-radar`.
 - The embedded NowcastNet model image includes the pinned ONNX weight; users

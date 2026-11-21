@@ -8,15 +8,13 @@ tests and they still pass.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
 import pytest
-
 from nib_verify.catalog import (
-    find_config_file,
     discover_packages,
     discover_runs,
+    find_config_file,
     load_host,
     load_manifest,
     load_run_config,
@@ -119,8 +117,15 @@ def test_field_specs_are_read_through_several_spellings():
     raw = {
         "id": "x",
         "offers": ["p"],
-        "fields": [{"variable": "vil", "units": "kg m-2", "grid": [10, 20],
-                    "cadence": 5, "frames": 4}],
+        "fields": [
+            {
+                "variable": "vil",
+                "units": "kg m-2",
+                "grid": [10, 20],
+                "cadence": 5,
+                "frames": 4,
+            }
+        ],
     }
     spec = PackageManifest.from_mapping(raw).fields[0]
     assert spec.name == "vil"
@@ -131,16 +136,22 @@ def test_field_specs_are_read_through_several_spellings():
 
 
 def test_unknown_manifest_keys_are_kept_not_rejected():
-    raw = {"id": "x", "offers": ["p"], "something_new": {"a": 1},
-           "fields": [{"name": "vil", "quantile": 0.9}]}
+    raw = {
+        "id": "x",
+        "offers": ["p"],
+        "something_new": {"a": 1},
+        "fields": [{"name": "vil", "quantile": 0.9}],
+    }
     manifest = PackageManifest.from_mapping(raw)
     assert manifest.raw["something_new"] == {"a": 1}
     assert manifest.fields[0].raw["quantile"] == 0.9
 
 
 def test_a_package_with_neither_offers_nor_requires_is_reported(platform):
-    write_json(platform.root / "stray" / "manifest.json",
-               {"id": "mystery", "fields": [{"name": "something"}]})
+    write_json(
+        platform.root / "stray" / "manifest.json",
+        {"id": "mystery", "fields": [{"name": "something"}]},
+    )
     catalog = discover_packages(platform.packages + [platform.root / "stray"])
     assert "mystery" in {p.id for p in catalog}
     assert any("neither offers nor requires" in p for p in catalog.problems())
@@ -148,7 +159,9 @@ def test_a_package_with_neither_offers_nor_requires_is_reported(platform):
 
 def test_a_json_file_that_is_not_a_manifest_is_ignored(tmp_path):
     """Content decides. A Python package's manifest.json is not a package here."""
-    write_json(tmp_path / "somewhere" / "manifest.json", {"name": "mypkg", "version": "1.0"})
+    write_json(
+        tmp_path / "somewhere" / "manifest.json", {"name": "mypkg", "version": "1.0"}
+    )
     catalog = discover_packages([tmp_path])
     assert len(catalog) == 0
     assert catalog.skipped == ()
@@ -178,7 +191,9 @@ def test_a_manifest_without_an_id_is_refused(tmp_path):
 
 
 def test_a_package_that_is_neither_data_nor_model_is_still_readable():
-    manifest = PackageManifest.from_mapping({"id": "x", "offers": ["p"], "requires": "p"})
+    manifest = PackageManifest.from_mapping(
+        {"id": "x", "offers": ["p"], "requires": "p"}
+    )
     assert manifest.kind == "unknown"
     assert not manifest.is_data and not manifest.is_model
 
@@ -203,25 +218,28 @@ def test_a_run_config_carries_the_run_directory(platform):
 
 
 def test_unknown_top_level_keys_are_refused(tmp_path):
-    write_yaml(tmp_path / "run.yaml",
-               run_config_text() + "extra:\n  whatever: 1\n")
+    write_yaml(tmp_path / "run.yaml", run_config_text() + "extra:\n  whatever: 1\n")
     path = tmp_path / "run.yaml"
     with pytest.raises(RunConfigError, match="unknown top-level key"):
         load_run_config(path)
 
 
 def test_unknown_section_keys_are_refused(tmp_path):
-    write_yaml(tmp_path / "run.yaml",
-               'version: 1\ndata:\n  id: d\n  typo: 1\nmodel:\n  id: m\n'
-               'run:\n  start_time: "2026-01-01T00:00:00Z"\n')
+    write_yaml(
+        tmp_path / "run.yaml",
+        "version: 1\ndata:\n  id: d\n  typo: 1\nmodel:\n  id: m\n"
+        'run:\n  start_time: "2026-01-01T00:00:00Z"\n',
+    )
     with pytest.raises(RunConfigError, match="unknown key"):
         load_run_config(tmp_path / "run.yaml")
 
 
 def test_a_sample_id_may_replace_the_start_time(tmp_path):
-    write_yaml(tmp_path / "run.yaml",
-               'version: 1\ndata:\n  id: d\nmodel:\n  id: m\n'
-               'run:\n  sample_id: "case-7"\n  forecast_horizon: 3\n')
+    write_yaml(
+        tmp_path / "run.yaml",
+        "version: 1\ndata:\n  id: d\nmodel:\n  id: m\n"
+        'run:\n  sample_id: "case-7"\n  forecast_horizon: 3\n',
+    )
     cfg = load_run_config(tmp_path / "run.yaml")
     assert cfg.start_time is None
     assert cfg.sample_id == "case-7"
@@ -229,24 +247,30 @@ def test_a_sample_id_may_replace_the_start_time(tmp_path):
 
 
 def test_a_run_with_neither_time_nor_sample_is_refused(tmp_path):
-    write_yaml(tmp_path / "run.yaml",
-               'version: 1\ndata:\n  id: d\nmodel:\n  id: m\nrun:\n  forecast_horizon: 3\n')
+    write_yaml(
+        tmp_path / "run.yaml",
+        "version: 1\ndata:\n  id: d\nmodel:\n  id: m\nrun:\n  forecast_horizon: 3\n",
+    )
     with pytest.raises(RunConfigError, match="start_time or run.sample_id"):
         load_run_config(tmp_path / "run.yaml")
 
 
 def test_a_bad_start_time_is_reported(tmp_path):
-    write_yaml(tmp_path / "run.yaml",
-               'version: 1\ndata:\n  id: d\nmodel:\n  id: m\n'
-               'run:\n  start_time: "last tuesday"\n')
+    write_yaml(
+        tmp_path / "run.yaml",
+        "version: 1\ndata:\n  id: d\nmodel:\n  id: m\n"
+        'run:\n  start_time: "last tuesday"\n',
+    )
     with pytest.raises(RunConfigError, match="not ISO-8601"):
         load_run_config(tmp_path / "run.yaml")
 
 
 def test_a_broken_run_config_is_listed_not_swallowed(tmp_path):
     write_yaml(tmp_path / "good" / "run.yaml", run_config_text())
-    write_yaml(tmp_path / "bad" / "run.yaml",
-               'version: 1\ndata:\n  id: d\nmodel:\n  id: m\nrun:\n  start_time: "nope"\n')
+    write_yaml(
+        tmp_path / "bad" / "run.yaml",
+        'version: 1\ndata:\n  id: d\nmodel:\n  id: m\nrun:\n  start_time: "nope"\n',
+    )
     book = discover_runs([tmp_path])
     assert len(book) == 1
     assert book.skipped and "not ISO-8601" in book.skipped[0]
@@ -258,10 +282,14 @@ def test_a_yaml_file_that_is_not_a_run_config_is_ignored(tmp_path):
 
 
 def test_the_horizon_is_a_frame_count_and_becomes_leads_with_the_cadence():
-    cfg = RunConfig.from_mapping({
-        "version": 1, "data": {"id": "d"}, "model": {"id": "m"},
-        "run": {"start_time": "2026-01-01T00:00:00Z", "forecast_horizon": 3},
-    })
+    cfg = RunConfig.from_mapping(
+        {
+            "version": 1,
+            "data": {"id": "d"},
+            "model": {"id": "m"},
+            "run": {"start_time": "2026-01-01T00:00:00Z", "forecast_horizon": 3},
+        }
+    )
     assert cfg.leads_within_horizon(10) == [10, 20, 30]
     assert cfg.leads_within_horizon(5) == [5, 10, 15]
     assert cfg.leads_within_horizon(0) == []
@@ -269,10 +297,14 @@ def test_the_horizon_is_a_frame_count_and_becomes_leads_with_the_cadence():
 
 def test_a_negative_horizon_is_refused():
     with pytest.raises(RunConfigError, match="must be positive"):
-        RunConfig.from_mapping({
-            "version": 1, "data": {"id": "d"}, "model": {"id": "m"},
-            "run": {"start_time": "2026-01-01T00:00:00Z", "forecast_horizon": -1},
-        })
+        RunConfig.from_mapping(
+            {
+                "version": 1,
+                "data": {"id": "d"},
+                "model": {"id": "m"},
+                "run": {"start_time": "2026-01-01T00:00:00Z", "forecast_horizon": -1},
+            }
+        )
 
 
 # ======================================================================
@@ -375,8 +407,9 @@ def manifest(**overrides):
     raw = {
         "id": "radar-composite",
         "offers": ["precip-nowcast.v1"],
-        "fields": [{"name": "vil", "unit": "kg m-2", "cadence_minutes": 10,
-                    "shape": [48, 64]}],
+        "fields": [
+            {"name": "vil", "unit": "kg m-2", "cadence_minutes": 10, "shape": [48, 64]}
+        ],
     }
     raw.update(overrides)
     return PackageManifest.from_mapping(raw)
@@ -402,8 +435,9 @@ def test_an_extent_is_read_when_the_manifest_gives_one():
 def test_an_extent_given_as_bounds_is_read_too():
     from nib_verify.catalog.packages import ruler_defaults
 
-    got = ruler_defaults(manifest(bounds={"lon_min": 100, "lat_min": 20,
-                                          "lon_max": 130, "lat_max": 45}))
+    got = ruler_defaults(
+        manifest(bounds={"lon_min": 100, "lat_min": 20, "lon_max": 130, "lat_max": 45})
+    )
     assert got["extent"] == [100.0, 20.0, 130.0, 45.0]
     assert got["resolution"] is None
 
@@ -411,8 +445,13 @@ def test_an_extent_given_as_bounds_is_read_too():
 def test_an_extent_on_the_field_is_read_as_well_as_on_the_package():
     from nib_verify.catalog.packages import ruler_defaults
 
-    got = ruler_defaults(manifest(fields=[{"name": "z", "unit": "mm",
-                                           "extent": [1, 2, 3, 4], "resolution": 0.25}]))
+    got = ruler_defaults(
+        manifest(
+            fields=[
+                {"name": "z", "unit": "mm", "extent": [1, 2, 3, 4], "resolution": 0.25}
+            ]
+        )
+    )
     assert got["extent"] == [1.0, 2.0, 3.0, 4.0]
     assert got["resolution"] == 0.25
 
@@ -427,11 +466,18 @@ def test_a_region_name_is_not_an_extent():
     assert got["resolution"] is None
 
 
-@pytest.mark.parametrize("junk", [
-    {"extent": ["a", "b"]}, {"extent": [1, 2, 3]}, {"extent": "east-china"},
-    {"extent": {"lon_min": 1, "lat_min": 2}}, {"resolution": "fine"},
-    {"resolution": True}, {"bounds": {"north": 40}},
-])
+@pytest.mark.parametrize(
+    "junk",
+    [
+        {"extent": ["a", "b"]},
+        {"extent": [1, 2, 3]},
+        {"extent": "east-china"},
+        {"extent": {"lon_min": 1, "lat_min": 2}},
+        {"resolution": "fine"},
+        {"resolution": True},
+        {"bounds": {"north": 40}},
+    ],
+)
 def test_something_unreadable_comes_back_as_nothing(junk):
     from nib_verify.catalog.packages import ruler_defaults
 

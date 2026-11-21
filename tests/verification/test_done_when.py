@@ -26,8 +26,8 @@ from __future__ import annotations
 from dataclasses import replace
 
 from nib_verify.access import CountingAccess
-from nib_verify.query import query_scores
 from nib_verify.config.schema import MetricGroup
+from nib_verify.query import query_scores
 from nib_verify.runner import RunRef, run_tasks
 from nib_verify.store import Store
 
@@ -46,7 +46,9 @@ def _run(levels):
 
 def _csi_records(store, cfg):
     return query_scores(
-        store, cfg, method="csi",
+        store,
+        cfg,
+        method="csi",
         s={"level": list(LEVELS_SUB)},
         g=["lead_minutes", "level"],
     )
@@ -68,7 +70,9 @@ def test_thresholds_are_independent():
         "CSI at 181/219 must not depend on which other thresholds were computed"
     )
     for rec in full["records"]:
-        assert rec["value"] is not None, "the synthetic field should make these definite"
+        assert rec["value"] is not None, (
+            "the synthetic field should make these definite"
+        )
         assert 0.0 <= rec["value"] <= 1.0
 
 
@@ -82,9 +86,13 @@ def test_query_does_not_touch_the_provider():
 
     _csi_records(store, cfg)
     query_scores(store, cfg, method="rmse", g=["lead_minutes"])
-    query_scores(store, cfg, method="fss",
-                 s={"level": list(LEVELS_SUB), "half_window": [1, 2]},
-                 g=["lead_minutes", "level", "half_window"])
+    query_scores(
+        store,
+        cfg,
+        method="fss",
+        s={"level": list(LEVELS_SUB), "half_window": [1, 2]},
+        g=["lead_minutes", "level", "half_window"],
+    )
 
     assert access.field_reads == before, "the read path must not call the provider"
 
@@ -118,7 +126,6 @@ def test_second_run_is_a_noop():
 # 4. levels do not multiply the reads
 # ----------------------------------------------------------------------
 def test_reads_scale_with_tasks_not_with_levels():
-    runs = [RunRef(member="mlcast-det", init_time=T0)]
 
     acc_2, _, _, stats_2 = _run(LEVELS_SUB)
     acc_5, _, _, stats_5 = _run(LEVELS_FULL)
@@ -172,16 +179,23 @@ def test_a_new_metric_over_the_same_block_reads_nothing():
     reads = access.field_reads
 
     # same ruler, same roster, same thresholds; the metric list is the difference
-    after = replace(before, metrics=before.metrics + (MetricGroup(
-        family="yes_or_no", items=("dts",), levels=tuple(LEVELS_SUB)),))
+    after = replace(
+        before,
+        metrics=before.metrics
+        + (MetricGroup(family="yes_or_no", items=("dts",), levels=tuple(LEVELS_SUB)),),
+    )
     again = run_tasks(access, store, after, runs)
 
     assert again.ran == 0 and again.skipped == 3, "adding a metric must not re-run"
     assert access.field_reads == reads, "and must not read a field"
 
-    records = query_scores(store, after, method="dts",
-                           s={"level": list(LEVELS_SUB)},
-                           g=["lead_minutes", "level"])["records"]
+    records = query_scores(
+        store,
+        after,
+        method="dts",
+        s={"level": list(LEVELS_SUB)},
+        g=["lead_minutes", "level"],
+    )["records"]
     assert records, "the new metric has nothing to read"
     for rec in records:
         assert rec["value"] is not None

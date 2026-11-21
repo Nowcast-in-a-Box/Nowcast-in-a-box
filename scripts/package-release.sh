@@ -28,7 +28,7 @@ for os in "${oses[@]}"; do
   esac
 done
 
-"$ROOT/scripts/cross-build.sh"
+"$ROOT/scripts/cross-build.sh" "$VERSION"
 "$ROOT/scripts/package-resources.sh"
 
 mkdir -p "$ROOT/dist"

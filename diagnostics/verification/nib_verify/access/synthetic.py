@@ -40,8 +40,10 @@ DEFAULT_EXTENT = (110.0, 30.0, 120.0, 42.0)
 #: and a satellite's -- would stop being the same storm. That shows up as skill
 #: collapsing for no reason in the weather, which is the worst kind of wrong
 #: answer to debug.
-REFERENCE_SPAN = (DEFAULT_EXTENT[2] - DEFAULT_EXTENT[0],
-                  DEFAULT_EXTENT[3] - DEFAULT_EXTENT[1])
+REFERENCE_SPAN = (
+    DEFAULT_EXTENT[2] - DEFAULT_EXTENT[0],
+    DEFAULT_EXTENT[3] - DEFAULT_EXTENT[1],
+)
 
 #: How a provider can be missing data. ``random`` is speckle, the way an
 #: individual bad gate looks; ``range`` is the shape coverage leaves behind.
@@ -126,8 +128,19 @@ class Source:
 #: what a per-source override may say. Anything else is a typo, and a typo that
 #: silently did nothing would serve the wrong field.
 SOURCE_FIELDS = frozenset(
-    {"variable", "unit", "scale", "offset", "vmin", "vmax", "noise", "missing_kind",
-     "missing_points", "extent", "shape"}
+    {
+        "variable",
+        "unit",
+        "scale",
+        "offset",
+        "vmin",
+        "vmax",
+        "noise",
+        "missing_kind",
+        "missing_points",
+        "extent",
+        "shape",
+    }
 )
 
 
@@ -343,8 +356,12 @@ class SyntheticAccess:
                 f"observation {name!r} was not recorded at {valid_time.isoformat()}"
             )
         return self._make_field(
-            self._observation_coords(name), valid_time, name=name,
-            noise=self.sources[name].noise, stream=1, bias=0.0,
+            self._observation_coords(name),
+            valid_time,
+            name=name,
+            noise=self.sources[name].noise,
+            stream=1,
+            bias=0.0,
             source=self.sources[name],
         )
 
@@ -390,8 +407,11 @@ class SyntheticAccess:
         lead = int(lead_minutes)
         rank = 1.0 + self.model_ids.index(model_id) * self.skill_spread
         aging = lead / (lead + SKILL_TAU_MINUTES)
-        return self.forecast_lag_minutes * rank * (
-            YOUNG_LAG + (AGED_LAG - YOUNG_LAG) * aging)
+        return (
+            self.forecast_lag_minutes
+            * rank
+            * (YOUNG_LAG + (AGED_LAG - YOUNG_LAG) * aging)
+        )
 
     def get_prediction(
         self, model_id: str, init_time: datetime, lead_minutes: int
@@ -427,9 +447,12 @@ class SyntheticAccess:
         # asked for. Relative aging is a property of a forecast that is trying.
         aging = lead / (lead + SKILL_TAU_MINUTES)
         return self._make_field(
-            self.model_coords, valid_time, name=model_id,
-            noise=self.forecast_noise * rank * (
-                YOUNG_NOISE + (AGED_NOISE - YOUNG_NOISE) * aging),
+            self.model_coords,
+            valid_time,
+            name=model_id,
+            noise=self.forecast_noise
+            * rank
+            * (YOUNG_NOISE + (AGED_NOISE - YOUNG_NOISE) * aging),
             stream=2,
             gain=1.0 + self.forecast_spread * aging,
             bias=self.forecast_bias,
@@ -536,7 +559,10 @@ class SyntheticAccess:
         if index == 0 and self.drift == 0.0:
             phase = (minutes % 360.0) / 360.0
             cx = centre_lon + (0.20 + 0.60 * phase - 0.5) * ref_lon
-            cy = centre_lat + (0.35 + 0.30 * math.sin(2.0 * math.pi * phase) - 0.5) * ref_lat
+            cy = (
+                centre_lat
+                + (0.35 + 0.30 * math.sin(2.0 * math.pi * phase) - 0.5) * ref_lat
+            )
             amplitude = self.peak
             size = self.sigma
         else:
@@ -582,7 +608,11 @@ class SyntheticAccess:
         return self.background * np.exp(-2.0 * (dx * dx + dy * dy))
 
     def _noise(
-        self, shape: tuple[int, int], valid_time: datetime, stream: int, amplitude: float
+        self,
+        shape: tuple[int, int],
+        valid_time: datetime,
+        stream: int,
+        amplitude: float,
     ) -> np.ndarray:
         rng = np.random.default_rng([self.seed, self._minutes(valid_time), stream])
         return rng.normal(0.0, amplitude, size=shape)

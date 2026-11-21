@@ -429,7 +429,9 @@ def build_parser() -> argparse.ArgumentParser:
     cma_cmd.add_argument("--crop-record", type=Path, default=DEFAULT_CROP_RECORD)
     cma_cmd.add_argument("--color-file", type=Path, default=DEFAULT_COLOR_FILE)
     cma_cmd.add_argument(
-        "--display-width", type=int, default=1000,
+        "--display-width",
+        type=int,
+        default=1000,
         help="maximum spatial display columns; never changes the number of time frames",
     )
     cma_cmd.add_argument("--fps", type=float, default=5, help="playback speed only (default: 5)")
@@ -453,17 +455,33 @@ def main(argv: list[str] | None = None) -> int:
 
         command = [".venv/bin/python", "-m", "nib_visualization.cli", "cma-mock"]
         for flag in (
-            "input", "output", "basemap", "source_record", "acquisition_record", "terrain",
-            "terrain_record", "crop_record", "color_file", "display_width", "fps",
+            "input",
+            "output",
+            "basemap",
+            "source_record",
+            "acquisition_record",
+            "terrain",
+            "terrain_record",
+            "crop_record",
+            "color_file",
+            "display_width",
+            "fps",
         ):
             command.extend(["--" + flag.replace("_", "-"), str(getattr(args, flag))])
         try:
             manifest = run_cma_mock(
-                input_dir=args.input, output_dir=args.output, basemap_path=args.basemap,
-                source_record=args.source_record, acquisition_record=args.acquisition_record,
-                terrain_path=args.terrain, terrain_record=args.terrain_record,
-                crop_record=args.crop_record, color_file=args.color_file,
-                display_width=args.display_width, fps=args.fps, command=command,
+                input_dir=args.input,
+                output_dir=args.output,
+                basemap_path=args.basemap,
+                source_record=args.source_record,
+                acquisition_record=args.acquisition_record,
+                terrain_path=args.terrain,
+                terrain_record=args.terrain_record,
+                crop_record=args.crop_record,
+                color_file=args.color_file,
+                display_width=args.display_width,
+                fps=args.fps,
+                command=command,
             )
         except (BasemapError, FieldValidationError, ValueError, OSError, KeyError) as err:
             print(f"error: {err}", file=sys.stderr)

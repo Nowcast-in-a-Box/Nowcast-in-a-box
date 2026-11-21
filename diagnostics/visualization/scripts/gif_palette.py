@@ -41,9 +41,7 @@ def save_gif_with_shared_palette(
     shared_colors += [(0, 0, 0)] * (256 - len(shared_colors))
     palette = Image.new("P", (1, 1))
     palette.putpalette([channel for rgb in shared_colors for channel in rgb])
-    quantized = [
-        image.quantize(palette=palette, dither=Image.Dither.NONE) for image in images
-    ]
+    quantized = [image.quantize(palette=palette, dither=Image.Dither.NONE) for image in images]
     quantized[0].save(
         output,
         save_all=True,

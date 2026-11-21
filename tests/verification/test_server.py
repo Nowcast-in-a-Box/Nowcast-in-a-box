@@ -15,7 +15,6 @@ import json
 import xml.etree.ElementTree as ET
 
 import pytest
-
 from nib_verify.catalog.hostconfig import load as load_host
 from nib_verify.server import create_app
 from nib_verify.server.library import ConfigLibrary as Library
@@ -87,7 +86,9 @@ def test_the_metric_catalogue_is_grouped_by_family(client):
     methods = {m["method"] for m in body["metrics"]}
     assert {"ts", "dts", "me", "corr", "fss"} <= methods
     # dts sits with the other thresholded metrics, and is asked for by name
-    assert next(m for m in body["metrics"] if m["method"] == "dts")["params"] == ["level"]
+    assert next(m for m in body["metrics"] if m["method"] == "dts")["params"] == [
+        "level"
+    ]
 
 
 def test_dimensions_come_from_the_metric(client):
@@ -97,7 +98,10 @@ def test_dimensions_come_from_the_metric(client):
 
 def test_the_catalog_reports_packages_runs_and_pairs(client):
     body = client.get("/api/catalog").json()
-    assert {p["id"] for p in body["packages"]["packages"]} == {"radar-composite", "mlcast-det"}
+    assert {p["id"] for p in body["packages"]["packages"]} == {
+        "radar-composite",
+        "mlcast-det",
+    }
     assert body["runs"]["count"] == 2
     assert len(body["ok_pairs"]) == 1
 
@@ -123,7 +127,9 @@ def test_a_config_can_be_created_listed_and_read(client):
 
 def test_creating_the_same_config_twice_is_refused(client):
     create(client, group={"id": "a-config", "name": "A config"})
-    response = client.post("/api/configs", json={"spec": spec(group={"id": "a-config", "name": "x"})})
+    response = client.post(
+        "/api/configs", json={"spec": spec(group={"id": "a-config", "name": "x"})}
+    )
     assert response.status_code == 400
     assert "already exists" in response.json()["detail"]
 
@@ -138,8 +144,9 @@ def test_the_ruler_cannot_be_edited_in_place(client):
     changed = spec(group={"id": "a-config", "name": "A config"})
     changed["ruler"] = {**changed["ruler"], "resolution": 0.25}
 
-    response = client.post("/api/configs",
-                           json={"spec": changed, "overwrite": True, "strict": False})
+    response = client.post(
+        "/api/configs", json={"spec": changed, "overwrite": True, "strict": False}
+    )
     assert response.status_code == 400
     assert "ruler" in response.json()["detail"]
     assert "not be comparable" in response.json()["detail"]
@@ -171,13 +178,15 @@ def test_a_metric_cannot_be_removed_in_place(client):
 def test_members_can_be_added_and_retired(client):
     create(client, group={"id": "a-config", "name": "A config"})
 
-    added = client.post("/api/configs/a-config/roster",
-                        json={"name": "simvp", "leads": [10, 20]})
+    added = client.post(
+        "/api/configs/a-config/roster", json={"name": "simvp", "leads": [10, 20]}
+    )
     assert added.status_code == 201, added.text
     assert "simvp" in added.json()["config"]["member_names"]
 
-    retired = client.post("/api/configs/a-config/roster/simvp/retire",
-                          json={"on": "2026-06-01"})
+    retired = client.post(
+        "/api/configs/a-config/roster/simvp/retire", json={"on": "2026-06-01"}
+    )
     assert retired.status_code == 200
     detail = client.get("/api/configs/a-config").json()
     member = next(m for m in detail["members"] if m["name"] == "simvp")
@@ -187,8 +196,10 @@ def test_members_can_be_added_and_retired(client):
 def test_a_member_cannot_be_added_in_a_different_unit(client):
     """Refused rather than silently overridden: thresholds live on the ruler."""
     create(client, group={"id": "a-config", "name": "A config"})
-    response = client.post("/api/configs/a-config/roster",
-                           json={"name": "simvp", "leads": [10], "unit": "mm/h"})
+    response = client.post(
+        "/api/configs/a-config/roster",
+        json={"name": "simvp", "leads": [10], "unit": "mm/h"},
+    )
     assert response.status_code == 400
     assert "meaningless" in response.json()["detail"]
 
@@ -200,9 +211,10 @@ def test_metrics_are_appended(client):
     create(client, group={"id": "a-config", "name": "A config"})
     before = client.get("/api/configs/a-config").json()["metrics"]
 
-    response = client.post("/api/configs/a-config/metrics",
-                           json={"family": "yes_or_no", "items": ["pod"],
-                                 "levels": [181]})
+    response = client.post(
+        "/api/configs/a-config/metrics",
+        json={"family": "yes_or_no", "items": ["pod"], "levels": [181]},
+    )
     assert response.status_code == 201, response.text
 
     after = client.get("/api/configs/a-config").json()["metrics"]
@@ -214,9 +226,15 @@ def test_metrics_are_appended(client):
 def test_a_metric_already_present_is_not_added_twice(client):
     """Append-only is not append-anything."""
     create(client, group={"id": "a-config", "name": "A config"})
-    response = client.post("/api/configs/a-config/metrics",
-                           json={"family": "spatial", "items": ["fss"],
-                                 "levels": [181], "half_windows": [4]})
+    response = client.post(
+        "/api/configs/a-config/metrics",
+        json={
+            "family": "spatial",
+            "items": ["fss"],
+            "levels": [181],
+            "half_windows": [4],
+        },
+    )
     assert response.status_code == 400
     assert "already present" in response.json()["detail"]
 
@@ -224,16 +242,20 @@ def test_a_metric_already_present_is_not_added_twice(client):
 def test_a_neighbourhood_metric_needs_both_parameters(client):
     """FSS is computed on a thresholded field inside a window, so it needs both."""
     create(client, group={"id": "a-config", "name": "A config"})
-    response = client.post("/api/configs/a-config/metrics",
-                           json={"family": "spatial", "items": ["fss"], "levels": [181]})
+    response = client.post(
+        "/api/configs/a-config/metrics",
+        json={"family": "spatial", "items": ["fss"], "levels": [181]},
+    )
     assert response.status_code == 400
     assert "half_window" in response.json()["detail"]
 
 
 def test_a_metric_that_needs_a_level_without_one_is_refused(client):
     create(client, group={"id": "a-config", "name": "A config"})
-    response = client.post("/api/configs/a-config/metrics",
-                           json={"family": "yes_or_no", "items": ["ts"], "levels": []})
+    response = client.post(
+        "/api/configs/a-config/metrics",
+        json={"family": "yes_or_no", "items": ["ts"], "levels": []},
+    )
     assert response.status_code == 400
     assert "level" in response.json()["detail"]
 
@@ -244,22 +266,31 @@ def test_an_unknown_config_is_a_404(client):
 
 
 def test_a_group_id_that_is_not_a_file_name_is_refused(client):
-    response = client.post("/api/configs",
-                           json={"spec": spec(group={"id": "../escape", "name": "bad"})})
+    response = client.post(
+        "/api/configs", json={"spec": spec(group={"id": "../escape", "name": "bad"})}
+    )
     assert response.status_code == 400
 
 
 def test_a_run_can_be_repeated_but_two_at_once_are_refused(client):
     """Two concurrent runs would write to one store; the second is turned away."""
     create(client, group={"id": "a-config", "name": "A config"})
-    first = client.post("/api/runs", json={
-        "config": "a-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()
+    first = client.post(
+        "/api/runs",
+        json={
+            "config": "a-config",
+            "init": ["2026-01-01T00:00:00Z"],
+        },
+    ).json()
     assert first["started"] is True
 
-    second = client.post("/api/runs", json={
-        "config": "a-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()
+    second = client.post(
+        "/api/runs",
+        json={
+            "config": "a-config",
+            "init": ["2026-01-01T00:00:00Z"],
+        },
+    ).json()
     assert second["started"] is False
     assert second["reason"] == "busy"
 
@@ -270,9 +301,13 @@ def test_deleting_a_config_removes_only_its_rows(client):
     create(client, group={"id": "one", "name": "One"})
     create(client, group={"id": "two", "name": "Two"})
     for group_id in ("one", "two"):
-        job = client.post("/api/runs", json={
-            "config": group_id, "init": ["2026-01-01T00:00:00Z"],
-        }).json()["job"]
+        job = client.post(
+            "/api/runs",
+            json={
+                "config": group_id,
+                "init": ["2026-01-01T00:00:00Z"],
+            },
+        ).json()["job"]
         wait(client, job)
 
     body = client.delete("/api/configs/one").json()
@@ -296,7 +331,7 @@ def test_a_preview_of_a_retired_member_reports_the_reason(client):
     payload["members"] = [{**payload["members"][0], "active_to": "2025-12-31"}]
     body = client.post("/api/plan", json={"spec": payload}).json()
     assert body["tasks"] == 0
-    assert body["reasons"] == {"inactive": 2}   # the two runs the server can see
+    assert body["reasons"] == {"inactive": 2}  # the two runs the server can see
     assert body["rejections"][0]["detail"]
 
 
@@ -331,8 +366,9 @@ def test_the_preview_warns_about_a_truth_source_the_catalog_lacks(client):
 # ======================================================================
 def test_a_run_completes_and_reports_its_stats(client):
     create(client, group={"id": "a-config", "name": "A config"})
-    response = client.post("/api/runs",
-                           json={"config": "a-config", "init": ["2026-01-01T00:00:00Z"]})
+    response = client.post(
+        "/api/runs", json={"config": "a-config", "init": ["2026-01-01T00:00:00Z"]}
+    )
     assert response.status_code == 202, response.text
     body = response.json()
     assert body["started"] is True
@@ -346,9 +382,13 @@ def test_a_run_completes_and_reports_its_stats(client):
 
 def test_polling_only_returns_new_lines(client):
     create(client, group={"id": "a-config", "name": "A config"})
-    job_id = client.post("/api/runs", json={
-        "config": "a-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()["job"]
+    job_id = client.post(
+        "/api/runs",
+        json={
+            "config": "a-config",
+            "init": ["2026-01-01T00:00:00Z"],
+        },
+    ).json()["job"]
     wait(client, job_id)
 
     first = client.get(f"/api/jobs/{job_id}").json()
@@ -362,7 +402,9 @@ def test_polling_only_returns_new_lines(client):
 def test_a_run_with_nothing_to_do_does_not_start_a_job(client):
     create(client, group={"id": "a-config", "name": "A config"})
     # no --init, and the run configs are discovered, so this one does have work
-    assert client.post("/api/runs", json={"config": "a-config"}).json()["started"] is True
+    assert (
+        client.post("/api/runs", json={"config": "a-config"}).json()["started"] is True
+    )
 
     retired = spec(group={"id": "b-config", "name": "B"})
     retired["members"] = [{**retired["members"][0], "active_to": "2025-12-31"}]
@@ -376,6 +418,7 @@ def test_a_run_with_nothing_to_do_does_not_start_a_job(client):
 
 def test_a_failing_job_is_reported_not_raised(client):
     """Whatever goes wrong in the background belongs on the job, not in a 500."""
+
     def explode(report):
         report("about to fail")
         raise RuntimeError("no data today")
@@ -397,15 +440,25 @@ def test_an_unknown_job_is_a_404(client):
 # ======================================================================
 def test_scores_aggregate_what_a_run_stored(client):
     create(client, group={"id": "a-config", "name": "A config"})
-    job = client.post("/api/runs", json={
-        "config": "a-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()["job"]
+    job = client.post(
+        "/api/runs",
+        json={
+            "config": "a-config",
+            "init": ["2026-01-01T00:00:00Z"],
+        },
+    ).json()["job"]
     wait(client, job)
 
-    body = client.get("/api/scores", params=[
-        ("config", "a-config"), ("method", "ts"),
-        ("level", "181,219"), ("g", "lead_minutes"), ("g", "level"),
-    ]).json()
+    body = client.get(
+        "/api/scores",
+        params=[
+            ("config", "a-config"),
+            ("method", "ts"),
+            ("level", "181,219"),
+            ("g", "lead_minutes"),
+            ("g", "level"),
+        ],
+    ).json()
 
     assert body["dims"] == ["lead_minutes", "level"]
     assert len(body["records"]) == 6
@@ -413,7 +466,9 @@ def test_scores_aggregate_what_a_run_stored(client):
     assert {r["level"] for r in body["records"]} == {181, 219}
     assert all(0.0 <= r["value"] <= 1.0 for r in body["records"])
     assert all(r["n_valid"] > 0 for r in body["records"])
-    assert body["meta"]["group"]["ruler"]["fingerprint"] == make_config().ruler_fingerprint
+    assert (
+        body["meta"]["group"]["ruler"]["fingerprint"] == make_config().ruler_fingerprint
+    )
     assert body["coverage"]["tasks"] == {"done": 3}
 
 
@@ -425,16 +480,25 @@ def test_asking_for_fewer_thresholds_does_not_change_the_numbers(client):
     the same sums either way and never re-reads a field.
     """
     create(client, group={"id": "a-config", "name": "A config"})
-    job = client.post("/api/runs", json={
-        "config": "a-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()["job"]
+    job = client.post(
+        "/api/runs",
+        json={
+            "config": "a-config",
+            "init": ["2026-01-01T00:00:00Z"],
+        },
+    ).json()["job"]
     wait(client, job)
 
     def at_181(levels):
-        body = client.get("/api/scores", params=[
-            ("config", "a-config"), ("method", "ts"), ("level", levels),
-            ("g", "level"),
-        ]).json()
+        body = client.get(
+            "/api/scores",
+            params=[
+                ("config", "a-config"),
+                ("method", "ts"),
+                ("level", levels),
+                ("g", "level"),
+            ],
+        ).json()
         return next(r["value"] for r in body["records"] if r["level"] == 181)
 
     assert at_181("181") == at_181("181,219")
@@ -444,14 +508,23 @@ def test_asking_for_fewer_thresholds_does_not_change_the_numbers(client):
 def test_a_threshold_outside_the_configured_levels_can_still_be_asked_for(client):
     """A stored contingency table answers any threshold; nothing was stored for 133."""
     create(client, group={"id": "a-config", "name": "A config"})
-    job = client.post("/api/runs", json={
-        "config": "a-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()["job"]
+    job = client.post(
+        "/api/runs",
+        json={
+            "config": "a-config",
+            "init": ["2026-01-01T00:00:00Z"],
+        },
+    ).json()["job"]
     wait(client, job)
 
-    body = client.get("/api/scores", params=[
-        ("config", "a-config"), ("method", "ts"), ("level", "133"),
-    ]).json()
+    body = client.get(
+        "/api/scores",
+        params=[
+            ("config", "a-config"),
+            ("method", "ts"),
+            ("level", "133"),
+        ],
+    ).json()
     assert len(body["records"]) == 1
     assert body["records"][0]["value"] is not None
 
@@ -465,9 +538,14 @@ def test_a_metric_the_config_does_not_carry_is_refused(client):
 
 def test_an_unknown_dimension_is_refused_with_the_alternatives(client):
     create(client, group={"id": "a-config", "name": "A config"})
-    response = client.get("/api/scores", params=[
-        ("config", "a-config"), ("method", "me"), ("g", "level"),
-    ])
+    response = client.get(
+        "/api/scores",
+        params=[
+            ("config", "a-config"),
+            ("method", "me"),
+            ("g", "level"),
+        ],
+    )
     assert response.status_code == 400
     assert "member" in response.json()["detail"]
 
@@ -535,12 +613,25 @@ def test_a_chart_comes_back_as_an_image(client):
     """Not JSON with an SVG in it. The page loads this with ``<img src>``, so the
     content type is the interface."""
     create(client, group={"id": "chart-config", "name": "Chart"})
-    wait(client, client.post("/api/runs", json={
-        "config": "chart-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()["job"])
+    wait(
+        client,
+        client.post(
+            "/api/runs",
+            json={
+                "config": "chart-config",
+                "init": ["2026-01-01T00:00:00Z"],
+            },
+        ).json()["job"],
+    )
 
-    response = chart(client, config="chart-config", method="ts",
-                     x="lead_minutes", series="member", level="181")
+    response = chart(
+        client,
+        config="chart-config",
+        method="ts",
+        x="lead_minutes",
+        series="member",
+        level="181",
+    )
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("image/svg+xml")
     assert response.text.startswith("<?xml")
@@ -552,9 +643,16 @@ def test_the_chart_is_the_same_query_as_the_table(client):
     both go through ``query_scores``, and a chart of different data would be a
     second, quieter way to ask."""
     create(client, group={"id": "same-config", "name": "Same"})
-    wait(client, client.post("/api/runs", json={
-        "config": "same-config", "init": ["2026-01-01T00:00:00Z"],
-    }).json()["job"])
+    wait(
+        client,
+        client.post(
+            "/api/runs",
+            json={
+                "config": "same-config",
+                "init": ["2026-01-01T00:00:00Z"],
+            },
+        ).json()["job"],
+    )
 
     params = {"config": "same-config", "method": "ts", "level": "181"}
     table = client.get("/api/scores", params={**params, "g": "lead_minutes"}).json()
@@ -609,12 +707,18 @@ def test_the_chart_size_is_bounded(client):
     """The size ends up in every coordinate and in the SVG header, so it is
     clamped rather than trusted."""
     create(client, group={"id": "size-config", "name": "Size"})
-    assert 'width="4000"' in chart(client, config="size-config", method="ts",
-                                   width="999999").text
-    assert 'width="200"' in chart(client, config="size-config", method="ts",
-                                  width="1").text
-    assert "whole number" in chart(client, config="size-config", method="ts",
-                                   width="wide").text
+    assert (
+        'width="4000"'
+        in chart(client, config="size-config", method="ts", width="999999").text
+    )
+    assert (
+        'width="200"'
+        in chart(client, config="size-config", method="ts", width="1").text
+    )
+    assert (
+        "whole number"
+        in chart(client, config="size-config", method="ts", width="wide").text
+    )
 
 
 # ======================================================================
@@ -649,8 +753,12 @@ def test_the_ground_truth_fills_the_unit_and_the_step(client):
 def test_what_the_caller_gave_is_never_overwritten(client):
     """The step is editable on purpose: a config may want a coarser one than the
     source produces. Filling blanks must not undo that."""
-    response = post(client, bare(unit="mm", time_step_minutes=30,
-                                 extent=[110, 30, 120, 42], resolution=0.5))
+    response = post(
+        client,
+        bare(
+            unit="mm", time_step_minutes=30, extent=[110, 30, 120, 42], resolution=0.5
+        ),
+    )
     assert response.status_code == 201, response.text
 
     ruler = client.get("/api/configs/derived").json()["ruler"]
@@ -668,10 +776,17 @@ def test_an_extent_the_package_does_not_declare_is_not_invented(client):
 
 def test_a_ground_truth_the_server_cannot_see_fills_nothing_in(client):
     """It refuses rather than inventing a unit for a package nobody found."""
-    response = post(client, {**bare(), "ruler": {
-        "ground_truth": "no-such-package",
-        "extent": [110, 30, 120, 42], "resolution": 0.5,
-    }})
+    response = post(
+        client,
+        {
+            **bare(),
+            "ruler": {
+                "ground_truth": "no-such-package",
+                "extent": [110, 30, 120, 42],
+                "resolution": 0.5,
+            },
+        },
+    )
     assert response.status_code == 400
     assert "unit" in response.text
 
@@ -681,16 +796,24 @@ def test_the_ruler_fingerprint_moves_when_the_unit_is_filled_in(client):
     same config made by hand would not be comparable."""
     from nib_verify.config.schema import VerificationConfig
 
-    assert post(client, bare(extent=[110, 30, 120, 42], resolution=0.5)).status_code == 201
+    assert (
+        post(client, bare(extent=[110, 30, 120, 42], resolution=0.5)).status_code == 201
+    )
     filled = client.get("/api/configs/derived").json()
 
-    by_hand = VerificationConfig.from_dict({
-        **bare(extent=[110, 30, 120, 42], resolution=0.5),
-        "group": {"id": "derived", "name": "Derived"},
-        "ruler": {"ground_truth": "radar-composite", "unit": "kg m-2",
-                  "time_step_minutes": 10, "extent": [110, 30, 120, 42],
-                  "resolution": 0.5},
-    })
+    by_hand = VerificationConfig.from_dict(
+        {
+            **bare(extent=[110, 30, 120, 42], resolution=0.5),
+            "group": {"id": "derived", "name": "Derived"},
+            "ruler": {
+                "ground_truth": "radar-composite",
+                "unit": "kg m-2",
+                "time_step_minutes": 10,
+                "extent": [110, 30, 120, 42],
+                "resolution": 0.5,
+            },
+        }
+    )
     assert filled["ruler_fingerprint"] == by_hand.ruler.fingerprint
 
 
@@ -700,8 +823,11 @@ def test_a_package_advertises_what_it_can_answer_for(client):
     packages = client.get("/api/catalog").json()["packages"]["packages"]
     radar = next(p for p in packages if p["id"] == "radar-composite")
     assert radar["ruler_defaults"] == {
-        "variable": "vil", "unit": "kg m-2", "time_step_minutes": 10,
-        "extent": None, "resolution": None,
+        "variable": "vil",
+        "unit": "kg m-2",
+        "time_step_minutes": 10,
+        "extent": None,
+        "resolution": None,
     }
 
 
@@ -734,10 +860,14 @@ def test_a_run_with_no_horizon_contributes_no_leads():
     from nib_verify.catalog.runs import RunBook, RunConfig
     from nib_verify.server.app import available_leads
 
-    run = RunConfig.from_mapping({
-        "version": 1, "data": {"id": "d"}, "model": {"id": "m"},
-        "run": {"start_time": "2026-01-01T00:00:00Z"},
-    })
+    run = RunConfig.from_mapping(
+        {
+            "version": 1,
+            "data": {"id": "d"},
+            "model": {"id": "m"},
+            "run": {"start_time": "2026-01-01T00:00:00Z"},
+        }
+    )
     book = RunBook(runs=(run,))
     assert available_leads(None, book)["by_model"] == {"m": []}
 
@@ -754,15 +884,20 @@ def test_the_cadence_comes_from_the_source_package_first(platform):
 
 def test_without_a_cadence_the_question_cannot_be_answered_and_says_so():
     from nib_verify.catalog.packages import PackageManifest
-    from nib_verify.catalog.runs import RunConfig, RunBook
+    from nib_verify.catalog.runs import RunBook, RunConfig
     from nib_verify.server.app import available_leads
 
-    bare = PackageManifest.from_mapping({
-        "id": "d", "offers": ["p"], "fields": [{"name": "vil"}]})   # no cadence
-    run = RunConfig.from_mapping({
-        "version": 1, "data": {"id": "d"}, "model": {"id": "m"},
-        "run": {"start_time": "2026-01-01T00:00:00Z", "forecast_horizon": 6},
-    })
+    bare = PackageManifest.from_mapping(
+        {"id": "d", "offers": ["p"], "fields": [{"name": "vil"}]}
+    )  # no cadence
+    run = RunConfig.from_mapping(
+        {
+            "version": 1,
+            "data": {"id": "d"},
+            "model": {"id": "m"},
+            "run": {"start_time": "2026-01-01T00:00:00Z", "forecast_horizon": 6},
+        }
+    )
 
     class JustOne:
         data_packages = (bare,)
@@ -789,8 +924,9 @@ def test_the_roster_endpoint_changes_the_leads_of_a_member_already_there(client)
     be edited at all -- which is the one thing the page's Edit button is for.
     """
     create(client)
-    first = client.post("/api/configs/vil-test/roster",
-                        json={"name": "mlcast-det", "leads": [10, 90]})
+    first = client.post(
+        "/api/configs/vil-test/roster", json={"name": "mlcast-det", "leads": [10, 90]}
+    )
     assert first.status_code == 201, first.text
     cfg = client.get("/api/configs/vil-test").json()
     leads = {m["name"]: m["leads"] for m in cfg["members"]}
@@ -801,9 +937,10 @@ def test_the_roster_endpoint_changes_the_leads_of_a_member_already_there(client)
 def test_the_roster_endpoint_will_not_restate_a_member_in_another_unit(client):
     """The unit is what the stored thresholds are measured in."""
     create(client)
-    response = client.post("/api/configs/vil-test/roster",
-                           json={"name": "mlcast-det", "leads": [10],
-                                 "unit": "mm h-1"})
+    response = client.post(
+        "/api/configs/vil-test/roster",
+        json={"name": "mlcast-det", "leads": [10], "unit": "mm h-1"},
+    )
     assert response.status_code == 400
     assert "mm h-1" in response.json()["detail"]
 
@@ -812,8 +949,9 @@ def test_a_config_can_be_removed_and_says_what_that_cost(client):
     """`Remove` means remove: the file and every stored row under it. The reply
     carries the count so the page can say what it just did."""
     create(client)
-    started = client.post("/api/runs", json={"config": "vil-test",
-                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    started = client.post(
+        "/api/runs", json={"config": "vil-test", "init": ["2026-01-01T00:00:00Z"]}
+    ).json()
     wait(client, started["job"])
 
     gone = client.delete("/api/configs/vil-test")
@@ -823,27 +961,34 @@ def test_a_config_can_be_removed_and_says_what_that_cost(client):
     assert removed and sum(removed.values()) > 0, removed
     assert "task" in removed and "yes_or_no" in removed, removed
     assert client.get("/api/configs/vil-test").status_code == 404
-    assert "vil-test" not in [c["group_id"] for c in client.get("/api/configs").json()["configs"]]
+    assert "vil-test" not in [
+        c["group_id"] for c in client.get("/api/configs").json()["configs"]
+    ]
 
 
 def test_the_chart_endpoint_can_draw_a_mesh_and_still_draws_a_line(client):
     create(client)
-    started = client.post("/api/runs", json={"config": "vil-test",
-                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    started = client.post(
+        "/api/runs", json={"config": "vil-test", "init": ["2026-01-01T00:00:00Z"]}
+    ).json()
     wait(client, started["job"])
 
-    line = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
-                                            "level": 35})
+    line = client.get(
+        "/api/chart", params={"config": "vil-test", "method": "ts", "level": 35}
+    )
     assert line.status_code == 200, line.text
     assert line.headers["content-type"].startswith("image/svg+xml")
 
-    mesh = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
-                                            "level": 35, "kind": "mesh"})
+    mesh = client.get(
+        "/api/chart",
+        params={"config": "vil-test", "method": "ts", "level": 35, "kind": "mesh"},
+    )
     assert mesh.status_code == 200, mesh.text
-    ET.fromstring(mesh.text)          # it is a document, not a string
+    ET.fromstring(mesh.text)  # it is a document, not a string
 
-    bad = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
-                                           "kind": "scatter"})
+    bad = client.get(
+        "/api/chart", params={"config": "vil-test", "method": "ts", "kind": "scatter"}
+    )
     assert bad.status_code == 400
     assert "scatter" in bad.json()["detail"]
 
@@ -856,12 +1001,19 @@ def test_more_than_one_parameter_value_is_drawn_as_a_grid(client):
     picking three thresholds is asking.
     """
     create(client)
-    started = client.post("/api/runs", json={"config": "vil-test",
-                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    started = client.post(
+        "/api/runs", json={"config": "vil-test", "init": ["2026-01-01T00:00:00Z"]}
+    ).json()
     wait(client, started["job"])
 
-    params = {"config": "vil-test", "method": "ts", "x": "lead_minutes",
-              "series": "member", "level": "16,74,133", "panel": "level"}
+    params = {
+        "config": "vil-test",
+        "method": "ts",
+        "x": "lead_minutes",
+        "series": "member",
+        "level": "16,74,133",
+        "panel": "level",
+    }
     response = client.get("/api/chart", params=params)
     assert response.status_code == 200, response.text
     root = ET.fromstring(response.text)
@@ -870,25 +1022,41 @@ def test_more_than_one_parameter_value_is_drawn_as_a_grid(client):
 
     # and the page only asks for a grid when there is more than one value to
     # separate: with one threshold there is nothing for a panel to be
-    single = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
-                                              "x": "lead_minutes", "series": "member",
-                                              "level": "133"})
+    single = client.get(
+        "/api/chart",
+        params={
+            "config": "vil-test",
+            "method": "ts",
+            "x": "lead_minutes",
+            "series": "member",
+            "level": "133",
+        },
+    )
     assert single.status_code == 200
-    assert not ET.fromstring(single.text).findall("{http://www.w3.org/2000/svg}svg"), \
+    assert not ET.fromstring(single.text).findall("{http://www.w3.org/2000/svg}svg"), (
         "one threshold is not a grid"
+    )
 
 
 def test_the_grid_draws_the_same_query_as_the_table(client):
     """The chart cannot show a number the table would refuse to return."""
     create(client)
-    started = client.post("/api/runs", json={"config": "vil-test",
-                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    started = client.post(
+        "/api/runs", json={"config": "vil-test", "init": ["2026-01-01T00:00:00Z"]}
+    ).json()
     wait(client, started["job"])
 
-    params = {"config": "vil-test", "method": "ts", "x": "lead_minutes",
-              "series": "member", "level": "16,74,133", "panel": "level"}
-    scores = client.get("/api/scores", params={**params, "g": ["member", "lead_minutes",
-                                                               "level"]}).json()
+    params = {
+        "config": "vil-test",
+        "method": "ts",
+        "x": "lead_minutes",
+        "series": "member",
+        "level": "16,74,133",
+        "panel": "level",
+    }
+    scores = client.get(
+        "/api/scores", params={**params, "g": ["member", "lead_minutes", "level"]}
+    ).json()
     drawn = ET.fromstring(client.get("/api/chart", params=params).text)
     cells = drawn.findall("{http://www.w3.org/2000/svg}svg")
     assert len(cells) == len({r["level"] for r in scores["records"]})
@@ -898,17 +1066,26 @@ def test_the_chart_answers_a_time_axis(client):
     """An init-time axis is a string on one side and an arithmetical position on
     the other, and ``float("2026-01-01T00:00:00Z")`` is what used to happen."""
     create(client)
-    started = client.post("/api/runs", json={"config": "vil-test",
-                                             "init": ["2026-01-01T00:00:00Z"]}).json()
+    started = client.post(
+        "/api/runs", json={"config": "vil-test", "init": ["2026-01-01T00:00:00Z"]}
+    ).json()
     wait(client, started["job"])
 
-    response = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
-                                                "level": 35, "x": "init_time",
-                                                "series": "member"})
+    response = client.get(
+        "/api/chart",
+        params={
+            "config": "vil-test",
+            "method": "ts",
+            "level": 35,
+            "x": "init_time",
+            "series": "member",
+        },
+    )
     assert response.status_code == 200, response.text
     root = ET.fromstring(response.text)
-    drawn = " ".join("".join(t.itertext()) for t in root.iter(
-        "{http://www.w3.org/2000/svg}text"))
+    drawn = " ".join(
+        "".join(t.itertext()) for t in root.iter("{http://www.w3.org/2000/svg}text")
+    )
     assert "init time (UTC)" in drawn, drawn
 
 
@@ -921,8 +1098,9 @@ def test_a_bad_chart_request_keeps_its_own_status_and_its_own_reason(client):
     and nothing else. The picture itself is tested in ``test_chart.py``.
     """
     create(client)
-    response = client.get("/api/chart", params={"config": "vil-test", "method": "ts",
-                                                "x": "nonsense"})
+    response = client.get(
+        "/api/chart", params={"config": "vil-test", "method": "ts", "x": "nonsense"}
+    )
     assert response.status_code == 400
     assert "nonsense" in response.json()["detail"]
 
@@ -937,5 +1115,6 @@ def test_the_page_and_its_files_are_revalidated_every_time(client):
     for path in ("/", "/static/app.js", "/static/style.css"):
         response = client.get(path)
         assert response.status_code == 200, path
-        assert "no-cache" in response.headers.get("cache-control", ""), \
+        assert "no-cache" in response.headers.get("cache-control", ""), (
             f"{path} may be kept without asking"
+        )

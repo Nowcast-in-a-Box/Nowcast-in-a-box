@@ -5,10 +5,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from datetime import datetime, timedelta, timezone
 import os
 import re
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from interfaces.data import (
+    ChannelSpec,
+    DataBundle,
+    DataCapabilities,
+    DataRequest,
+    DeclaredDataAdapter,
+    SpatialSpec,
+    bundle_from_parts,
+    loader_config,
+)
 
 # IMPORTANT:
 # MTG FCI L1c uses the EUMETSAT FCIDECOMP HDF5 filter (ID 32018).
@@ -40,18 +51,6 @@ except Exception:
 RC_RE = re.compile(r"_(\d{4})_(\d{4})\.nc$", re.IGNORECASE)
 OPE_RE = re.compile(r"OPE_(\d{14})_", re.IGNORECASE)
 
-
-from interfaces.data import (
-    ChannelSpec,
-    DataBundle,
-    DataCapabilities,
-    DataRequest,
-    DeclaredDataAdapter,
-    SpatialSpec,
-    VariableSpec,
-    bundle_from_parts,
-    loader_config,
-)
 
 # Dataset. Fixed before any request runs.
 ID = "mtg"
@@ -191,7 +190,7 @@ def find_mtg_cycle_files(records, requested_time):
 
     if not body_records:
         raise FileNotFoundError(
-            "\nMTG FCI BODY chunks not found\n" f"requested_time = {target.isoformat()}"
+            f"\nMTG FCI BODY chunks not found\nrequested_time = {target.isoformat()}"
         )
 
     files = sorted(
@@ -299,8 +298,7 @@ def load_mtg_fci(config):
 
     if not records:
         raise FileNotFoundError(
-            "\nNo recognizable MTG FCI L1c NetCDF files found\n"
-            f"data_dir = {data_dir}"
+            f"\nNo recognizable MTG FCI L1c NetCDF files found\ndata_dir = {data_dir}"
         )
 
     print("=== MTG FCI Loader Request ===")
@@ -369,7 +367,26 @@ def load_mtg_fci(config):
     return results
 
 
+_SAMPLE_CHANNELS = (
+    "vis_06 ir_105 nir_22 ir_38 vis_04 vis_05 vis_08 vis_09 "
+    "nir_13 nir_16 wv_63 wv_73 ir_87 ir_97 ir_123 ir_133"
+).split()
+
+
 class Source(DeclaredDataAdapter):
+    def inspect_sample(self, root: Path) -> dict:
+        from utils.hdf_sample import inspect_hdf
+        from utils.sample_files import first_file
+
+        path = first_file(
+            root, lambda p: p.suffix.lower() == ".nc" and "fci" in p.name.lower()
+        )
+        names = (
+            f"data/{channel}/measured/effective_radiance"
+            for channel in _SAMPLE_CHANNELS
+        )
+        return inspect_hdf(root, path, names)
+
     CAPABILITIES = DataCapabilities(
         id=ID,
         version=VERSION,

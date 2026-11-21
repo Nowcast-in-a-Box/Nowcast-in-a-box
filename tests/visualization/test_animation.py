@@ -26,15 +26,14 @@ import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import nib_visualization.animation as animation_module
 import numpy as np
 import pytest
 import xarray as xr
-from PIL import Image, ImageChops, ImageSequence
-
-import nib_visualization.animation as animation_module
 from nib_visualization import RenderConfig, make_fixture, prepare_scene, write_animation
 from nib_visualization.field import VisualizationField, validate_field
 from nib_visualization.wmo_basemap import load_wmo_basemap
+from PIL import Image, ImageChops, ImageSequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2] / "diagnostics" / "visualization"
 WMO_SOURCE_RECORD = REPO_ROOT / "basemap_sources" / "wmo-source.json"
@@ -60,7 +59,9 @@ def wmo_cache() -> Path:
 
 
 def non_uniform_leads() -> np.ndarray:
-    return np.array(NON_UNIFORM_LEAD_MINUTES, dtype="timedelta64[m]").astype("timedelta64[s]")
+    return np.array(NON_UNIFORM_LEAD_MINUTES, dtype="timedelta64[m]").astype(
+        "timedelta64[s]"
+    )
 
 
 def non_uniform_latlon_fixture() -> VisualizationField:
@@ -119,7 +120,9 @@ def rendered_axes_box(scene, axes) -> tuple[int, int, int, int]:
 
 def test_a1_real_wmo_twelve_lead_gif(tmp_path, monkeypatch):
     field = non_uniform_latlon_fixture()
-    scene = prepare_scene(field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD))
+    scene = prepare_scene(
+        field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD)
+    )
 
     recorded: list[dict] = []
     original_render = animation_module.render_frame
@@ -185,16 +188,21 @@ def test_a1_real_wmo_twelve_lead_gif(tmp_path, monkeypatch):
     try:
         bars = {frame.crop(bar_box).tobytes() for frame in rgb_frames}
         assert len(bars) == 1
-        assert ImageChops.difference(
-            rgb_frames[0].crop(map_box), rgb_frames[-1].crop(map_box)
-        ).getbbox() is not None
+        assert (
+            ImageChops.difference(
+                rgb_frames[0].crop(map_box), rgb_frames[-1].crop(map_box)
+            ).getbbox()
+            is not None
+        )
     finally:
         for frame in rgb_frames:
             frame.close()
 
     # a second write at another fps reproduces identical frame semantics
     # (same leads, same labels) with only the playback duration changed
-    scene = prepare_scene(field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD))
+    scene = prepare_scene(
+        field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD)
+    )
     recorded.clear()
     try:
         faster = tmp_path / "a1_wmo_12lead_fps4.gif"
@@ -245,7 +253,9 @@ def test_a2_frame_loop_does_no_wmo_basemap_work(tmp_path, monkeypatch):
     monkeypatch.setattr(render_module, "crop_basemap", counting_crop)
 
     field = make_fixture("latlon")
-    scene = prepare_scene(field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD))
+    scene = prepare_scene(
+        field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD)
+    )
     after_prepare = dict(counts)
     # the probes provably fired during preparation (false-PASS resistance:
     # a counter that never counted proves nothing about the frame loop)
@@ -272,7 +282,9 @@ def test_a2_frame_loop_does_no_wmo_basemap_work(tmp_path, monkeypatch):
 def test_a3_singleton_one_frame_gif_input_unchanged(tmp_path):
     field = make_fixture("latlon", n_leads=1)
     before = copy.deepcopy(field)
-    scene = prepare_scene(field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD))
+    scene = prepare_scene(
+        field, RenderConfig(), load_wmo_basemap(wmo_cache(), WMO_SOURCE_RECORD)
+    )
     try:
         out = tmp_path / "a3_singleton.gif"
         write_animation(scene, field, out)
@@ -303,7 +315,9 @@ def test_ocha_cli_two_frame_smoke(tmp_path, monkeypatch, capsys):
     if not cache:
         pytest.skip("set NIB_BASEMAP_PATH for the real OCHA GeoPackage integration")
     if not Path(cache).is_file():
-        pytest.fail(f"NIB_BASEMAP_PATH={cache} does not point to an existing cache file")
+        pytest.fail(
+            f"NIB_BASEMAP_PATH={cache} does not point to an existing cache file"
+        )
 
     import nib_visualization.cli as cli_module
     from nib_visualization.cli import main as cli_main
@@ -335,7 +349,10 @@ def test_ocha_cli_two_frame_smoke(tmp_path, monkeypatch, capsys):
     decoded = decode_gif(out)
     assert decoded["n_frames"] == 2
     assert decoded["sizes"] == {(1000, 700)}
-    assert decoded["durations"] == [DEFAULT_FRAME_DURATION_MS, DEFAULT_FRAME_DURATION_MS]
+    assert decoded["durations"] == [
+        DEFAULT_FRAME_DURATION_MS,
+        DEFAULT_FRAME_DURATION_MS,
+    ]
 
 
 # ---------------------------------------------------------------------------
