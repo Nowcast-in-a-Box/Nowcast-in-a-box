@@ -1,0 +1,10 @@
+{
+  "schema": "nib.pysteps-lk.v1",
+  "model_id": "pysteps_lk",
+  "model_version": "0.1.0",
+  "library": {"name": "pysteps", "version": "1.21.5"},
+  "input": {"data_id": "mlcast_opera_plus_it_vmi", "variable": "vmi", "unit": "dBZ", "minimum_context_frames": 3, "cadence_minutes": 5},
+  "algorithm": {"motion_method": "LK", "motion_frames": 3, "nowcast_method": "extrapolation", "extrapolation_outval": "min"},
+  "output": {"lead_frames": 20, "lead_minutes": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100], "variable": "vmi", "unit": "dBZ"},
+  "notice": "Deterministic optical-flow extrapolation. No learned weights and no rainfall-rate retrieval."
+}

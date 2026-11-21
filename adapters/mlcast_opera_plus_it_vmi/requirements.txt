@@ -1,0 +1,8 @@
+# Python 3.12, Zarr 3.x; pinned to match NiB dependency conventions.
+# No remote S3 access in the local Data Adapter.
+numpy==2.5.3
+xarray==2026.9.0
+zarr==3.4.0
+dask[array]==2026.8.0
+pyproj==3.8.0
+PyYAML==6.0.3

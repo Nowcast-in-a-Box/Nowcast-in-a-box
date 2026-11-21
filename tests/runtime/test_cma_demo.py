@@ -28,7 +28,7 @@ def test_index_latest_generation_and_nested_files(tmp_path):
         ).touch()
     index = cma._window_file_index(tmp_path)
     assert len(index) == 2
-    assert next(iter(index.values())).generation_time.minute == 10
+    assert index[dt.datetime(2026, 7, 1)].generation_time.minute == 10
 
 
 def test_samples_expose_days_and_filter_by_day(monkeypatch):
