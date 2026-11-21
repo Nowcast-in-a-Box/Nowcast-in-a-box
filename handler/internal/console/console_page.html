@@ -6,6 +6,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NiB local console</title>
 <style>
@@ -48,8 +49,9 @@
   *::-webkit-scrollbar-thumb { background: #c9d6e6; border-radius: 6px; border: 2px solid var(--bg); }
   *::-webkit-scrollbar-track { background: transparent; }
 
-  .skip-link { position: fixed; top: 12px; left: 12px; z-index: 10; padding: 10px 16px; border-radius: 7px; background: var(--blue); color: #fff; transform: translateY(calc(-100% - 16px)); }
-  .skip-link:focus { transform: none; }
+  .skip-link { position: fixed; top: 12px; left: 12px; z-index: 10; padding: 10px 16px; border-radius: 7px; background: var(--blue); color: #fff; transform: translateY(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
+  .skip-link:focus-visible { transform: none; opacity: 1; pointer-events: auto; }
+  #page-title:focus, #main:focus { outline: none; }
 
   /* ------------------------------------------------------------- shell */
   .app-frame { display: flex; min-height: 100vh; }
@@ -88,7 +90,18 @@
 
   /* ------------------------------------------------------------- panels */
   .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 1px 2px rgb(41 60 85 / 4%); padding: 22px 22px 24px; min-width: 0; }
+  .editor-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 32px); margin: auto; overflow: auto; padding: 22px 24px 24px; box-shadow: 0 24px 70px rgb(16 35 60 / 22%); }
+  .editor-dialog::backdrop { background: rgb(13 29 48 / 38%); backdrop-filter: blur(2px); }
+  .editor-dialog .section-heading { align-items: center; }
+  .dialog-close { margin-left: auto; }
+  .dialog-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; }
+  .dialog-head h3 { margin:0; }
+  .trigger-dialog { width:min(560px, calc(100vw - 32px)); }
+  .trigger-dialog .trigger-form { max-width:none; margin:0; padding:0; border:0; }
+  .trigger-dialog .trigger-form .field { max-width:none; }
   .panel + .panel { margin-top: 22px; }
+  .panel.editor-dialog { margin: auto; }
+  body:has(dialog[open]) { overflow: hidden; }
   .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
   .heading-note { font-size: 12px; color: var(--muted); }
   #editor-revision, #editor-title, #run-title { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
@@ -144,6 +157,9 @@
   /* ------------------------------------------------------------- states */
   .state-block { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
   .empty-title { font-weight: 600; }
+  .trigger-empty { align-items: center; justify-content: center; min-height: 260px; text-align: center; border-style: dashed; }
+  .trigger-empty-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #edf4ff; color: var(--blue); }
+  .trigger-empty .muted { max-width: 44rem; margin: 0; }
   .error-note { display: flex; gap: 10px; align-items: baseline; margin: 12px 0 0; padding: 12px 14px; border: 1px solid #efb9b3; border-radius: 8px; background: var(--red-soft); color: #7c2d24; line-height: 1.55; overflow-wrap: anywhere; }
   .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #d8e3f2; border-top-color: var(--blue); animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -255,6 +271,18 @@
   .check-field input { width: 18px; height: 18px; accent-color: var(--blue); }
   .editor-actions, .paging { flex-wrap: wrap; margin-top: 16px; }
   .config-output { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--bg); border-radius: 7px; }
+  .dataset-feedback { display:flex; align-items:flex-start; gap:8px; min-height:20px; margin:8px 0 0; font-size:13px; color:var(--muted); }
+  .dataset-feedback--ok { color:#087a3a; }
+  .dataset-feedback--error { color:var(--red); }
+  .feedback-dot { width:7px; height:7px; margin-top:6px; border-radius:50%; background:currentColor; flex:none; }
+  .inspect-result { margin-top:10px; border:1px solid var(--line); border-radius:8px; background:#fbfcfe; overflow:hidden; }
+  .inspect-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:#f3f7fd; border-bottom:1px solid var(--line); }
+  .inspect-kicker { font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .inspect-result dl { display:grid; grid-template-columns:84px minmax(0,1fr); gap:9px 14px; margin:0; padding:12px; }
+  .inspect-result dt { color:var(--muted); font-size:12px; }
+  .inspect-result dd { margin:0; min-width:0; font-size:12px; overflow-wrap:anywhere; }
+  .inspect-result dd code { white-space:normal; }
+  .inspect-note { margin:0; padding:0 12px 12px; color:var(--muted); font-size:12px; }
   #run-inspector { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 20px; }
   @media (max-width: 680px) { .parameter-grid { grid-template-columns: minmax(0, 1fr); } .editor-actions > button { flex: 1 1 140px; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
@@ -263,7 +291,7 @@
   @media (max-width: 880px) { .sidebar { flex-wrap: wrap; } .sidebar nav { flex-wrap: wrap; } }
   @media (max-width: 680px) { .field input, .field select, .field textarea { font-size: 16px; } }
   main > section { display:none; }
-  body[data-page="dashboard"] #dashboard-view, body[data-page="settings"] #management, body[data-page="orders"] :is(#orders-view,#import,#order-editor,#runs), body[data-page="triggers"] #triggers-view { display:block; }
+  body[data-page="dashboard"] #dashboard-view, body[data-page="settings"] #management, body[data-page="orders"] :is(#orders-view,#import,#runs), body[data-page="triggers"] #triggers-view { display:block; }
   [hidden] { display:none !important; }
   #status-chip:not(.runtime-status--disconnected) { display:none; }
   .instrument { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:28px; background:#143c72; color:#fff; border-left:6px solid #75afff; }
@@ -296,6 +324,83 @@
   .field > span, .orders-table th, .badge { text-transform:none; letter-spacing:0; font-size:12px; }
   @media(max-width:680px) { .folder-browser { grid-template-columns:minmax(0,1fr); gap:12px; } #dataset-list {max-height:9rem; border:1px solid var(--line); padding:4px;} .instrument { flex-wrap:wrap; } }
   @media(max-width:680px) { .activity-grid {grid-template-columns:1fr;} .sidebar nav {width:100%; display:grid; grid-template-columns:1fr 1fr; padding:0;} .sidebar .nav-item {min-width:0;} .sidebar .ui-icon {display:inline-flex;} .nav-section-title {display:none;} }
+  /* ------------------------------------------------------- order controls */
+  .field-label-row { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+  .field-meta { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .window-picker { display:grid; grid-template-columns:repeat(auto-fill,minmax(142px,1fr)); gap:8px; max-height:224px; overflow:auto; padding:10px; border:1px solid var(--line); border-radius:8px; background:#fbfcfe; }
+  .window-option { display:flex; flex-direction:column; gap:2px; padding:9px 10px; border:1px solid var(--line); border-radius:7px; background:#fff; cursor:pointer; transition:border-color .12s, background .12s; }
+  .window-option:hover { border-color:#a9c5ea; }
+  .window-option:has(input:checked) { border-color:var(--blue); background:var(--blue-soft); box-shadow:inset 0 0 0 1px var(--blue); }
+  .window-option:has(input:disabled) { opacity:.52; cursor:not-allowed; background:#f7f9fc; }
+  .window-option input { width:16px; height:16px; margin:0; accent-color:var(--blue); }
+  .window-option span { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .window-option small { color:var(--muted); font-size:11px; }
+  .window-empty { grid-column:1/-1; padding:14px; color:var(--muted); font-size:13px; }
+  .diagnostics-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-top:22px; }
+  .diagnostics-heading h3 { margin:0; font-size:14px; }
+  .diagnostics-heading p { margin:0; font-size:12px; }
+  .diagnostic-group { margin:12px 0; padding:14px; border:1px solid var(--line); border-radius:9px; background:#fbfcfe; transition:border-color .12s, background .12s; }
+  .diagnostic-group[data-enabled="true"] { border-color:#b9d2f5; background:#fff; }
+  .diagnostic-purpose { margin:0 0 8px; color:var(--muted); font-size:12.5px; }
+  .diagnostic-toggle label { font-weight:600; }
+  .diagnostic-fields { margin:10px 0 0; padding:10px 0 0; border-top:1px solid var(--line); }
+  .diagnostic-details { margin:10px 0 0; padding-top:8px; border-top:1px solid var(--line); }
+  .diagnostic-details > summary { padding:0; font-size:12px; font-weight:600; color:var(--blue); }
+  .diagnostic-details[open] > summary { margin-bottom:10px; }
+  .diagnostic-details .diagnostic-fields { margin:0; padding:0; border:0; }
+  .operation-history { margin-top:14px; }
+  .operation-history > summary { font-weight:600; }
+  .diagnostic-fields > legend { font-size:12px; font-weight:600; color:var(--muted); }
+  .diagnostic-fields .check-field label { font-weight:400; }
+
+  /* --------------------------------------------------------- readiness */
+  .check-summary { display:flex; align-items:center; gap:10px; margin:12px 0 10px; font-size:13px; }
+  .check-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; font-size:11.5px; font-weight:600; background:var(--blue-soft); color:var(--blue); }
+  .check-pill--ok { background:var(--green-soft); color:#06733a; }
+  .check-pill--fail { background:var(--red-soft); color:#943b32; }
+  .check-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
+  .check-card { display:grid; grid-template-columns:24px minmax(0,1fr); gap:9px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .check-card--ok { border-left:3px solid var(--green); }
+  .check-card--fail { border-left:3px solid var(--red); background:#fff8f7; }
+  .check-card--compact { padding:8px 10px; }
+  .check-icon { display:flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--green-soft); color:#06733a; }
+  .check-card--fail .check-icon { background:var(--red-soft); color:var(--red); }
+  .check-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+  .check-card h4 { margin:0; font-size:12.5px; font-weight:600; }
+  .check-card p { margin:3px 0 0; color:var(--muted); font-size:12px; line-height:1.45; }
+  #preflight-status[data-state="ok"] { color:#06733a; font-weight:600; }
+  #preflight-status[data-state="fail"] { color:#943b32; font-weight:600; }
+  #preflight-checks { margin-top:8px; }
+  button.is-busy { cursor:progress; opacity:.72; }
+
+  /* ----------------------------------------------------------- validation */
+  .validation-card { margin-top:12px; padding:14px; border:1px solid #bfe3cd; border-radius:9px; background:var(--green-soft); }
+  .validation-card h3 { margin:0; font-size:14px; }
+  .validation-card p { margin:4px 0 0; color:#286448; font-size:12.5px; }
+  .validation-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:12px; }
+  .validation-grid span { display:block; color:#4e6d5c; font-size:11px; text-transform:uppercase; letter-spacing:.4px; }
+  .validation-grid strong { display:block; margin-top:2px; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+
+  /* --------------------------------------------------------- run stages */
+  .stage-rail { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin:14px 0 18px; padding:18px 16px 12px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  .stage-step { position:relative; display:flex; flex-direction:column; gap:4px; min-width:0; padding:18px 12px 0 0; }
+  .stage-step::before { content:""; position:absolute; left:0; top:2px; width:10px; height:10px; border-radius:50%; background:#d5dfec; box-shadow:0 0 0 3px #fff; }
+  .stage-step::after { content:""; position:absolute; left:12px; right:0; top:6px; height:2px; background:#e4ebf5; }
+  .stage-step:last-child::after { display:none; }
+  .stage-step--done::before, .stage-step--done::after { background:var(--green); }
+  .stage-step--active::before { background:var(--blue); box-shadow:0 0 0 3px var(--blue-soft); }
+  .stage-step--failed::before { background:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
+  .stage-step--skipped { opacity:.55; }
+  .stage-label { font-size:12px; font-weight:600; line-height:1.25; overflow-wrap:anywhere; }
+  .stage-meta { color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
+  .stage-now { grid-column:1/-1; margin:14px 0 0; padding-top:10px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+  .stage-step--active .stage-label { color:var(--blue); }
+  @media (max-width:680px) {
+    .stage-rail { grid-template-columns:minmax(0,1fr); gap:10px; }
+    .stage-step { padding:0 0 0 26px; }
+    .stage-step::after { left:4px; top:14px; bottom:-8px; width:2px; height:auto; right:auto; }
+    .stage-step:last-child::after { display:none; }
+  }
 </style>
 </head>
 <body>
@@ -358,7 +463,7 @@
             <legend></legend>
             <label class="field"><span>Local folder path</span><input name="root" autocomplete="off" spellcheck="false"></label>
             <div class="form-actions editor-actions"><button type="button" class="primary" name="save" data-icon="save">Save folder</button><button type="button" class="secondary" name="inspect" data-icon="inspect">Inspect sample</button><button type="button" class="secondary" name="clear">Clear folder</button></div>
-            <p role="status"></p><pre class="config-output" hidden></pre>
+            <p role="status" class="dataset-feedback"></p><div class="inspect-result" hidden></div>
           </fieldset></template>
           <p id="settings-status" role="status"></p><button id="reload-settings" type="button" class="secondary">Reload settings</button>
         </div>
@@ -387,32 +492,37 @@
         <div id="options-error" role="status"></div>
       </section>
 
-      <section class="panel" id="order-editor" aria-labelledby="editor-title" hidden>
-        <div class="section-heading"><h2 id="editor-title">Order defaults</h2><span class="heading-note" id="editor-revision"></span></div>
-        <p class="muted">Editing defaults affects future runs only. Changes to data, times, region or inference models require a new run.</p>
+      <dialog class="panel editor-dialog" id="order-editor" aria-labelledby="editor-title">
+        <div class="section-heading"><h2 id="editor-title">Order settings</h2><span class="heading-note" id="editor-revision"></span><button id="close-order" class="secondary table-button dialog-close" type="button">Close</button></div>
+        <p class="muted">Editing settings affects future runs only. Changes to data, times, region or inference models require a new run.</p>
         <form id="order-form">
           <fieldset id="order-fields" disabled>
             <legend>Inference inputs</legend>
             <div class="parameter-grid">
               <div class="field"><label for="order-id">Order ID</label><input id="order-id" required pattern="[a-z0-9][a-z0-9._\-]{0,127}" autocomplete="off"><span class="field-hint">Lowercase letters, digits, dot, underscore and dash. Unique on this machine.</span></div>
-              <div class="field"><label for="order-data">Data source</label><select id="order-data" required></select></div>
-              <div class="field"><label for="order-event">Event ID</label><input id="order-event" required autocomplete="off"></div>
-              <div class="field field-wide"><label for="order-starts">Sample start times (UTC)</label><textarea id="order-starts" rows="4" required placeholder="2026-01-01T00:00:00Z" aria-describedby="sample-hint"></textarea><span class="field-hint" id="sample-hint">One UTC RFC3339 time per line, ending in Z.</span></div>
+              <div class="field"><label for="order-data">Data source</label><select id="order-data" required></select><span class="field-hint" id="data-hint">Fixed for an imported or saved order.</span></div>
+              <div class="field"><label for="order-event">Event</label><select id="order-event" required></select><span class="field-hint">Dates available in the local dataset.</span></div>
+              <div class="field field-wide">
+                <div class="field-label-row"><label id="sample-start-label" for="order-starts">Sample windows (UTC)</label><span class="field-meta" id="sample-count"></span></div>
+                <div id="order-starts" class="window-picker" role="group" aria-labelledby="sample-start-label"></div>
+                <span class="field-hint" id="sample-hint">Choose one or more runnable windows from the local dataset.</span>
+              </div>
             </div>
             <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div></fieldset>
             <fieldset id="order-region" hidden><legend>Region centre</legend><div class="parameter-grid">
               <div class="field"><label for="order-lon">Longitude (°E)</label><input id="order-lon" type="number" step="any"></div>
               <div class="field"><label for="order-lat">Latitude (°N)</label><input id="order-lat" type="number" step="any"></div>
             </div><p class="muted" id="region-hint"></p></fieldset>
-            <fieldset><legend>Fixed model geometry</legend><div class="parameter-grid" id="order-fixed"></div></fieldset>
+            <fieldset><legend>Model parameters</legend><div class="parameter-grid" id="order-fixed"></div><p class="field-hint">Fixed by the model contract. Not editable for this order.</p></fieldset>
+            <div class="diagnostics-heading"><h3>Diagnostics</h3><p class="muted">Optional post-processing. Each diagnostic uses only this order's inference models.</p></div>
             <div id="order-diagnostics"></div>
           </fieldset>
-          <p id="editor-status" role="status" class="muted"></p>
+          <div id="editor-status" role="status" class="muted"></div>
           <div id="editor-error" role="status"></div>
           <fieldset class="order-action-group"><legend>Draft</legend><div class="form-actions editor-actions">
             <button id="validate-order" class="secondary" type="button">Validate draft</button>
             <button id="preflight-order" class="secondary" type="button">Check readiness</button>
-            <button id="save-defaults" data-icon="save" class="primary" type="submit">Save defaults</button>
+            <button id="save-defaults" data-icon="save" class="primary" type="submit">Save settings</button>
           </div></fieldset>
           <p id="preflight-status" role="status">Readiness not checked. Every start also runs backend checks.</p><div id="preflight-checks"></div>
           <fieldset class="order-action-group"><legend>Saved order</legend><div class="form-actions editor-actions">
@@ -420,14 +530,14 @@
             <button id="export-order" class="secondary" type="button" disabled>Export saved YAML</button>
           </div></fieldset>
         </form>
-      </section>
+      </dialog>
 
       <section class="panel" id="orders-view" aria-label="Saved orders" style="margin-top:22px">
         <div class="section-heading">
           <h2>Saved orders</h2>
           <span class="heading-note" id="orders-note"></span>
         </div>
-        <label class="field">Filter orders and runs<select id="order-filter"><option value="">All orders</option></select></label>
+        <label class="field">Show runs for<select id="order-filter"><option value="">All runs</option></select></label>
         <div id="orders-error"></div>
         <div id="orders-docker" hidden></div>
         <div id="orders-action-error"></div>
@@ -447,11 +557,11 @@
           <h2>Saved triggers</h2><span class="heading-note" id="triggers-note"></span>
           <button class="primary" type="button" id="new-trigger" data-icon="add" disabled>New trigger</button>
         </div>
-        <p class="muted">Run a saved order on new data or a schedule.</p>
         <p id="trigger-no-orders" hidden><a href="#orders">Create a saved order</a> to add a trigger.</p>
         <div id="triggers-error"></div>
-        <form class="trigger-form" id="trigger-form" hidden>
-          <h3 id="trigger-form-title">New trigger</h3>
+        <dialog class="panel editor-dialog trigger-dialog" id="trigger-dialog" aria-labelledby="trigger-form-title">
+          <div class="dialog-head"><h3 id="trigger-form-title">New trigger</h3><button id="trigger-close" class="secondary table-button" type="button">Close</button></div>
+          <form class="trigger-form" id="trigger-form">
           <label class="field">
             <span>Saved order</span>
             <select id="trigger-package" required></select>
@@ -494,6 +604,7 @@
             <button class="secondary" id="trigger-cancel" type="button">Cancel</button>
           </div>
         </form>
+        </dialog>
         <div id="trigger-action-error"></div>
         <div id="triggers-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading triggers"></div></div>
         <div class="orders-table-wrap" id="triggers-wrap" hidden tabindex="0" style="margin-top:16px">
@@ -511,7 +622,7 @@
           <h2>Recent runs</h2>
           <span class="heading-note">results open in the diagnostics page</span>
         </div>
-        <div class="form-actions paging"><span id="runs-filter" role="status">All orders</span><button id="all-runs" class="secondary" type="button">Show all orders</button></div>
+        <div class="form-actions paging"><span id="runs-filter" role="status">All runs</span><button id="all-runs" class="secondary" type="button">Show all runs</button></div>
         <div id="runs-error" role="status"></div>
         <div id="runs-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading runs"></div></div>
         <div class="orders-table-wrap" id="runs-wrap" hidden tabindex="0">
@@ -527,6 +638,7 @@
           <h3 id="run-title" tabindex="-1">Run details</h3>
           <p class="muted">Inputs are frozen. To change data, times, region or inference models, edit an order and start a new run.</p>
           <div id="run-detail-error" role="status"></div>
+          <div id="run-stage-timeline" class="stage-rail" aria-label="Run stages" hidden></div>
           <div id="run-summary"></div>
           <button id="repeat-inference" class="secondary" type="button" disabled>Repeat inference</button>
           <p id="repeat-status" role="status"></p>
@@ -693,7 +805,7 @@ async function loadOrders() {
 function paintOrders() {
   const ids = new Set(ordersCache.map(order => order.order_id || order.package_id).filter(Boolean));
   if (runOrderFilter) ids.add(runOrderFilter);
-  const all = el("option", "All orders"); all.value = "";
+  const all = el("option", "All runs"); all.value = "";
   $("order-filter").replaceChildren(all, ...Array.from(ids).sort().map(id => el("option", id)));
   $("order-filter").value = runOrderFilter;
   const count = document.getElementById("nav-order-count");
@@ -702,7 +814,6 @@ function paintOrders() {
   note("orders-note", ordersCache.length + (ordersCache.length === 1 ? " order" : " orders"));
   const rows = [];
   for (const order of ordersCache) {
-    if (runOrderFilter && (order.order_id || order.package_id) !== runOrderFilter) continue;
     const row = document.createElement("tr");
     if (order.error) {
       const actions = el("div"); actions.className = "cell-actions";
@@ -718,7 +829,7 @@ function paintOrders() {
       );
     } else {
       const actions = el("div"); actions.className = "cell-actions";
-      const open = el("button", order.read_only ? "View history" : "Edit defaults"); open.className = "secondary table-button"; open.type = "button";
+      const open = el("button", order.read_only ? "View history" : "Settings"); open.className = "secondary table-button"; open.type = "button";
       open.addEventListener("click", () => openOrder(order));
       actions.append(open);
       if (!order.read_only && order.source === "saved") {
@@ -1091,7 +1202,7 @@ async function saveOrder() {
   } finally {
     input.disabled = false; button.disabled = !importFile; button.textContent = "Import file";
     editorBusy = false; syncEditorActions();
-    if (hub && !importFile) $("order-starts").focus();
+    if (hub && !importFile) $("order-event").focus();
   }
 }
 
@@ -1109,6 +1220,10 @@ const runPageSize = 50;
 let runsGeneration = 0;
 let selectedRunId = null;
 let diagnosticsRunId = null;
+let diagnosticsModels = [];
+function storedDiagnostics(id) {
+  try { const raw = localStorage.getItem("nib.diagnostics." + id); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
 let diagnosticsBusy = false;
 
 function discardDraft() {
@@ -1127,7 +1242,7 @@ function syncEditorActions() {
 function markOrderDirty() {
   editorDirty = true; editorGeneration++;
   invalidatePreflight();
-  $("editor-status").textContent = "Unsaved changes. Save defaults before starting a new run.";
+  $("editor-status").textContent = "Unsaved changes. Save settings before starting a new run.";
   syncEditorActions();
 }
 async function loadOrderOptions() {
@@ -1138,10 +1253,114 @@ async function loadOrderOptions() {
     $("order-data").replaceChildren(...orderOptions.data.map(data => {
       const option = el("option", data.name || data.id); option.value = data.id; return option;
     }));
-    $("sample-hint").textContent = "One UTC RFC3339 time per line, ending in Z. Maximum " + orderOptions.max_batch_samples + " samples.";
+    $("sample-hint").textContent = "Times come from the selected local dataset. Up to " + orderOptions.max_batch_samples + " windows per run.";
     syncEditorActions();
   } catch (cause) {
     $("options-error").replaceChildren(noteBlock("Order options could not load: " + cause.message + ". Reload the page to retry."));
+  }
+}
+let sampleWindows = [], sampleDays = [], sampleWindowsGeneration = 0;
+
+function windowLabel(time) {
+  const date = new Date(time);
+  if (!Number.isFinite(date.valueOf())) return time;
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC", hour12: false });
+}
+
+function paintWindowsForEvent(eventId, selected) {
+  const holder = $("order-starts"); holder.replaceChildren();
+  const rows = sampleWindows.filter(item => item.event_id === eventId);
+  rows.sort((a, b) => {
+    const aSelected = selected.has(a.context_start_time) ? 0 : 1;
+    const bSelected = selected.has(b.context_start_time) ? 0 : 1;
+    return aSelected - bSelected || a.context_start_time.localeCompare(b.context_start_time);
+  });
+  $("sample-count").textContent = rows.length + (rows.length === 1 ? " window" : " windows");
+  if (!rows.length) {
+    const empty = el("p", "No windows are available for this event."); empty.className = "window-empty"; holder.append(empty); return;
+  }
+  for (const row of rows) {
+    const label = el("label"); label.className = "window-option";
+    const input = el("input"); input.type = "checkbox"; input.name = "sample-start"; input.value = row.context_start_time;
+    input.checked = selected.has(row.context_start_time); input.disabled = row.ready === false;
+    const time = el("span", windowLabel(row.context_start_time));
+    const meta = el("small", row.ready === false ? "not ready" : "ready");
+    label.append(input, time, meta); holder.append(label);
+  }
+  if (!holder.querySelector('input[name="sample-start"]:checked')) {
+    const first = holder.querySelector('input[name="sample-start"]:not(:disabled)');
+    if (first) first.checked = true;
+  }
+  holder.scrollTop = 0;
+}
+
+function paintWindowPicker(order) {
+  const eventSelect = $("order-event"); eventSelect.replaceChildren();
+  if (!sampleDays.length) {
+    const option = el("option", "No local events"); option.value = ""; eventSelect.append(option);
+    $("sample-count").textContent = "";
+    const empty = el("p", "No sample windows are available for this dataset."); empty.className = "window-empty"; $("order-starts").replaceChildren(empty);
+    return "";
+  }
+  for (const day of sampleDays) { const option = el("option", day); option.value = day; eventSelect.append(option); }
+  const previous = order?.event_id;
+  const chosen = sampleDays.includes(previous) ? previous : sampleDays[sampleDays.length - 1];
+  eventSelect.value = chosen;
+  return chosen;
+}
+
+async function loadSampleDay(dataId, eventId, selected) {
+  const generation = ++sampleWindowsGeneration;
+  const holder = $("order-starts");
+  const loading = el("p", "Loading windows…"); loading.className = "window-empty"; holder.replaceChildren(loading);
+  $("sample-count").textContent = "";
+  try {
+    const page = await api("/v1/datasets/" + encodeURIComponent(dataId) + "/samples?day=" + encodeURIComponent(eventId) + "&limit=500");
+    if (generation !== sampleWindowsGeneration || eventId !== $("order-event").value) return;
+    sampleWindows = (page.samples || []).filter(item => item && item.event_id === eventId && item.context_start_time);
+    paintWindowsForEvent(eventId, selected);
+  } catch (cause) {
+    if (generation !== sampleWindowsGeneration) return;
+    $("sample-hint").textContent = "Could not load local windows. Set the dataset folder in Settings, then reopen this order.";
+    const fallback = [...selected];
+    if (fallback.length) {
+      sampleWindows = fallback.map(time => ({ event_id: eventId, context_start_time: time, ready: true }));
+      paintWindowsForEvent(eventId, selected);
+    } else {
+      const empty = el("p", "No sample windows loaded."); empty.className = "window-empty"; holder.replaceChildren(empty);
+    }
+  }
+}
+
+async function loadSampleWindows(order) {
+  const dataId = $("order-data").value;
+  const generation = ++sampleWindowsGeneration;
+  sampleWindows = []; sampleDays = [];
+  $("order-event").replaceChildren();
+  const loading = el("p", "Loading available events…"); loading.className = "window-empty"; $("order-starts").replaceChildren(loading);
+  $("sample-count").textContent = "";
+  $("sample-hint").textContent = "Load the dataset folder to choose real event times.";
+  if (!dataId) return;
+  try {
+    const page = await api("/v1/datasets/" + encodeURIComponent(dataId) + "/samples?limit=1");
+    if (generation !== sampleWindowsGeneration || dataId !== $("order-data").value) return;
+    const samples = page.samples || [];
+    sampleDays = Array.isArray(page.days) && page.days.length ? page.days : [...new Set(samples.map(item => item.event_id).filter(Boolean))].sort();
+    $("sample-hint").textContent = "Only windows present in the local dataset are listed. Up to " + (orderOptions?.max_batch_samples || 1) + " per run.";
+    const chosen = paintWindowPicker(order);
+    if (chosen) await loadSampleDay(dataId, chosen, new Set(order?.sample_starts || []));
+  } catch (cause) {
+    if (generation !== sampleWindowsGeneration) return;
+    $("sample-hint").textContent = "Could not load local windows. Set the dataset folder in Settings, then reopen this order.";
+    const fallback = order?.sample_starts || [];
+    if (!fallback.length) {
+      const empty = el("p", "No sample windows loaded."); empty.className = "window-empty"; $("order-starts").replaceChildren(empty); return;
+    }
+    const event = order?.event_id || fallback[0].slice(0, 10).replaceAll("-", "");
+    sampleDays = [event];
+    sampleWindows = fallback.map(time => ({ event_id: event, context_start_time: time, ready: true }));
+    paintWindowPicker(order);
+    paintWindowsForEvent(event, new Set(fallback));
   }
 }
 function choices(holder, name, options, selected) {
@@ -1155,41 +1374,71 @@ function choices(holder, name, options, selected) {
   }
 }
 function checked(name) { return Array.from(document.querySelectorAll('input[name="' + name + '"]:checked'), input => input.value); }
+function defaultLevels(data) {
+  const verification = data?.verification || {};
+  const min = Number(verification.level_min), max = Number(verification.level_max);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return [];
+  const standard = [10, 20, 30, 40, 50].filter(level => level >= min && level <= max);
+  if (standard.length) return standard;
+  return Array.from({ length: 5 }, (_, index) => Number((min + (max - min) * (index + 1) / 6).toFixed(1)));
+}
 function diagnosticFields(holderId, prefix, models, config, data) {
   const holder = $(holderId); holder.replaceChildren();
+  const purpose = {
+    verification: "Scores this order's forecasts against the observed fields.",
+    visualization: "Renders the same forecast fields for inspection and playback."
+  };
   for (const kind of ["verification", "visualization"]) {
-    const group = el("fieldset"); group.append(el("legend", kind === "verification" ? "Verification" : "Visualization"));
+    const group = el("fieldset"); group.className = "diagnostic-group";
     const enabled = el("input"); enabled.type = "checkbox"; enabled.id = prefix + "-" + kind; enabled.checked = Boolean(config[kind]);
     const label = el("label", kind === "verification" ? "Compute verification" : "Render visualization"); label.htmlFor = enabled.id;
-    const toggle = el("div"); toggle.className = "check-field"; toggle.append(enabled, label); group.append(toggle);
-    const fields = el("fieldset"); fields.id = enabled.id + "-fields"; fields.append(el("legend", "Models"));
-    fields.disabled = !enabled.checked;
-    const modelList = el("div"); modelList.className = "choice-list";
-    choices(modelList, prefix + "-" + kind + "-models", models, config[kind]?.models || models.map(model => typeof model === "string" ? model : model.id));
-    fields.append(modelList);
+    const toggle = el("div"); toggle.className = "check-field diagnostic-toggle"; toggle.append(enabled, label);
+    const note = el("p", purpose[kind]); note.className = "diagnostic-purpose";
+    group.append(el("legend", kind === "verification" ? "Verification" : "Visualization"), note, toggle);
+    const fields = el("fieldset"); fields.id = enabled.id + "-fields"; fields.className = "diagnostic-fields";
+    if (models.length > 1) {
+      fields.append(el("legend", kind === "verification" ? "Models to evaluate" : "Models to render"));
+      const modelList = el("div"); modelList.className = "choice-list";
+      choices(modelList, prefix + "-" + kind + "-models", models, config[kind]?.models || models.map(model => typeof model === "string" ? model : model.id));
+      fields.append(modelList);
+    } else {
+      const only = models[0];
+      const label = typeof only === "string" ? (data?.models?.find(item => (item.id || item) === only)?.name || only) : (only?.name || only?.id);
+      const line = el("p", label ? "Uses " + label + "." : "Select an inference model first.");
+      line.className = "field-hint"; fields.append(line);
+    }
     if (kind === "verification") {
-      const methods = el("fieldset"); methods.append(el("legend", "Methods"));
+      const metrics = el("fieldset"); metrics.append(el("legend", "Metrics"));
       const methodList = el("div"); methodList.className = "choice-list";
-      choices(methodList, prefix + "-methods", orderOptions.methods, config.verification?.methods || []);
-      methods.append(methodList); fields.append(methods);
+      choices(methodList, prefix + "-methods", orderOptions.methods, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
+      metrics.append(methodList); fields.append(metrics);
       const grid = el("div"); grid.className = "parameter-grid";
       for (const [key, title] of [["levels", "Threshold levels"], ["half_windows", "Half-window sizes (grid cells)"]]) {
         const field = el("div"); field.className = "field";
         const input = el("input"); input.id = prefix + "-" + key; input.type = "text";
-        input.value = (config.verification?.[key] || []).join(", ");
+        const defaults = key === "levels" ? defaultLevels(data) : [0, 2];
+        const current = config.verification?.[key];
+        input.value = (current?.length ? current : defaults).join(", ");
         const label = el("label", title); label.htmlFor = input.id;
         const hint = el("span", key === "levels" && data?.verification
-          ? "Comma-separated; " + data.verification.level_min + " to " + data.verification.level_max + " " + data.verification.unit + ". Required for threshold and FSS methods."
+          ? "Comma-separated; " + data.verification.level_min + " to " + data.verification.level_max + " " + data.verification.unit + ". Required for threshold and FSS metrics."
           : "Comma-separated integers from 0 to 16. Required for FSS.");
         hint.className = "field-hint"; hint.id = input.id + "-hint"; input.setAttribute("aria-describedby", hint.id);
         field.append(label, input, hint); grid.append(field);
       }
       fields.append(grid);
     } else {
-      fields.append(el("p", "Select models only. Layers, display thresholds and playback are available in the results viewer."));
+      const hint = el("p", "Display layers and playback are configured in the results viewer."); hint.className = "field-hint"; fields.append(hint);
     }
-    enabled.addEventListener("change", () => { fields.disabled = !enabled.checked; });
-    group.append(fields); holder.append(group);
+    const setEnabled = () => { fields.disabled = !enabled.checked; group.dataset.enabled = String(enabled.checked); };
+    enabled.addEventListener("change", setEnabled); setEnabled();
+    if (kind === "verification") {
+      const details = el("details"); details.className = "diagnostic-details";
+      details.append(el("summary", "Parameters"), fields); group.append(details);
+    } else {
+      group.append(fields);
+    }
+    holder.append(group);
   }
 }
 function numberList(id, integers) {
@@ -1206,13 +1455,16 @@ function numberList(id, integers) {
 function readDiagnostics(prefix, eligible) {
   const result = {};
   for (const kind of ["verification", "visualization"]) {
-    if (!$(prefix + "-" + kind).checked) continue;
-    const models = checked(prefix + "-" + kind + "-models");
+    const toggle = $(prefix + "-" + kind);
+    if (!toggle) throw new Error("Diagnostics controls are not ready; reopen the run.");
+    if (!toggle.checked) continue;
+    const boxes = Array.from(document.querySelectorAll('input[name="' + prefix + "-" + kind + '-models"]'));
+    const models = boxes.length ? boxes.filter(box => box.checked).map(box => box.value) : eligible;
     if (!models.length || models.some(model => !eligible.includes(model))) throw new Error("Choose eligible " + kind + " models.");
     result[kind] = { models };
     if (kind === "verification") {
       const methods = checked(prefix + "-methods");
-      if (!methods.length) throw new Error("Choose at least one verification method.");
+      if (!methods.length) throw new Error("Choose at least one verification metric.");
       result[kind].methods = methods;
       const levels = numberList(prefix + "-levels", false);
       const windows = numberList(prefix + "-half_windows", true);
@@ -1243,6 +1495,7 @@ function populateDataFields(order) {
   }
   diagnosticFields("order-diagnostics", "defaults", data.models, order, data);
   syncDiagnosticModels();
+  void loadSampleWindows(order);
 }
 function syncDiagnosticModels() {
   const models = checked("inference-models");
@@ -1257,16 +1510,19 @@ function showOrder(detail, draft) {
   selectedOrder = detail; editorDirty = false; editorGeneration++;
   invalidatePreflight();
   const order = draft || detail?.order || { data_id: orderOptions.data[0]?.id, models: [] };
-  $("order-editor").hidden = false;
-  $("editor-title").textContent = detail ? "Order defaults · " + order.order_id : "Create an order";
+  if (!$("order-editor").open) $("order-editor").showModal();
+  $("editor-title").textContent = detail ? "Order settings · " + order.order_id : "Create an order";
   $("editor-revision").textContent = detail?.revision ? "Revision " + detail.revision : "Not saved";
   $("order-id").value = order.order_id || ""; $("order-id").readOnly = Boolean(detail);
   $("order-data").value = order.data_id;
-  $("order-event").value = order.event_id || "";
-  $("order-starts").value = (order.sample_starts || []).join("\n");
+  const lockedData = Boolean(detail || draft);
+  $("order-data").disabled = lockedData;
+  $("data-hint").textContent = lockedData ? "Fixed by the imported order." : "Choose the dataset for this order.";
+  $("order-event").replaceChildren();
+  $("order-starts").replaceChildren();
   populateDataFields(order);
   $("editor-error").replaceChildren();
-  $("editor-status").textContent = detail ? "Saved defaults. Existing runs keep their frozen configuration." : "Choose inputs and save this order before starting a run.";
+  $("editor-status").textContent = detail ? "Saved settings. Existing runs keep their frozen configuration." : "Choose inputs and save this order before starting a run.";
   syncEditorActions();
 }
 async function openOrder(summary) {
@@ -1275,7 +1531,7 @@ async function openOrder(summary) {
   await filterRuns(summary.order_id || summary.package_id);
   if (generation !== editorGeneration) return;
   if (summary.read_only || summary.source !== "saved") {
-    selectedOrder = null; editorDirty = false; $("order-editor").hidden = true;
+    selectedOrder = null; editorDirty = false; if ($("order-editor").open) $("order-editor").close();
     $("runs-filter").textContent += " · Read-only history; create a YAML order to start new runs.";
     return;
   }
@@ -1283,35 +1539,54 @@ async function openOrder(summary) {
     if (!orderOptions) throw new Error("Order options are unavailable. Reload the page to retry.");
     const detail = await api("/v1/orders/" + encodeURIComponent(summary.order_id || summary.package_id));
     if (generation !== editorGeneration) return;
-    showOrder(detail); $("order-editor").scrollIntoView({ block: "start" }); $("order-event").focus({ preventScroll: true });
+    showOrder(detail); $("order-event").focus({ preventScroll: true });
   } catch (cause) { showActionError("Could not load order: " + cause.message); }
 }
 function readOrder() {
   if (!$("order-form").reportValidity()) return null;
   const models = checked("inference-models");
   if (!models.length) throw new Error("Choose at least one inference model.");
-  const starts = $("order-starts").value.trim().split(/\s+/);
-  if (starts.length > orderOptions.max_batch_samples) throw new Error("Too many sample starts; maximum " + orderOptions.max_batch_samples + ".");
-  if (starts.some(time => !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(time) || !Number.isFinite(Date.parse(time)))) throw new Error("Use UTC RFC3339 sample starts ending in Z, one per line.");
-  const order = { schema_version: "nib.order.v1", order_id: $("order-id").value.trim(), data_id: $("order-data").value, event_id: $("order-event").value.trim(), sample_starts: starts, models, ...readDiagnostics("defaults", models) };
+  const starts = checked("sample-start");
+  if (!starts.length) throw new Error("Choose at least one sample window.");
+  if (starts.length > orderOptions.max_batch_samples) throw new Error("Too many sample windows; maximum " + orderOptions.max_batch_samples + ".");
+  const event = $("order-event").value;
+  if (!event) throw new Error("Choose an event with available windows.");
+  const order = { schema_version: "nib.order.v1", order_id: $("order-id").value.trim(), data_id: $("order-data").value, event_id: event, sample_starts: starts, models, ...readDiagnostics("defaults", models) };
   if (!$("order-region").hidden) order.region = { center_lon: Number($("order-lon").value), center_lat: Number($("order-lat").value) };
   return order;
+}
+function validationCard(order) {
+  const card = el("div"); card.className = "validation-card";
+  card.append(el("h3", "Draft is valid"));
+  card.append(el("p", "No save, readiness probe or Docker execution was performed."));
+  const grid = el("div"); grid.className = "validation-grid";
+  const diagnostics = [order.verification ? "verification" : "", order.visualization ? "visualization" : ""].filter(Boolean).join(" · ") || "none";
+  for (const [label, value] of [["Order", order.order_id], ["Data", order.data_id], ["Event", order.event_id], ["Windows", String(order.sample_starts.length)], ["Models", order.models.join(", ")], ["Diagnostics", diagnostics]]) {
+    const item = el("div"); item.append(el("span", label), el("strong", value)); grid.append(item);
+  }
+  card.append(grid); return card;
 }
 async function submitOrder(validateOnly) {
   if (editorBusy) return;
   $("editor-error").replaceChildren();
+  const button = validateOnly ? $("validate-order") : $("save-defaults");
+  const label = button.textContent;
   try {
     const order = readOrder(); if (!order) return;
     editorBusy = true; editorGeneration++; syncEditorActions();
+    button.disabled = true; button.classList.add("is-busy"); button.textContent = validateOnly ? "Validating…" : "Saving…";
     const body = { order };
     if (selectedOrder) body.revision = selectedOrder.revision;
     const path = validateOnly ? "/v1/orders/validate" : selectedOrder ? "/v1/orders/" + encodeURIComponent(selectedOrder.order_id) : "/v1/orders";
     const detail = await api(path, jsonRequest(validateOnly || !selectedOrder ? "POST" : "PATCH", body));
-    if (validateOnly) $("editor-status").textContent = "Draft is valid. No save, data probe or Docker execution was performed.";
+    if (validateOnly) $("editor-status").replaceChildren(validationCard(order));
     else { showOrder(detail); await loadOrders(); await filterRuns(detail.order_id); }
   } catch (cause) {
     $("editor-error").replaceChildren(noteBlock(cause.message + " Your draft is retained. If the saved revision changed, reload the order before saving again."));
-  } finally { editorBusy = false; syncEditorActions(); }
+  } finally {
+    button.textContent = label; button.classList.remove("is-busy");
+    editorBusy = false; syncEditorActions();
+  }
 }
 async function exportOrder() {
   if (!selectedOrder) return;
@@ -1323,17 +1598,18 @@ async function exportOrder() {
     document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (cause) { $("editor-error").replaceChildren(noteBlock(cause.message)); }
 }
-async function filterRuns(orderId) {
+async function filterRuns(orderId, reveal = false) {
   runOrderFilter = orderId || ""; runOffset = 0; paintOrders();
-  $("runs-filter").textContent = runOrderFilter ? "Order: " + runOrderFilter : "All orders";
+  $("runs-filter").textContent = runOrderFilter ? "Order: " + runOrderFilter : "All runs";
   await loadRuns();
+  if (reveal) $("runs").scrollIntoView({ block: "start", behavior: "smooth" });
 }
 async function openRun(id) {
   if (diagnosticsBusy) return;
   selectedRunId = id; diagnosticsRunId = null;
   $("run-inspector").hidden = false; $("run-title").textContent = "Run · " + id;
   $("run-summary").replaceChildren(); $("run-config").textContent = "Loading frozen configuration…";
-  $("run-operations").replaceChildren(); $("run-diagnostics").replaceChildren(); $("run-diagnostics-status").replaceChildren();
+  $("run-operations").replaceChildren(); $("run-diagnostics").replaceChildren(); $("run-diagnostics-status").replaceChildren(); $("run-stage-timeline").hidden = true; $("run-stage-timeline").replaceChildren();
   $("run-diagnostics-submit").disabled = true;
   await loadRunDetail(id);
   $("run-title").focus();
@@ -1347,24 +1623,34 @@ async function loadRunDetail(id) {
     summary.append(el("p", "Inference: " + (run.inference_status || run.status) + " · Diagnostics: " + (run.diagnostics_status || "not requested")));
     if (run.job?.error) summary.append(noteBlock(run.job.error));
     const report = reportEntry(run);
-    if (report) { const link = el("a", "Open results and Coverage"); link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; summary.append(link); }
-    summary.append(el("p", "Stage: " + (run.job?.stage || "not reported")));
-    renderChecks(summary, run.job?.preflight || []);
+    if (report) { const link = el("a", "Results & Coverage"); link.className = "secondary table-button"; link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; link.title = "Forecast metrics, coverage and data-arrival completeness"; summary.append(link); }
+    const runChecks = el("div"); summary.append(runChecks);
+    renderRunStages(run);
+    renderChecks(runChecks, run.job?.preflight || [], true);
     $("repeat-inference").disabled = !run.order || repeatBusy || ["queued", "running"].includes(run.status);
     $("run-config").textContent = JSON.stringify({ order: run.order || null, request: run.job?.request, execution_context: run.job?.execution_context, revision: run.revision, forecasts: run.forecasts, samples: run.samples }, null, 2);
     const operations = run.operations?.length ? run.operations : run.operation ? [run.operation] : [];
     const list = el("ol");
     for (const operation of operations) { const item = el("li"); item.append(statusBadge(operation.status), el("pre", JSON.stringify(operation, null, 2))); item.lastChild.className = "config-output"; list.append(item); }
-    $("run-operations").replaceChildren(operations.length ? list : el("p", "No diagnostic operations recorded."));
-    if (diagnosticsRunId !== id && orderOptions) {
-      diagnosticsRunId = id;
-      const models = Object.keys(run.forecasts || {});
-      if (run.order && models.length) {
+    const history = el("details"); history.className = "operation-history";
+    history.append(el("summary", operations.length ? "Operation history · " + operations.length : "Operation history"));
+    history.append(operations.length ? list : el("p", "No diagnostic operations recorded."));
+    $("run-operations").replaceChildren(history);
+    const models = Object.keys(run.forecasts || {});
+    diagnosticsModels = models;
+    const savedDiagnostics = storedDiagnostics(id);
+    if (run.order && models.length && orderOptions) {
+      if (diagnosticsRunId !== id || !$("retry-verification")) {
         const data = orderOptions.data.find(item => item.id === run.order.data_id);
-        diagnosticFields("run-diagnostics", "retry", models, run.order, data);
-      } else { $("run-diagnostics").append(el("p", run.order ? "No saved forecasts are available for diagnostics." : "Read-only history: no frozen YAML order is available for diagnostic changes.")); }
+        const diagnosticConfig = savedDiagnostics ? { ...run.order, verification: savedDiagnostics.verification ?? run.order.verification, visualization: savedDiagnostics.visualization ?? run.order.visualization } : run.order;
+        diagnosticFields("run-diagnostics", "retry", models, diagnosticConfig, data);
+      }
+      diagnosticsRunId = id;
+    } else if (diagnosticsRunId !== id) {
+      $("run-diagnostics").replaceChildren(el("p", run.order ? "No saved forecasts are available for diagnostics." : "Read-only history: no frozen YAML order is available for diagnostic changes."));
+      diagnosticsRunId = id;
     }
-    $("run-diagnostics-submit").disabled = diagnosticsBusy || !run.order || !Object.keys(run.forecasts || {}).length || !orderOptions || ["queued", "running"].includes(run.status) || ["queued", "running"].includes(run.operation?.status);
+    $("run-diagnostics-submit").disabled = diagnosticsBusy || !run.order || !models.length || !orderOptions || !$("retry-verification") || ["queued", "running"].includes(run.status) || ["queued", "running"].includes(run.operation?.status);
   } catch (cause) { if (id === selectedRunId) $("run-detail-error").replaceChildren(noteBlock("Could not load run: " + cause.message)); }
 }
 async function submitDiagnostics() {
@@ -1372,11 +1658,14 @@ async function submitDiagnostics() {
   const id = selectedRunId;
   $("run-diagnostics-status").replaceChildren();
   try {
-    const eligible = Array.from(document.querySelectorAll('input[name="retry-verification-models"]'), input => input.value);
+    if (!$("retry-verification")) { await loadRunDetail(id); if (!$("retry-verification")) throw new Error("Diagnostics controls are not ready for this run."); }
+    const eligible = diagnosticsModels.length ? diagnosticsModels : Array.from(document.querySelectorAll('input[name="retry-verification-models"]'), input => input.value);
     const body = readDiagnostics("retry", eligible);
     if (!body.verification && !body.visualization) throw new Error("Enable verification or visualization first.");
     diagnosticsBusy = true; $("run-diagnostics-submit").disabled = true;
     await api("/v1/runs/" + encodeURIComponent(id) + "/diagnostics", jsonRequest("POST", body));
+    try { localStorage.setItem("nib.diagnostics." + id, JSON.stringify(body)); } catch {}
+    diagnosticsRunId = null;
     $("run-diagnostics-status").append(el("p", "Diagnostics submitted. Frozen inference inputs are unchanged."));
   } catch (cause) { $("run-diagnostics-status").append(noteBlock(cause.message)); }
   finally { diagnosticsBusy = false; await loadRunDetail(id); }
@@ -1389,7 +1678,7 @@ let editingTriggerId = "", triggerSaving = false;
 function openTriggerForm(packageId, trigger = null) {
   if (triggerSaving) return;
   editingTriggerId = trigger?.id || "";
-  $("trigger-form").hidden = false; $("trigger-form").reset(); $("trigger-options").open = !!trigger; paintTriggerOrderOptions();
+  if (!$("trigger-dialog").open) $("trigger-dialog").showModal(); $("trigger-form").reset(); $("trigger-options").open = !!trigger; paintTriggerOrderOptions();
   if (packageId) $("trigger-package").value = packageId;
   $("trigger-package").disabled = Boolean(trigger);
   if (trigger) {
@@ -1406,7 +1695,7 @@ function openTriggerForm(packageId, trigger = null) {
   requestAnimationFrame(() => (trigger ? $("trigger-form").querySelector(":checked[type=radio]") : $("trigger-package")).focus());
 }
 function closeTriggerForm() {
-  editingTriggerId = ""; $("trigger-form").hidden = true; $("trigger-package").disabled = false;
+  editingTriggerId = ""; if ($("trigger-dialog").open) $("trigger-dialog").close(); $("trigger-package").disabled = false;
   showTriggerError(""); $("new-trigger").focus();
 }
 
@@ -1500,10 +1789,15 @@ function triggerRow(trigger) {
 
 function emptyTriggersBlock() {
   const block = el("div");
-  block.className = "state-block";
+  block.className = "state-block trigger-empty";
+  const mark = el("div");
+  mark.className = "trigger-empty-icon";
+  mark.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>';
   const title = el("span", "No triggers yet.");
+  const copy = el("p", "Create a trigger to run a saved order when new data arrives or on a schedule.");
+  copy.className = "muted";
   title.className = "empty-title";
-  block.append(title);
+  block.append(mark, title, copy);
   return block;
 }
 
@@ -1665,30 +1959,143 @@ let preflightGeneration = 0, preflightBusy = false, repeatBusy = false;
 const repeatAttempts = new Map();
 function invalidatePreflight() {
   preflightGeneration++;
+  $("preflight-status").removeAttribute("data-state");
   $("preflight-status").textContent = "Readiness not checked for the current draft and settings. Every start runs backend checks.";
   $("preflight-checks").replaceChildren();
 }
-function renderChecks(holder, checks) {
+const RUN_STAGES = [
+  { label: "Preflight", detail: "Docker, images, data" },
+  { label: "Read inputs", detail: "Resolve the window" },
+  { label: "Inference", detail: "Run the model" },
+  { label: "Diagnostics", detail: "Verify and render" },
+  { label: "Complete", detail: "Write results" }
+];
+function stageIndex(stage, run) {
+  if (!stage || stage === "queued" || stage === "preflight" || stage.startsWith("preflight:")) return 0;
+  if (stage === "read-inputs" || stage.startsWith("sample ") || (stage.startsWith("sample-") && stage.endsWith("-read-inputs"))) return 1;
+  if (stage === "diagnostics") return 3;
+  if (stage === "finished" || run.status === "succeeded") return 4;
+  const models = Object.keys(run.forecasts || {});
+  if (models.some(model => stage === model || stage.endsWith("-" + model))) return 2;
+  return 2;
+}
+function humanStage(stage) {
+  return String(stage || "waiting").replace(/^preflight:/, "checking ").replace(/^image:model:/, "model image ").replace(/^image:/, "image ").replace(/^weight:/, "weights ").replaceAll("-", " ");
+}
+function renderRunStages(run) {
+  const holder = $("run-stage-timeline"); holder.replaceChildren();
+  const stage = run.job?.stage || "";
+  if (!stage && !run.status) { holder.hidden = true; return; }
+  holder.hidden = false;
+  const active = stageIndex(stage, run);
+  const finished = run.status === "succeeded" || stage === "finished";
+  const failed = run.status === "failed" || run.status === "interrupted";
+  const partial = run.status === "partial";
+  const diagnosticsRequested = Boolean(run.order?.verification || run.order?.visualization);
+  for (const [index, item] of RUN_STAGES.entries()) {
+    let state = "pending";
+    if (finished) state = "done";
+    else if (failed) state = index < active ? "done" : index === active ? "failed" : "pending";
+    else if (partial) state = index <= 3 ? "done" : "failed";
+    else if (index < active) state = "done";
+    else if (index === active) state = "active";
+    if (index === 3 && !diagnosticsRequested) state = "skipped";
+    const step = el("div"); step.className = "stage-step stage-step--" + state;
+    const label = el("span", item.label); label.className = "stage-label";
+    const meta = el("span", { done: "done", active: "in progress", failed: "failed", skipped: "not requested", pending: "waiting" }[state]); meta.className = "stage-meta";
+    step.append(label, meta); holder.append(step);
+  }
+  const now = el("p", finished ? "All stages complete." : (failed ? "Run stopped at " + humanStage(stage) + "." : "Current: " + humanStage(stage)));
+  now.className = "stage-now"; holder.append(now);
+}
+function checkLabel(id) {
+  const parts = String(id || "").split(":");
+  if (parts[0] === "image" && parts[1] === "model") return "Model image · " + parts.slice(2).join(":");
+  if (parts[0] === "image") return parts[1] === "data" ? "Data image" : parts[1] === "diagnostics" ? "Diagnostics image" : "Image · " + parts.slice(1).join(":");
+  if (parts[0] === "weight") return "Weights · " + parts.slice(1).join(":");
+  if (parts[0] === "window") return parts.length > 1 ? "Time window · " + parts.slice(1).join(":") : "Time window";
+  return { docker: "Docker", data: "Dataset folder", windows: "Time windows" }[parts[0]] || id;
+}
+function checkDetail(check) {
+  if (!check.ok) return check.message || "Failed";
+  const id = String(check.id || "");
+  if (id === "docker") return "Reachable";
+  if (id === "data") return "Local files present";
+  if (id.startsWith("image:")) return "Ready";
+  if (id.startsWith("weight:")) return "SHA-256 verified";
+  if (id === "window" || id.startsWith("window:")) return "Metadata checked";
+  return check.message || "Passed";
+}
+function displayChecks(checks) {
+  const windows = checks.filter(check => check.id === "window" || String(check.id || "").startsWith("window:"));
+  if (windows.length < 2 || !windows.every(check => check.ok)) return checks;
+  const shown = []; let grouped = false;
+  for (const check of checks) {
+    if (check.id === "window" || String(check.id || "").startsWith("window:")) {
+      if (!grouped) {
+        shown.push({ id: "windows", ok: true, message: windows.length + " selected windows", short: windows.length + " selected · metadata checked" });
+        grouped = true;
+      }
+      continue;
+    }
+    shown.push(check);
+  }
+  return shown;
+}
+function checkMark(ok) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute("d", ok ? "M5 12l4 4L19 6" : "M6 6l12 12M18 6L6 18");
+  svg.append(path); return svg;
+}
+function renderChecks(holder, checks, compact) {
+  holder.replaceChildren();
   if (!checks.length) return;
-  const list = el("ul");
-  for (const check of checks) list.append(el("li", (check.ok ? "Passed: " : "Failed: ") + check.id + " · " + check.message));
-  holder.append(list);
+  const shown = displayChecks(checks);
+  const passed = shown.filter(check => check.ok).length;
+  const summary = el("div"); summary.className = "check-summary";
+  const pill = el("span", passed + " / " + shown.length + " passed"); pill.className = "check-pill " + (passed === shown.length ? "check-pill--ok" : "check-pill--fail");
+  summary.append(pill); holder.append(summary);
+  const grid = el("div"); grid.className = "check-grid";
+  for (const check of shown) {
+    const card = el("article"); card.className = "check-card " + (check.ok ? "check-card--ok" : "check-card--fail") + (compact ? " check-card--compact" : "");
+    const mark = el("div"); mark.className = "check-icon"; mark.append(checkMark(check.ok));
+    const body = el("div"); body.append(el("h4", checkLabel(check.id)), el("p", check.short || checkDetail(check)));
+    card.append(mark, body); grid.append(card);
+  }
+  holder.append(grid);
 }
 async function checkReadiness() {
   if (preflightBusy || editorBusy) return;
   const generation = ++preflightGeneration;
+  const button = $("preflight-order"), label = button.textContent;
+  preflightBusy = true; syncEditorActions();
+  button.disabled = true; button.classList.add("is-busy"); button.textContent = "Checking…";
   try {
     if (settingsBusy || imageSettingsDirty || dataSettingsDirty) throw new Error("Wait for settings to save before checking readiness.");
     const order = readOrder(); if (!order) return;
-    preflightBusy = true; syncEditorActions();
-    $("preflight-checks").replaceChildren();
-    $("preflight-status").textContent = "Checking local resources and data windows… This may start a reader container.";
+    const checks = $("preflight-checks"); checks.replaceChildren();
+    const loading = el("div"); loading.className = "state-block";
+    const spinner = el("span"); spinner.className = "spinner";
+    loading.append(spinner, el("p", "Checking Docker, local data, images and weights. This can start a reader container."));
+    checks.append(loading);
+    $("preflight-status").removeAttribute("data-state");
+    $("preflight-status").textContent = "Checking local resources and data windows…";
     const result = await api("/v1/preflight", jsonRequest("POST", { order }));
     if (generation !== preflightGeneration) return;
-    $("preflight-status").textContent = result.ok ? "Readiness checks passed. Starts will check again." : "Readiness checks failed. Resolve the checks below and retry.";
-    renderChecks($("preflight-checks"), result.checks || []);
-  } catch (cause) { if (generation === preflightGeneration) $("preflight-status").textContent = "Readiness check failed: " + cause.message; }
-  finally { preflightBusy = false; syncEditorActions(); }
+    $("preflight-status").dataset.state = result.ok ? "ok" : "fail";
+    $("preflight-status").textContent = result.ok ? "Readiness checks passed. Starts check again." : "Readiness checks failed. Resolve the items below and retry.";
+    renderChecks(checks, result.checks || []);
+  } catch (cause) {
+    if (generation === preflightGeneration) {
+      $("preflight-status").dataset.state = "fail";
+      $("preflight-status").textContent = "Readiness check failed: " + cause.message;
+    }
+  } finally {
+    button.textContent = label; button.classList.remove("is-busy");
+    preflightBusy = false; syncEditorActions();
+  }
 }
 function previewImagePriority() {
   const policy = $("image-source").value, override = $("image-override").value.trim();
@@ -1702,9 +2109,33 @@ function previewImagePriority() {
     const step = el("span", label); step.className = "source-step"; step.title = address || label; output.append(step);
   }
 }
+function setFeedback(node, text, tone = "neutral") {
+  node.className = "dataset-feedback" + (tone === "neutral" ? "" : " dataset-feedback--" + tone);
+  if (!text) { node.replaceChildren(); return; }
+  const dot = el("span"); dot.className = "feedback-dot"; dot.setAttribute("aria-hidden", "true");
+  node.replaceChildren(dot, el("span", text));
+}
+function renderInspection(node, result) {
+  node.replaceChildren();
+  const head = el("div"); head.className = "inspect-head";
+  const kicker = el("span", "Sample read"); kicker.className = "inspect-kicker";
+  const badge = el("span", "Readable"); badge.className = "badge badge--success";
+  head.append(kicker, badge);
+  const list = el("dl");
+  const raw = result?.value;
+  for (const [label, value] of [["File", result?.sample || "Not reported"], ["Raw value", raw === undefined || raw === null ? "Not reported" : String(raw)]]) {
+    list.append(el("dt", label));
+    const cellValue = el("dd"); cellValue.append(code(value)); list.append(cellValue);
+  }
+  const note = el("p", Number(raw) <= -1000
+    ? "The reader decoded the file. This negative sentinel means no echo at the sampled cell."
+    : "Raw value read from the first sample in this folder.");
+  note.className = "inspect-note";
+  node.append(head, list, note); node.hidden = false;
+}
 function datasetRow({id, title}, savedRoot, folderState) {
   const row = $("dataset-row").content.firstElementChild.cloneNode(true);
-  const root = row.elements.root, status = row.querySelector('[role="status"]'), output = row.querySelector("pre");
+  const root = row.elements.root, status = row.querySelector('[role="status"]'), output = row.querySelector(".inspect-result");
   row.querySelector("legend").textContent = title || id;
   root.value = savedRoot;
   decorateButtons(row);
@@ -1719,24 +2150,24 @@ function datasetRow({id, title}, savedRoot, folderState) {
     row.elements.inspect.disabled = dirty || !savedRoot;
     output.hidden = true;
   }
-  row.oninput = event => { update(); status.textContent = row.hasAttribute("data-dirty") ? "Unsaved folder." : ""; if (event.target === root) invalidatePreflight(); };
+  row.oninput = event => { update(); const dirty = row.hasAttribute("data-dirty"); setFeedback(status, dirty ? "Unsaved folder." : "", dirty ? "pending" : "neutral"); if (event.target === root) invalidatePreflight(); };
   row.onclick = async event => {
     const action = event.target.closest("button")?.name;
     if (!["save", "clear", "inspect"].includes(action) || row.disabled) return;
     row.disabled = true; output.hidden = true;
     try {
       if (action === "inspect") {
-        status.textContent = "Inspecting sample…";
+        setFeedback(status, "Reading a sample…", "pending");
         const result = await api("/v1/datasets/" + encodeURIComponent(id) + "/inspect", {method: "POST"});
-        output.textContent = JSON.stringify(result, null, 2); output.hidden = false; status.textContent = "Inspection complete.";
+        renderInspection(output, result); setFeedback(status, "Inspection complete.", "ok");
       } else {
         const path = action === "clear" ? "" : root.value.trim();
-        status.textContent = path ? "Saving folder…" : "Clearing folder…";
+        setFeedback(status, path ? "Saving folder…" : "Clearing folder…", "pending");
         const result = await api("/v1/settings", jsonRequest("PATCH", {data_id: id, data_root: path}));
         savedRoot = result?.data_roots?.[id] ?? path; root.value = savedRoot;
-        update(); invalidatePreflight(); status.textContent = path ? "Folder saved." : "Folder association cleared.";
+        update(); invalidatePreflight(); setFeedback(status, path ? "Folder saved." : "Folder association cleared.", "ok");
       }
-    } catch (cause) { status.textContent = "Could not " + action + ": " + cause.message; }
+    } catch (cause) { setFeedback(status, "Could not " + action + ": " + cause.message, "error"); }
     finally { row.disabled = false; }
   };
   update(); return row;
@@ -1881,7 +2312,11 @@ $("order-drop").addEventListener("drop", event => {
 document.getElementById("save-order").addEventListener("click", () => { saveOrder(); });
 document.getElementById("trigger-form").addEventListener("submit", (event) => { event.preventDefault(); addTrigger(); });
 $("new-trigger").addEventListener("click", () => openTriggerForm(""));
+$("close-order").addEventListener("click", () => $("order-editor").close());
+$("order-editor").addEventListener("click", (event) => { if (event.target === $("order-editor")) $("order-editor").close(); });
 $("trigger-form").addEventListener("change", syncTriggerForm);
+$("trigger-close").addEventListener("click", closeTriggerForm);
+$("trigger-dialog").addEventListener("click", (event) => { if (event.target === $("trigger-dialog")) closeTriggerForm(); });
 $("trigger-cancel").addEventListener("click", closeTriggerForm);
 syncTriggerForm();
 $("new-order").addEventListener("click", () => { if (discardDraft()) { showOrder(null); $("order-id").focus(); } });
@@ -1889,11 +2324,12 @@ $("order-form").addEventListener("input", markOrderDirty);
 $("order-form").addEventListener("change", markOrderDirty);
 $("order-form").addEventListener("submit", event => { event.preventDefault(); submitOrder(false); });
 $("order-data").addEventListener("change", () => { populateDataFields({}); markOrderDirty(); });
+$("order-event").addEventListener("change", () => { const dataId = $("order-data").value, eventId = $("order-event").value; if (dataId && eventId) void loadSampleDay(dataId, eventId, new Set()); markOrderDirty(); });
 $("order-models").addEventListener("change", syncDiagnosticModels);
 $("validate-order").addEventListener("click", () => submitOrder(true));
 $("export-order").addEventListener("click", exportOrder);
 $("start-selected").addEventListener("click", event => { if (selectedOrder) startOrder(selectedOrder, event.currentTarget); });
-$("order-filter").addEventListener("change", event => filterRuns(event.target.value));
+$("order-filter").addEventListener("change", event => filterRuns(event.target.value, true));
 $("all-runs").addEventListener("click", () => filterRuns(""));
 $("runs-prev").addEventListener("click", () => { runOffset = Math.max(0, runOffset - runPageSize); loadRuns(); });
 $("runs-next").addEventListener("click", () => { runOffset += runPageSize; loadRuns(); });

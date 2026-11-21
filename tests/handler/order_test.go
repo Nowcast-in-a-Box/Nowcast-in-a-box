@@ -88,6 +88,22 @@ func TestOrderRejectsInvalidYAMLAndSelections(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsDefaultToInferenceModels(t *testing.T) {
+	resources := testResources(t)
+	order := orderFixture()
+	order.Verification = &handler.OrderVerification{Methods: []string{"mae"}}
+	order.Visualization = &handler.OrderVisualization{}
+	normalized, request, err := handler.ParseOrder([]byte(orderYAML(t, order)), resources, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(normalized.Verification.Models, order.Models) || !reflect.DeepEqual(request.VerificationModels, order.Models) {
+		t.Fatalf("verification models = %v/%v, want %v", normalized.Verification.Models, request.VerificationModels, order.Models)
+	}
+	if !reflect.DeepEqual(normalized.Visualization.Models, order.Models) || !reflect.DeepEqual(request.VisualizationModels, order.Models) {
+		t.Fatalf("visualization models = %v/%v, want %v", normalized.Visualization.Models, request.VisualizationModels, order.Models)
+	}
+}
 func TestOrderRevisionUsesNormalizedContent(t *testing.T) {
 	resources := testResources(t)
 	first := orderFixture()

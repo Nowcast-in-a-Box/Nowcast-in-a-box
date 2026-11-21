@@ -135,6 +135,46 @@ func TestImageSourceSettingPersistsAndIsValidated(t *testing.T) {
 	}
 }
 
+func TestRuntimeSettingsPersistMirrorAndWeightSource(t *testing.T) {
+	t.Setenv("NIB_DATA_ROOT", "")
+	source := settingsConfig(t)
+	cfg, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Runtime.Token = "token"
+	server := handler.NewServer(cfg)
+	request := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("PATCH", "http://127.0.0.1/v1/settings", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer token")
+		result := httptest.NewRecorder()
+		server.Routes().ServeHTTP(result, req)
+		return result
+	}
+
+	body, err := json.Marshal(map[string]string{
+		"image_registry": "registry.example",
+		"image_mirror":   "mirror.example",
+		"weight_source":  "weights",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := request(string(body)); response.Code != 200 {
+		t.Fatalf("save runtime settings: %d %s", response.Code, response.Body.String())
+	}
+	reloaded, err := handler.Load(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Runtime.ImageRegistry != "registry.example" || reloaded.Runtime.ImageMirror != "mirror.example" {
+		t.Fatalf("reloaded registry/mirror = %q/%q", reloaded.Runtime.ImageRegistry, reloaded.Runtime.ImageMirror)
+	}
+	if want := filepath.Join(filepath.Dir(source), "weights"); reloaded.Paths.WeightSource != want {
+		t.Fatalf("reloaded weight source = %q, want %q", reloaded.Paths.WeightSource, want)
+	}
+}
+
 func TestPickDataRootSavesPerDataIDWithoutAcceptingABrowserPath(t *testing.T) {
 	t.Setenv("NIB_DATA_ROOT", "")
 	source := settingsConfig(t)

@@ -72,7 +72,7 @@ models:
   - <paired model ID>
 # Include region only for a data source that supports it:
 # region: {center_lon: <longitude>, center_lat: <latitude>}
-# Optional diagnostics, with model IDs drawn from models above:
+# Optional diagnostics. Omit models to use every inference model:
 # verification:
 #   models: [<paired model ID>]
 #   methods: [<supported method>]
@@ -91,7 +91,7 @@ Omit `verification` or `visualization` to disable that diagnostic. Selecting a
 model for inference does not implicitly enable diagnostics. Threshold-dependent
 methods require explicit `levels`; FSS also requires integer `half_windows`
 from 0 to 16. These fields are ignored when the selected methods do not use them.
-Each diagnostic model list must be a subset of the inference models.
+Omit a diagnostic's `models` list to use every inference model. An explicit list must be a subset of the inference models.
 
 ## Start and inspect runs
 
@@ -177,6 +177,7 @@ Choose an image source under **Container image source** (official, mirror, or au
 An optional custom registry overrides that choice; clear it to use the preset
 again. This changes where trusted image names are resolved, not which images
 an order can select.
+`image_mirror` and `weight_source` can also be set in `nib-settings.json` for local overrides.
 
 Select a reader in **Dataset folders** to edit its local folder. Save only the
 ones you intend to use. These paths persist across restarts and never leave the

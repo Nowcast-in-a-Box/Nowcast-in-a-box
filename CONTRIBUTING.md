@@ -79,6 +79,16 @@ Tests live under `tests/`. Routine CI uses lightweight synthetic function tests;
 
 `scripts/run-tests.sh` is the repository test entry; its header lists the contributor environment setup. `go test ./...` covers the handler alone. Record the checks you actually ran. See [model contribution tests](docs/guides/model-contribution.md#routine-checks).
 
+### Handler development loop
+
+Stop any installed Handler first. Then run the foreground loop from the repository root:
+
+```sh
+scripts/dev-handler.sh
+```
+
+It runs `go run ./handler/cmd/nib-handler serve -config config.yaml`, so each start recompiles the current source without a separate `go build`. Restart it after a code change. The process uses the same `config.yaml` and `nib-settings.json` as the packaged binary.
+
 ### Commit
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Put the issue number in the subject as (#12).

@@ -55,11 +55,11 @@ func (s *Server) dataPaths(dataID string) (string, string, error) {
 	}
 	root := s.dataRoot(dataID)
 	if strings.TrimSpace(root) == "" {
-		return "", "", fmt.Errorf("set the local data folder for %s before execution", resource.Name)
+		return "", "", fmt.Errorf("set the local data folder for %s from the Hub Local page, or data_roots.%s in nib-settings.json next to config.yaml, before execution", resource.Name, resource.ID)
 	}
 	info, err := os.Stat(root)
 	if err != nil || !info.IsDir() {
-		return "", "", fmt.Errorf("the local data folder for %s is unavailable; choose it again", resource.Name)
+		return "", "", fmt.Errorf("the local data folder for %s is unavailable; choose it again from the Hub Local page or update data_roots.%s in nib-settings.json", resource.Name, resource.ID)
 	}
 	resolve := func(relative, label string) (string, error) {
 		if strings.TrimSpace(relative) == "" {
