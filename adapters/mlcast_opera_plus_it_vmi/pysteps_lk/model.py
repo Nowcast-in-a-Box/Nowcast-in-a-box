@@ -38,6 +38,9 @@ def predict(context: np.ndarray, *, lead_steps: int = 20, flow_frames: int = 3):
         ),
         dtype=np.float32,
     )
-    if forecast.shape != (lead_steps, *values.shape[-2:]) or not np.isfinite(forecast).all():
+    if (
+        forecast.shape != (lead_steps, *values.shape[-2:])
+        or not np.isfinite(forecast).all()
+    ):
         raise ValueError("pySTEPS extrapolation returned an invalid forecast")
     return forecast

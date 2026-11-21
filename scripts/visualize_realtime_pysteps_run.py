@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter
 import numpy as np
+from matplotlib.animation import FuncAnimation, PillowWriter
 
 from utils.stored_fields import StoredFields
 
@@ -43,15 +43,30 @@ def main() -> None:
         raise ValueError(f"Requested leads must be among {leads}")
     indexes = [leads.index(lead) for lead in args.leads]
     vmin, vmax = _limits(context["values"], forecast["values"])
-    extent = (float(context["x"][0]), float(context["x"][-1]), float(context["y"][0]), float(context["y"][-1]))
+    extent = (
+        float(context["x"][0]),
+        float(context["x"][-1]),
+        float(context["y"][0]),
+        float(context["y"][-1]),
+    )
 
     figure, axes = plt.subplots(2, 4, figsize=(15, 7.5), constrained_layout=True)
     image = None
     for column in range(4):
         ax = axes[0, column]
         if column < context["values"].shape[0]:
-            image = ax.imshow(context["values"][column], origin="lower", extent=extent, cmap="turbo", vmin=vmin, vmax=vmax, aspect="auto")
-            ax.set_title(_label(context_descriptor["times"][column], "Observed VMI"), fontsize=10)
+            image = ax.imshow(
+                context["values"][column],
+                origin="lower",
+                extent=extent,
+                cmap="turbo",
+                vmin=vmin,
+                vmax=vmax,
+                aspect="auto",
+            )
+            ax.set_title(
+                _label(context_descriptor["times"][column], "Observed VMI"), fontsize=10
+            )
         else:
             ax.axis("off")
         ax.set_xlabel("Native x")
@@ -59,8 +74,21 @@ def main() -> None:
             ax.set_ylabel("Native y")
     for column, (lead, index) in enumerate(zip(args.leads, indexes)):
         ax = axes[1, column]
-        image = ax.imshow(forecast["values"][index], origin="lower", extent=extent, cmap="turbo", vmin=vmin, vmax=vmax, aspect="auto")
-        ax.set_title(_label(forecast_descriptor["times"][index], f"pySTEPS forecast +{lead} min"), fontsize=10)
+        image = ax.imshow(
+            forecast["values"][index],
+            origin="lower",
+            extent=extent,
+            cmap="turbo",
+            vmin=vmin,
+            vmax=vmax,
+            aspect="auto",
+        )
+        ax.set_title(
+            _label(
+                forecast_descriptor["times"][index], f"pySTEPS forecast +{lead} min"
+            ),
+            fontsize=10,
+        )
         ax.set_xlabel("Native x")
         if column == 0:
             ax.set_ylabel("Native y")
@@ -79,9 +107,22 @@ def main() -> None:
     plt.close(figure)
 
     frames = list(context["values"]) + list(forecast["values"])
-    labels = [_label(value, "Observed VMI") for value in context_descriptor["times"]] + [_label(value, f"pySTEPS forecast +{lead} min") for value, lead in zip(forecast_descriptor["times"], leads)]
+    labels = [
+        _label(value, "Observed VMI") for value in context_descriptor["times"]
+    ] + [
+        _label(value, f"pySTEPS forecast +{lead} min")
+        for value, lead in zip(forecast_descriptor["times"], leads)
+    ]
     figure, axis = plt.subplots(figsize=(7, 5.5), constrained_layout=True)
-    image = axis.imshow(frames[0], origin="lower", extent=extent, cmap="turbo", vmin=vmin, vmax=vmax, aspect="auto")
+    image = axis.imshow(
+        frames[0],
+        origin="lower",
+        extent=extent,
+        cmap="turbo",
+        vmin=vmin,
+        vmax=vmax,
+        aspect="auto",
+    )
     axis.set_xlabel("Native x")
     axis.set_ylabel("Native y")
     title = axis.set_title(labels[0])
@@ -93,7 +134,9 @@ def main() -> None:
         return image, title
 
     gif = output / f"{args.model}_realtime_nowcast.gif"
-    FuncAnimation(figure, update, frames=len(frames), interval=350, blit=False).save(gif, writer=PillowWriter(fps=3))
+    FuncAnimation(figure, update, frames=len(frames), interval=350, blit=False).save(
+        gif, writer=PillowWriter(fps=3)
+    )
     plt.close(figure)
     print(f"Overview: {png}")
     print(f"Animation: {gif}")

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
-from datetime import timedelta
 import hashlib
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +35,11 @@ def main():
     descriptor = access.manifest["observations"]["context"]
     context = access.cube(descriptor)
     values = np.ascontiguousarray(context["values"], dtype=np.float32)
-    if descriptor["variable"] != "vmi" or descriptor["unit"] != "dBZ" or context["mask"].any():
+    if (
+        descriptor["variable"] != "vmi"
+        or descriptor["unit"] != "dBZ"
+        or context["mask"].any()
+    ):
         raise ValueError("pySTEPS LK requires complete OPERA+DPC VMI/dBZ context")
     if values.shape[0] != 3:
         raise ValueError("pySTEPS LK requires exactly three five-minute VMI frames")
@@ -48,7 +52,9 @@ def main():
             "dBZ",
             result,
             tuple(
-                (utc(initial) + timedelta(minutes=lead)).isoformat().replace("+00:00", "Z")
+                (utc(initial) + timedelta(minutes=lead))
+                .isoformat()
+                .replace("+00:00", "Z")
                 for lead in _LEADS
             ),
             grid,
@@ -59,7 +65,9 @@ def main():
         validate_field(forecast)
         add_forecast(args.run, MODEL_ID, MODEL_VERSION, digest, forecast)
     except Exception as exc:
-        access.manifest.update(status="failed", error=str(exc), failure_stage="pysteps_lk")
+        access.manifest.update(
+            status="failed", error=str(exc), failure_stage="pysteps_lk"
+        )
         save_manifest(access.root, access.manifest)
         raise
     print(MODEL_ID)

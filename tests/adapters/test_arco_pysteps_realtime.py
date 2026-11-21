@@ -1,5 +1,5 @@
-from datetime import timedelta
 import hashlib
+from datetime import timedelta
 
 import numpy as np
 import xarray as xr
@@ -44,7 +44,11 @@ def test_realtime_vmi_run_has_context_without_fabricated_target(tmp_path):
             (utc(initial) + timedelta(minutes=lead)).isoformat().replace("+00:00", "Z")
             for lead in leads
         ),
-        {**access.manifest["observations"]["context"]["grid"], "x": context["x"], "y": context["y"]},
+        {
+            **access.manifest["observations"]["context"]["grid"],
+            "x": context["x"],
+            "y": context["y"],
+        },
         np.zeros((len(leads), 3, 4), dtype=bool),
         initial,
         leads,
@@ -57,4 +61,8 @@ def test_realtime_vmi_run_has_context_without_fabricated_target(tmp_path):
         forecast,
     )
     result = StoredFields(run)
-    assert result.cube(result.manifest["forecasts"]["pysteps_lk"])["values"].shape == (20, 3, 4)
+    assert result.cube(result.manifest["forecasts"]["pysteps_lk"])["values"].shape == (
+        20,
+        3,
+        4,
+    )
