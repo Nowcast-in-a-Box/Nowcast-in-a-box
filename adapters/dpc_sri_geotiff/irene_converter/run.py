@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import rasterio
 
+from interfaces.fields import Forecast
 from utils.stored_fields import add_forecast, save_manifest
 
 
@@ -54,6 +55,9 @@ def _grid(dataset: rasterio.io.DatasetReader) -> dict:
     y = transform.f + (np.arange(dataset.height, dtype=np.float64) + 0.5) * transform.e
     return {
         "crs": dataset.crs.to_wkt(),
+        "axis_units": dataset.crs.axis_info[0].unit_name
+        if dataset.crs.axis_info
+        else "unknown",
         "x": x,
         "y": y[::-1].copy(),
     }
@@ -94,7 +98,9 @@ def convert(run: Path, input_dir: Path, model_id: str = "irene") -> dict:
     by_key = {(int(item["member"]), _utc(item["valid_time"])): item for item in outputs}
     expected_keys = {(member, time) for member in members for time in valid_times}
     if set(by_key) != expected_keys:
-        raise ValueError("IRENE manifest does not contain one file for every member/lead")
+        raise ValueError(
+            "IRENE manifest does not contain one file for every member/lead"
+        )
 
     cube = None
     grid = None
@@ -104,23 +110,31 @@ def convert(run: Path, input_dir: Path, model_id: str = "irene") -> dict:
             field, field_grid = _read_field(source_path.parent / item["name"], grid)
             if grid is None:
                 grid = field_grid
-                cube = np.empty((len(members), len(valid_times), *field.shape), dtype=np.float32)
+                cube = np.empty(
+                    (len(members), len(valid_times), *field.shape), dtype=np.float32
+                )
             cube[member, lead] = field
 
     assert cube is not None and grid is not None
     weight = source.get("artifacts", {}).get("weights", {}).get("sha256")
     if not isinstance(weight, str) or len(weight) != 64:
         raise ValueError("IRENE manifest does not declare a SHA-256 for its weights")
-    descriptor = add_forecast(
+    forecast = Forecast(
+        "RR",
+        "mm/h",
+        cube,
+        tuple(time.isoformat().replace("+00:00", "Z") for time in valid_times),
+        grid,
+        ~np.isfinite(cube),
+        run_time.isoformat().replace("+00:00", "Z"),
+        tuple(leads),
+    )
+    add_forecast(
         run,
         model_id,
         str(source.get("model_version", "unknown")),
         weight,
-        cube,
-        leads,
-        grid=grid,
-        variable="RR",
-        unit="mm/h",
+        forecast,
     )
     access_manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
     access_manifest["forecasts"][model_id]["converter"] = {
