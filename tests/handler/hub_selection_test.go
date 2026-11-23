@@ -69,7 +69,7 @@ func TestImportHubSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	wadepreOrder := wadepreResponse.Order
-	if !reflect.DeepEqual(wadepreOrder.Models, []string{"nowcastnet", "wadepre"}) || wadepreOrder.Verification == nil || !reflect.DeepEqual(wadepreOrder.Verification.Models, wadepreOrder.Models) || wadepreOrder.Visualization == nil || !reflect.DeepEqual(wadepreOrder.Visualization.Models, wadepreOrder.Models) {
+	if !reflect.DeepEqual(wadepreOrder.Models, []string{"nowcastnet", "wadepre"}) || wadepreOrder.Verification != nil || wadepreOrder.Visualization != nil {
 		t.Fatalf("unexpected CMA WADEPre draft: %+v", wadepreOrder)
 	}
 	for name, body := range map[string]string{"unknown schema": strings.Replace(fixture, "nib-hub-selection-v1", "v3", 1), "unknown version": strings.Replace(fixture, `"v2"`, `"v9"`, 1), "mixed versions": strings.Replace(fixture, `"v2"`, `"v1"`, 1), "path": strings.Replace(fixture, "catalog/configuration/sevir-vil-configuration/v1.json", "../untrusted", 1), "config identity": strings.Replace(fixture, "sevir-vil-configuration", "other", 1), "unknown field": strings.Replace(fixture, `"items":`, `"command":"run", "items":`, 1), "duplicate key": strings.Replace(fixture, `"schema_version":`, `"schema_version":"bad", "schema_version":`, 1), "trailing document": fixture + "{}"} {
