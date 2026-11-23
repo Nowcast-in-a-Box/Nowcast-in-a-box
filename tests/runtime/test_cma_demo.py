@@ -224,6 +224,6 @@ def test_stored_cma_roundtrip(tmp_path):
     assert bundle["weather_style"]["min"] == 10
     assert bundle["spatial_sampling"] == "nearest"
     assert (report.parent / "weather" / "frame-0000.tif").is_file()
-    assert not (report.parent / "comparison.png").exists()
+    assert (report.parent / "comparison.png").is_file()
     assert not (report.parent / "animation.gif").exists()
     assert stored.read_bytes() == before

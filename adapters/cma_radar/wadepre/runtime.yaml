@@ -1,0 +1,21 @@
+schema: nib.resource.v1
+kind: model
+id: wadepre
+product_ids: [wadepre-cma]
+name: WADEPre · CMA demo
+weights:
+  file: WADEPre.onnx
+  sha256: "55c396165f620934b1262eeac19997f14b00fae5f3a150015a5a84c9cbd6ee3b"
+  embedded: true
+container:
+  image: nib-wadepre:cma-demo-embedded
+  build:
+    context: "."
+    dockerfile: adapters/cma_radar/wadepre/Dockerfile
+  command: ["--run", "/run", "--weights", "/opt/nib/weights/WADEPre.onnx"]
+  mounts:
+    - name: run
+      target: /run
+      write: true
+    - name: inputs
+      target: /run/inputs

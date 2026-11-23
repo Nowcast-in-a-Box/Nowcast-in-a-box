@@ -428,6 +428,13 @@
   .stage-label { font-size:12px; font-weight:600; line-height:1.25; overflow-wrap:anywhere; }
   .stage-meta { color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
   .stage-now { grid-column:1/-1; margin:14px 0 0; padding-top:10px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+  .model-sequence { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:8px; margin:0; padding:0; list-style:none; }
+  .model-step { display:flex; align-items:center; gap:7px; padding:5px 10px; border:1px solid var(--line); border-radius:999px; background:#fff; color:var(--muted); font-size:12px; }
+  .model-step--done { border-color:#bbf7d0; background:#f0fdf4; color:#166534; }
+  .model-step--active { border-color:#bfd3f6; background:var(--blue-soft); color:var(--blue); }
+  .model-step--failed { border-color:#fecaca; background:var(--red-soft); color:var(--red); }
+  .model-step-name { font-weight:600; }
+  .model-step-meta { font-size:11px; opacity:.8; }
   .stage-step--active .stage-label { color:var(--blue); }
   @media (max-width:680px) {
     .stage-rail { grid-template-columns:minmax(0,1fr); gap:10px; }
@@ -2137,6 +2144,20 @@ function renderRunStages(run) {
   }
   const now = el("p", finished ? "All stages complete." : (failed ? "Run stopped at " + humanStage(stage) + "." : "Current: " + humanStage(stage)));
   now.className = "stage-now"; holder.append(now);
+  const models = run.order?.models || Object.keys(run.forecasts || {});
+  if (models.length > 1) {
+    const sequence = el("ol"); sequence.className = "model-sequence";
+    for (const [index, model] of models.entries()) {
+      const done = Boolean(run.forecasts?.[model]);
+      const current = !finished && (stage === model || stage.endsWith("-" + model));
+      const state = done ? "done" : failed && current ? "failed" : current ? "active" : "pending";
+      const item = el("li"); item.className = "model-step model-step--" + state;
+      const name = el("span", (index + 1) + ". " + model); name.className = "model-step-name";
+      const meta = el("span", { done: "done", active: "running", failed: "failed", pending: "waiting" }[state]); meta.className = "model-step-meta";
+      item.append(name, meta); sequence.append(item);
+    }
+    holder.append(sequence);
+  }
 }
 function checkLabel(id) {
   const parts = String(id || "").split(":");
