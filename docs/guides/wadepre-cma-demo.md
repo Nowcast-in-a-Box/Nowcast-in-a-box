@@ -27,14 +27,22 @@ The image contains the weights and verifies the pinned SHA-256 at startup.
 
 ## Import and run
 
-Start the Handler, open `http://127.0.0.1:8765/`, and import
-`tests/handler/fixtures/hub-cma-wadepre-selection-v1.json` from Orders. Choose a
-ready CMA window, then start the run. The order selects `nowcastnet` and
-`wadepre`; the Handler runs them one after the other against the same window.
+Start the Handler, open `http://127.0.0.1:8765/`, and import the exported
+selection JSON from Orders. Choose a ready CMA window, then start the run. The
+order selects `nowcastnet` and `wadepre`; the Handler runs them one after the
+other against the same window.
 
-This local fixture substitutes for a Hub export. The current Hub cannot yet
-build a catalog from the Atlas revision that contains `wadepre-cma`; use the
-fixture until the Hub one-version catalog change lands.
+The checked-in fixture `tests/handler/fixtures/hub-cma-wadepre-selection-v1.json`
+is the current Hub output for cma-radar v2, nowcastnet-cma v2 and wadepre-cma v2.
+A local Hub can export the same file from `http://localhost:8000`.
+
+## Trigger demo
+
+Drag `/Users/sonderlau/Desktop/nib-arrival-20260803/20260803` into
+`/Users/sonderlau/Dev/CMARadar/cma-radar` after saving the multi-model order.
+Create a `New data arrives` trigger with a 1-minute poll. The first poll runs
+the newest existing window as a baseline; the next poll after the drag runs the
+new `2026-08-03T12:00:00Z` window. No command line is required.
 
 ## Results
 
@@ -45,9 +53,8 @@ shows one visualization card per model. Each bundle now contains
 the interactive map viewer remains forecast-only.
 
 ## Contract notes
-
-- `atlas/catalog/products/wadepre-cma.yaml` v1 maps the runtime model `wadepre`
-  to CMA observations and forecasts.
+- `atlas/catalog/products/wadepre-cma.yaml` v2 maps the runtime model `wadepre`
+  to CMA v2 observations and forecasts with stored-field constraints.
 - `adapters/cma_radar/wadepre/runtime.yaml` declares the product and the
   embedded image.
 - `atlas/contracts/models/cma_radar/wadepre.json` keeps the pinned weight URL
