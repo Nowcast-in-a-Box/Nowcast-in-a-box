@@ -146,14 +146,18 @@ def _comparison_image(source, model_id, forecast_field, out):
     fig.savefig(out / "comparison.png", dpi=110)
     label_fig, label_axis = plt.subplots(figsize=(4.2, 4.2), constrained_layout=True)
     label_axis.imshow(
-        np.ma.masked_where(target_cube["mask"][target_index], target_cube["values"][target_index]),
+        np.ma.masked_where(
+            target_cube["mask"][target_index], target_cube["values"][target_index]
+        ),
         origin="lower",
         cmap=cmap,
         vmin=0,
         vmax=75,
         aspect="auto",
     )
-    label_axis.set_title(f"Label (observed)\n{target['times'][target_index]}", fontsize=9)
+    label_axis.set_title(
+        f"Label (observed)\n{target['times'][target_index]}", fontsize=9
+    )
     label_axis.set_xticks([])
     label_axis.set_yticks([])
     label_fig.savefig(out / "label.png", dpi=110)
