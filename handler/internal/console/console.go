@@ -20,6 +20,9 @@ var consolePage string
 //go:embed console_assets/fonts
 var consoleFonts embed.FS
 
+//go:embed console_assets/logo.svg
+var consoleLogo []byte
+
 // handleConsole serves the offline control page with this session's token.
 // The token lives in the no-store response only; the page keeps it in memory.
 func ServePage(w http.ResponseWriter, token string) {
@@ -29,13 +32,13 @@ func ServePage(w http.ResponseWriter, token string) {
 	_, _ = io.WriteString(w, page)
 }
 
-// consoleFontNames are the embedded Inter glyphs (SIL OFL 1.1) the console
-// page loads from its CSS; the bytes are public so no token is required,
-// but the loopback host check still applies.
+// consoleFontNames are the embedded Source Sans 3 glyphs (SIL OFL 1.1) the
+// console page loads from its CSS; the bytes are public so no token is
+// required, but the loopback host check still applies.
 var consoleFontNames = map[string]bool{
-	"inter-latin-400-normal.woff2": true,
-	"inter-latin-500-normal.woff2": true,
-	"inter-latin-600-normal.woff2": true,
+	"source-sans-3-latin-400-normal.woff2": true,
+	"source-sans-3-latin-500-normal.woff2": true,
+	"source-sans-3-latin-600-normal.woff2": true,
 }
 
 func ServeFont(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +61,19 @@ func ServeFont(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "font/woff2")
 	_, _ = w.Write(body)
+}
+
+// ServeLogo serves the embedded Hub mark used by the console rail.
+func ServeLogo(w http.ResponseWriter, r *http.Request) {
+	etag := `"` + hex.EncodeToString(sha256Of(consoleLogo)[:16]) + `"`
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "no-cache")
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	_, _ = w.Write(consoleLogo)
 }
 
 func sha256Of(body []byte) []byte {
