@@ -7,13 +7,17 @@ RUN apt-get update \
 COPY adapters/cma_radar/pysteps_lk/requirements.txt /tmp/pysteps.lock
 RUN pip install --no-cache-dir -r /tmp/pysteps.lock
 
+COPY adapters/model_runner.py /app/model_run.py
 COPY adapters/__init__.py adapters/__init__.py
 COPY adapters/cma_radar/__init__.py adapters/cma_radar/__init__.py
 COPY adapters/cma_radar/pysteps_lk adapters/cma_radar/pysteps_lk
 COPY interfaces interfaces
 COPY utils utils
+COPY atlas/contracts/models/cma_radar/pysteps_lk.json atlas/contracts/models/cma_radar/pysteps_lk.json
 RUN mkdir -p /opt/nib/pysteps && \
     cp adapters/cma_radar/pysteps_lk/algorithm-manifest.json /opt/nib/pysteps/algorithm-manifest.json
 
 ENV PYTHONPATH=/app
-ENTRYPOINT ["python", "-m", "adapters.cma_radar.pysteps_lk.run"]
+ENV NIB_MODEL=pysteps_lk
+ENV NIB_ADAPTER_MODULE=adapters.cma_radar.pysteps_lk.adapter
+ENTRYPOINT ["python", "model_run.py"]

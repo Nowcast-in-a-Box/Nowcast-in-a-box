@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http/httptest"
@@ -90,6 +91,31 @@ func TestConsolePageServedWithSessionToken(t *testing.T) {
 	server.Routes().ServeHTTP(out, req)
 	if out.Code != 401 {
 		t.Fatalf("orders list without token: %d", out.Code)
+	}
+}
+
+func TestConsoleAssetsServed(t *testing.T) {
+	server := handler.NewServer(consoleConfig(t))
+	for _, asset := range []struct {
+		path        string
+		contentType string
+		prefix      []byte
+	}{
+		{"/console/logo.svg", "image/svg+xml; charset=utf-8", []byte("<svg")},
+		{"/console/fonts/source-sans-3-latin-400-normal.woff2", "font/woff2", []byte("wOF2")},
+	} {
+		req := httptest.NewRequest("GET", "http://127.0.0.1:8765"+asset.path, nil)
+		out := httptest.NewRecorder()
+		server.Routes().ServeHTTP(out, req)
+		if out.Code != 200 {
+			t.Fatalf("%s: %d %s", asset.path, out.Code, out.Body.String())
+		}
+		if got := out.Header().Get("Content-Type"); got != asset.contentType {
+			t.Fatalf("%s content type: %q", asset.path, got)
+		}
+		if !bytes.HasPrefix(out.Body.Bytes(), asset.prefix) {
+			t.Fatalf("%s body does not start with %q", asset.path, asset.prefix)
+		}
 	}
 }
 

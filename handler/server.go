@@ -112,6 +112,7 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) { console.ServePage(w, s.Token) })
 	mux.HandleFunc("GET /console/fonts/{name}", console.ServeFont)
+	mux.HandleFunc("GET /console/logo.svg", console.ServeLogo)
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /v1/identity", s.handleIdentity)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
