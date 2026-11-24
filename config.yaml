@@ -53,4 +53,4 @@ runtime:
   # Shared declarations including the CMA demo; matches the atlas submodule.
   max_batch_samples: 32
   max_concurrent_jobs: 2
-  atlas_revision: "a7549cca23398d72c2ebc099fb692d5d238e9caa"
+  atlas_revision: "01e251d96192c388995bb6bae8a8cf8eac8188a7"
