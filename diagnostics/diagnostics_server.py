@@ -36,6 +36,7 @@ PAGE_CSP = (
 
 CAPTIONS = {
     "comparison.png": "Latest input, observed field and forecast",
+    "label.png": "Label (observed)",
     "map.png": "Forecast map",
     "animation.gif": "Forecast animation",
 }

@@ -351,10 +351,11 @@
   .operation-history { margin-top:14px; }
   .operation-history > summary { font-weight:600; }
   .diagnostic-fields > legend { font-size:12px; font-weight:600; color:var(--muted); }
+  .choice-actions { display:flex; gap:8px; margin-top:8px; }
+  .choice-actions .table-button { padding:2px 8px; font-size:12px; }
   .diagnostic-fields .check-field label { font-weight:400; }
 
   /* ------------------------------------------------------ number inputs */
-  #add-models { margin-top:8px; }
   .token-control { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:42px; padding:6px 8px; border:1px solid var(--line-strong); border-radius:7px; background:#fff; transition:border-color .12s, box-shadow .12s; }
   .token-control:focus-within { border-color:#78aaff; box-shadow:0 0 0 3px rgb(120 170 255 / 18%); }
   .token-field.has-error .token-control { border-color:var(--red); }
@@ -549,7 +550,7 @@
                 <span class="field-hint" id="sample-hint">Choose one or more runnable windows from the local dataset.</span>
               </div>
             </div>
-            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div><button id="add-models" class="secondary table-button" type="button" hidden>Add model</button></fieldset>
+            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div><p class="field-hint">Models come from the imported Hub selection. Use Hub to add or remove one.</p></fieldset>
             <fieldset id="order-region" hidden><legend>Region centre</legend><div class="parameter-grid">
               <div class="field"><label for="order-lon">Longitude (°E)</label><input id="order-lon" type="number" step="any"></div>
               <div class="field"><label for="order-lat">Latitude (°N)</label><input id="order-lat" type="number" step="any"></div>
@@ -1254,7 +1255,6 @@ const $ = id => document.getElementById(id);
 const jsonRequest = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 let orderOptions = null;
 let selectedOrder = null;
-let modelsExpanded = false;
 let editorDirty = false;
 let editorBusy = false;
 let editorGeneration = 0;
@@ -1263,6 +1263,7 @@ let runOrderFilter = "";
 const runPageSize = 50;
 let runsGeneration = 0;
 let selectedRunId = null;
+let runInFlight = false;
 let diagnosticsRunId = null;
 let diagnosticsModels = [];
 function storedDiagnostics(id) {
@@ -1519,8 +1520,15 @@ function diagnosticFields(holderId, prefix, models, config, data) {
     if (kind === "verification") {
       const metrics = el("fieldset"); metrics.append(el("legend", "Metrics"));
       const methodList = el("div"); methodList.className = "choice-list";
-      choices(methodList, prefix + "-methods", orderOptions.methods, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
-      metrics.append(methodList); fields.append(metrics);
+      const methodOptions = (orderOptions.methods || []).map(id => ({ id, name: String(id).toUpperCase() }));
+      choices(methodList, prefix + "-methods", methodOptions, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
+      const methodActions = el("div"); methodActions.className = "choice-actions";
+      for (const [label, value] of [["Select all", true], ["Clear", false]]) {
+        const button = el("button", label); button.type = "button"; button.className = "secondary table-button";
+        button.addEventListener("click", () => { for (const box of methodList.querySelectorAll("input")) box.checked = value; });
+        methodActions.append(button);
+      }
+      metrics.append(methodList, methodActions); fields.append(metrics);
       const grid = el("div"); grid.className = "parameter-grid";
       const levelMin = data?.verification ? Number(data.verification.level_min) : 0;
       const levelMax = data?.verification ? Number(data.verification.level_max) : 75;
@@ -1583,15 +1591,12 @@ function renderInferenceModels(order) {
   const selected = order.models || [];
   const available = data.models || [];
   const known = selected.filter(id => available.some(item => item.id === id));
-  const visible = selected.length && known.length && !modelsExpanded ? available.filter(item => selected.includes(item.id)) : available;
+  const visible = selected.length && known.length ? available.filter(item => selected.includes(item.id)) : available;
   choices($("order-models").querySelector(".choice-list"), "inference-models", visible, selected);
-  const add = $("add-models");
-  if (add) add.hidden = !selected.length || modelsExpanded || visible.length >= available.length;
 }
 function populateDataFields(order) {
   const data = orderOptions.data.find(item => item.id === $("order-data").value);
   if (!data) throw new Error("This data source is not available locally.");
-  modelsExpanded = false;
   renderInferenceModels(order);
   $("order-region").hidden = !data.region;
   for (const axis of ["lon", "lat"]) {
@@ -1625,7 +1630,7 @@ function syncDiagnosticModels() {
   }
 }
 function showOrder(detail, draft) {
-  selectedOrder = detail; editorDirty = false; editorGeneration++; modelsExpanded = false;
+  selectedOrder = detail; editorDirty = false; editorGeneration++;
   invalidatePreflight();
   const order = draft || detail?.order || { data_id: orderOptions.data[0]?.id, models: [] };
   if (!$("order-editor").open) $("order-editor").showModal();
@@ -1747,6 +1752,7 @@ async function loadRunDetail(id) {
   try {
     const run = await api("/v1/runs/" + encodeURIComponent(id));
     if (id !== selectedRunId) return;
+    runInFlight = ["queued", "running"].includes(run.status) || ["queued", "running"].includes(run.operation?.status);
     $("run-detail-error").replaceChildren();
     const summary = $("run-summary"); summary.replaceChildren();
     const overview = el("div"); overview.className = "run-overview";
@@ -2150,7 +2156,9 @@ function renderRunStages(run) {
     for (const [index, model] of models.entries()) {
       const done = Boolean(run.forecasts?.[model]);
       const current = !finished && (stage === model || stage.endsWith("-" + model));
-      const state = done ? "done" : failed && current ? "failed" : current ? "active" : "pending";
+      const currentIndex = models.findIndex(item => stage === item || stage.endsWith("-" + item));
+      const allModelsDone = finished || stage === "diagnostics";
+      const state = done || allModelsDone || currentIndex > index ? "done" : failed && current ? "failed" : current ? "active" : "pending";
       const item = el("li"); item.className = "model-step model-step--" + state;
       const name = el("span", (index + 1) + ". " + model); name.className = "model-step-name";
       const meta = el("span", { done: "done", active: "running", failed: "failed", pending: "waiting" }[state]); meta.className = "model-step-meta";
@@ -2487,15 +2495,6 @@ $("order-form").addEventListener("input", markOrderDirty);
 $("order-form").addEventListener("change", markOrderDirty);
 $("order-form").addEventListener("submit", event => { event.preventDefault(); submitOrder(false); });
 $("order-data").addEventListener("change", () => { populateDataFields({}); markOrderDirty(); });
-$("add-models").addEventListener("click", () => {
-  const data = orderOptions?.data.find(item => item.id === $("order-data").value);
-  if (!data) return;
-  const selected = checked("inference-models");
-  modelsExpanded = true;
-  choices($("order-models").querySelector(".choice-list"), "inference-models", data.models, selected);
-  $("add-models").hidden = true;
-  syncDiagnosticModels();
-});
 $("order-event").addEventListener("change", () => { const dataId = $("order-data").value, eventId = $("order-event").value; if (dataId && eventId) void loadSampleDay(dataId, eventId, new Set()); markOrderDirty(); });
 $("order-models").addEventListener("change", syncDiagnosticModels);
 $("validate-order").addEventListener("click", () => submitOrder(true));
@@ -2525,7 +2524,8 @@ function decorateButtons(root) {
   }
 }
 decorateButtons(document); route();
-setInterval(() => { if (!document.hidden && (currentPage === "dashboard" || lifecycle === "restarting" || (currentPage === "orders" && selectedRunId))) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && currentPage === "orders" && selectedRunId && runInFlight) void loadRunDetail(selectedRunId); }, 3000);
+setInterval(() => { if (!document.hidden && (currentPage === "dashboard" || lifecycle === "restarting" || (currentPage === "orders" && selectedRunId && !runInFlight))) refresh(); }, 15000);
 </script>
 </body>
 </html>

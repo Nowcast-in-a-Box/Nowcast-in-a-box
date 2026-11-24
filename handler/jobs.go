@@ -730,6 +730,7 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 			args = append(args, "--center-lon", strconv.FormatFloat(request.CenterLon, 'f', -1, 64), "--center-lat", strconv.FormatFloat(request.CenterLat, 'f', -1, 64))
 		}
 		args = append([]string{"-v", volumeSpec(samplesRoot, "/workspace", false)}, args...)
+		s.updateJob(id, "running", "sample-"+childID+"-read-inputs", nil)
 		if err := s.runStage(ctx, directory, id, "sample-"+childID+"-read-inputs", args...); err != nil {
 			failures = append(failures, childID+": read-inputs: "+err.Error())
 			continue
@@ -740,7 +741,9 @@ func (s *Server) executeBatchJob(id string, request RuntimeRequest, directory st
 				failures = append(failures, childID+": "+specErr.Error())
 				continue
 			}
-			if err := s.runStage(ctx, directory, id, "sample-"+childID+"-"+model, args...); err != nil {
+			stage := "sample-" + childID + "-" + model
+			s.updateJob(id, "running", stage, nil)
+			if err := s.runStage(ctx, directory, id, stage, args...); err != nil {
 				failures = append(failures, childID+": "+model+": "+err.Error())
 				continue
 			}
