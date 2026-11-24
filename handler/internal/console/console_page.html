@@ -35,7 +35,7 @@
   ::selection { background: #dceaff; color: var(--ink); }
   h1, h2, p { margin: 0; }
   h1 { font-size: clamp(24px, 2vw, 30px); line-height: 1.15; letter-spacing: -0.5px; font-weight: 600; text-wrap: balance; }
-  h2 { font-size: 20px; line-height: 1.25; letter-spacing: -0.3px; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 18px; line-height: 1.25; letter-spacing: -0.2px; font-weight: 600; text-wrap: balance; }
   a { color: var(--blue); text-underline-offset: 3px; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; color: #3d5573; overflow-wrap: anywhere; }
   .muted { color: var(--muted); line-height: 1.5; }
@@ -56,13 +56,15 @@
   /* ------------------------------------------------------------- shell */
   .app-frame { display: flex; min-height: 100vh; }
   .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--rail); background: #fff; border-right: 1px solid var(--line); z-index: 5; overflow-y: auto; display: flex; flex-direction: column; padding: 0 14px 18px; }
-  .brand { min-height: 88px; display: flex; align-items: center; gap: 12px; padding: 0 8px; }
-  .brand-mark { display:grid; place-items:center; width:40px; height:40px; border-radius:8px; background:#143c72; color:white; font-weight:600; }
+  .brand { min-height: 88px; display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+  .brand-mark { display:grid; place-items:center; flex:none; width:48px; height:48px; border-radius:12px; background:var(--blue); color:#fff; font-weight:600; font-size:14px; box-shadow:0 8px 18px rgb(0 87 220 / 16%); }
   .brand-copy { display: flex; flex-direction: column; min-width: 0; }
   .brand-copy strong { font-size: 14px; letter-spacing: -0.2px; white-space: nowrap; }
   .brand-copy span { color: var(--muted); font-size: 11px; margin-top: 2px; }
-  .sidebar nav { padding:12px 0 0; display:flex; flex-direction:column; gap:4px; }
-  .nav-section-title { min-height: 36px; display: flex; align-items: center; padding: 0 10px; color: #5b6f88; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }
+  .sidebar nav { padding:14px 0 0; display:flex; flex-direction:column; gap:2px; }
+  .nav-section { display:flex; flex-direction:column; gap:2px; }
+  .nav-section + .nav-section { margin-top:18px; }
+  .nav-section-title { min-height: 28px; display: flex; align-items: center; margin: 0 0 4px; padding: 0 10px; color: #66788f; font-size: 10.5px; font-weight: 600; letter-spacing: 0.9px; text-transform: uppercase; }
   .nav-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 42px; padding: 8px 10px; border-left: 2px solid transparent; border-radius: 8px; color: #4f627a; font-size: 13px; text-decoration: none; }
   .nav-item:hover { background: #f3f7fc; }
   .nav-item--active { background: var(--blue-soft); border-left-color: var(--blue); color: var(--blue); font-weight: 600; }
@@ -240,22 +242,26 @@
     main { padding-top: 18px; }
   }
 
-  @media (max-width: 880px) {
-    /* The rail becomes a top bar, so the frame must stack instead of staying a row. */
+  @media (min-width: 681px) and (max-width: 980px) {
+    :root { --rail: 80px; }
+    .sidebar { padding-inline: 8px; }
+    .brand, .nav-item { justify-content: center; }
+    .nav-item { display: flex; min-height: 46px; }
+    .brand-copy, .nav-section-title, .nav-label, .nav-count, .sidebar-note { display: none; }
+  }
+  @media (max-width: 680px) {
     .app-frame { flex-direction: column; }
-    .sidebar { position: static; width: auto; flex-direction: row; align-items: center; gap: 10px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
-    .brand { min-height: 0; padding: 0; }
-    .sidebar nav { flex-direction: row; padding: 0 0 0 8px; }
-    .nav-section-title, .sidebar-note { display: none; }
-    .app-shell { margin-left: 0; }
-    .topbar { min-height: 0; flex-wrap: wrap; }
+    .sidebar { position: static; width: 100%; padding: 0 16px 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { min-height: 56px; }
+    .brand-mark { width: 32px; height: 32px; border-radius: 8px; font-size: 11px; box-shadow: none; }
+    .brand-copy span, .nav-section-title, .sidebar-note { display: none; }
+    .sidebar nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 0; }
+    .nav-section { display: contents; }
+    .nav-item { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 56px; padding: 6px 2px; border-left: 0; font-size: 11px; }
+    .nav-count { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; height: 16px; font-size: 10px; }
+    .app-shell { margin-left: 0; min-height: 0; }
+    .topbar { min-height: 0; flex-wrap: wrap; padding: 16px; gap: 12px; }
   }
-
-  @media (max-width: 560px) {
-    .brand-copy { display: none; }
-    .sidebar { gap: 6px; padding: 8px 12px; }
-  }
-  .panel + .panel { margin-top: 22px; }
   fieldset { min-width: 0; margin: 18px 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); }
   legend { padding: 0 10px 0 0; font-weight: 600; }
   .parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -288,17 +294,17 @@
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
   #runtime-identity { overflow-wrap: anywhere; }
   summary { cursor: pointer; padding: 10px 0; font-weight: 500; }
-  @media (max-width: 880px) { .sidebar { flex-wrap: wrap; } .sidebar nav { flex-wrap: wrap; } }
   @media (max-width: 680px) { .field input, .field select, .field textarea { font-size: 16px; } }
   main > section { display:none; }
   body[data-page="dashboard"] #dashboard-view, body[data-page="settings"] #management, body[data-page="orders"] :is(#orders-view,#import,#runs), body[data-page="triggers"] #triggers-view { display:block; }
+  #triggers-view { margin-top: 0; }
   [hidden] { display:none !important; }
   #status-chip:not(.runtime-status--disconnected) { display:none; }
   .instrument { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:28px; background:#143c72; color:#fff; border-left:6px solid #75afff; }
   .instrument h2 { color:inherit; font-size:1rem; margin:0; } #active-count { font-size:3.25rem; line-height:1.2; font-variant-numeric:tabular-nums; }
   .instrument dl { margin:0; } .instrument dt { font-size:.8rem; color:#d2e6ff; } .instrument dd { margin:2px 0 8px; font-weight:600; } #dash-version { overflow-wrap:anywhere; }
   .activity-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin-top:28px; } .activity-grid section { border-top:2px solid #7196c7; padding-top:14px; } .activity-grid ul { padding:0; list-style:none; } .activity-grid li { display:flex; justify-content:space-between; align-items:center; gap:8px; overflow-wrap:anywhere; padding:10px 0; border-bottom:1px solid var(--line); }
-  #first-run { margin-top:24px; padding:24px 0; border-block:1px solid var(--line); }
+  #first-run.first-run-card { margin-top: 18px; padding: 20px 22px; border-block: 0; }
   .first-actions { display:flex; gap:20px; flex-wrap:wrap; align-items:center; margin-top:16px; }
   .instrument dl { min-width:0; max-width:100%; }
   .handler-controls { margin-top:32px; padding-top:24px; border-top:1px solid var(--line); }
@@ -323,7 +329,6 @@
   .action-icon { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
   .field > span, .orders-table th, .badge { text-transform:none; letter-spacing:0; font-size:12px; }
   @media(max-width:680px) { .folder-browser { grid-template-columns:minmax(0,1fr); gap:12px; } #dataset-list {max-height:9rem; border:1px solid var(--line); padding:4px;} .instrument { flex-wrap:wrap; } }
-  @media(max-width:680px) { .activity-grid {grid-template-columns:1fr;} .sidebar nav {width:100%; display:grid; grid-template-columns:1fr 1fr; padding:0;} .sidebar .nav-item {min-width:0;} .sidebar .ui-icon {display:inline-flex;} .nav-section-title {display:none;} }
   /* ------------------------------------------------------- order controls */
   .field-label-row { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
   .field-meta { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
@@ -351,10 +356,11 @@
   .operation-history { margin-top:14px; }
   .operation-history > summary { font-weight:600; }
   .diagnostic-fields > legend { font-size:12px; font-weight:600; color:var(--muted); }
+  .choice-actions { display:flex; gap:8px; margin-top:8px; }
+  .choice-actions .table-button { padding:2px 8px; font-size:12px; }
   .diagnostic-fields .check-field label { font-weight:400; }
 
   /* ------------------------------------------------------ number inputs */
-  #add-models { margin-top:8px; }
   .token-control { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:42px; padding:6px 8px; border:1px solid var(--line-strong); border-radius:7px; background:#fff; transition:border-color .12s, box-shadow .12s; }
   .token-control:focus-within { border-color:#78aaff; box-shadow:0 0 0 3px rgb(120 170 255 / 18%); }
   .token-field.has-error .token-control { border-color:var(--red); }
@@ -428,12 +434,154 @@
   .stage-label { font-size:12px; font-weight:600; line-height:1.25; overflow-wrap:anywhere; }
   .stage-meta { color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
   .stage-now { grid-column:1/-1; margin:14px 0 0; padding-top:10px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+  .model-sequence { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:8px; margin:0; padding:0; list-style:none; }
+  .model-step { display:flex; align-items:center; gap:7px; padding:5px 10px; border:1px solid var(--line); border-radius:999px; background:#fff; color:var(--muted); font-size:12px; }
+  .model-step--done { border-color:#bbf7d0; background:#f0fdf4; color:#166534; }
+  .model-step--active { border-color:#bfd3f6; background:var(--blue-soft); color:var(--blue); }
+  .model-step--failed { border-color:#fecaca; background:var(--red-soft); color:var(--red); }
+  .model-step-name { font-weight:600; }
+  .model-step-meta { font-size:11px; opacity:.8; }
   .stage-step--active .stage-label { color:var(--blue); }
   @media (max-width:680px) {
     .stage-rail { grid-template-columns:minmax(0,1fr); gap:10px; }
     .stage-step { padding:0 0 0 26px; }
     .stage-step::after { left:4px; top:14px; bottom:-8px; width:2px; height:auto; right:auto; }
     .stage-step:last-child::after { display:none; }
+  }
+  /* ------------------------------------------------------- hub refresh */
+  .page-intro { margin: 0 0 18px; }
+  .page-intro h2 { font-size: 20px; }
+  .page-intro p { max-width: 76ch; margin-top: 5px; color: var(--muted); }
+  .section-copy { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .section-heading { align-items: flex-start; }
+  .section-heading > .badge, .section-heading > [role="status"] { flex: none; }
+
+  .overview-grid { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 14px; }
+  .overview-card { display: flex; align-items: flex-start; gap: 14px; min-height: 116px; padding: 20px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: 0 1px 2px rgb(41 60 85 / 4%); }
+  .overview-card--primary { border-color: #c9dcfb; background: var(--blue-soft); }
+  .overview-icon { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 10px; background: var(--blue-soft); color: var(--blue); }
+  .overview-card--primary .overview-icon { background: #fff; }
+  .overview-icon svg { width: 20px; height: 20px; }
+  .overview-copy { display: flex; flex-direction: column; min-width: 0; }
+  .overview-copy > span { color: var(--muted); font-size: 12px; font-weight: 500; }
+  .overview-copy strong { margin-top: 4px; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .overview-copy .overview-value { font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; }
+  .overview-copy small { margin-top: 7px; color: var(--muted); font-size: 11.5px; }
+  #dashboard-error:empty { display: none; }
+  #dashboard-error .error-note { margin: 14px 0 0; }
+
+  .dashboard-columns { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; margin-top: 18px; }
+  .dashboard-panel { padding: 20px 22px 10px; }
+  .dashboard-columns .panel + .panel { margin-top: 0; }
+  .dashboard-panel .section-heading { margin-bottom: 4px; }
+  .activity-list { display: grid; margin: 0; padding: 0; list-style: none; }
+  .activity-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 12px 0; border-bottom: 1px solid #edf2f8; color: var(--muted); font-size: 12.5px; }
+  .activity-list li:last-child { border-bottom: 0; }
+  .activity-list li.activity-empty { min-height: 74px; color: var(--muted); }
+  .activity-list li a { min-width: 0; overflow: hidden; color: var(--ink); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+  .activity-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .activity-meta { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .activity-list li .badge { flex: none; }
+
+  .quick-actions { margin-top: 18px; }
+  .quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .quick-action { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); text-decoration: none; transition: border-color .12s, background .12s; }
+  .quick-action:hover { border-color: #a9bede; background: #fbfdff; }
+  .quick-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 8px; background: var(--blue-soft); color: var(--blue); }
+  .quick-icon svg { width: 18px; height: 18px; }
+  .quick-copy { display: flex; flex-direction: column; min-width: 0; }
+  .quick-copy strong { font-size: 13px; }
+  .quick-copy small { margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+  .quick-arrow { margin-left: auto; color: #8a99ac; }
+  .first-run-card { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 20px 22px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: #fbfcfe; }
+  .first-run-card h2 { font-size: 17px; }
+  .first-run-card p { margin-top: 3px; color: var(--muted); font-size: 12.5px; }
+  .first-run-icon { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); }
+  .first-run-icon svg { width: 20px; height: 20px; }
+  .first-run-card .first-actions { margin: 0 0 0 auto; flex-wrap: wrap; }
+
+  .settings-stack { display: grid; gap: 18px; }
+  .settings-stack .panel + .panel { margin-top: 0; }
+  .settings-section { padding: 24px; }
+  .settings-section > .section-heading { margin-bottom: 18px; }
+  .settings-section > .section-heading h2 { font-size: 18px; }
+  .settings-section fieldset { margin: 0; padding: 0; border: 0; }
+  .settings-section .parameter-grid { margin-top: 2px; }
+  .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .settings-footer p { color: var(--muted); font-size: 12px; }
+  .settings-footer p:empty { display: none; }
+  .handler-controls { margin-top: 18px; padding-top: 24px; border-top: 0; }
+  .folder-browser { grid-template-columns: minmax(11rem, 240px) minmax(0, 1fr); gap: 22px; }
+  #dataset-list { max-height: 21rem; padding: 5px; border-right: 0; border-radius: 9px; background: var(--bg); }
+  #dataset-list button { min-height: 52px; padding: 9px 11px; border-radius: 7px; }
+  #dataset-list button[aria-pressed="true"] { background: var(--blue-soft); color: #164d98; box-shadow: inset 2px 0 var(--blue); }
+  #dataset-rows .dataset-detail { padding: 2px 0 0; border: 0; }
+  .dataset-detail > legend { display: block; padding: 0; margin-bottom: 12px; font-size: 16px; font-weight: 600; }
+  .dataset-detail > .form-actions { margin-top: 14px; }
+
+  #import { padding: 24px; }
+  #import .section-heading { margin-bottom: 4px; }
+  #import .import-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 10px; background: #fbfcfe; }
+  #import .file-label { min-height: 42px; padding: 8px 4px; border: 0; background: transparent; }
+  #import .file-label:hover { background: transparent; color: var(--blue); }
+  #import .file-name { margin-left: 2px; }
+
+  .order-list { display: grid; }
+  .order-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 16px 2px; border-bottom: 1px solid #edf2f8; }
+  .order-card:first-child { padding-top: 4px; }
+  .order-card:last-child { padding-bottom: 4px; border-bottom: 0; }
+  .order-main { min-width: 0; }
+  .order-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .order-title-row strong { min-width: 0; overflow: hidden; font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .order-meta { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 7px; color: var(--muted); font-size: 12px; }
+  .order-meta-item { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
+  .order-meta-item > span { color: #7b8ca1; font-size: 11px; }
+  .order-meta-item code { overflow-wrap: anywhere; }
+  .order-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
+  .order-actions .table-button { min-height: 36px; padding: 8px 14px; }
+  .order-card--error { border-color: #efd6d3; background: #fffafa; padding-inline: 12px; border-radius: 9px; margin: 6px 0; }
+  .order-error-copy { margin-top: 6px; color: #943b32; font-size: 12px; }
+  #runs .cell-actions { flex-wrap: nowrap; justify-content: flex-end; }
+  #runs .cell-actions .row-link { white-space: nowrap; }
+  #runs .orders-table td { vertical-align: top; }
+  .run-filter { display: flex; align-items: center; gap: 8px; max-width: 100%; color: var(--muted); }
+  .run-filter select { min-width: 0; max-width: 26ch; padding: 8px; min-height: 40px; border: 1px solid var(--line-strong); border-radius: 7px; background: white; color: var(--ink); font: inherit; }
+
+  @media (max-width: 980px) {
+    .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .overview-card--primary { grid-column: 1 / -1; }
+    .dashboard-columns { grid-template-columns: minmax(0, 1fr); }
+    .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 680px) {
+    .overview-grid, .quick-grid { grid-template-columns: minmax(0, 1fr); }
+    .overview-card--primary { grid-column: auto; }
+    .overview-card { min-height: 0; padding: 17px 18px; }
+    .first-run-card { align-items: flex-start; flex-wrap: wrap; }
+    .first-run-card .first-actions { width: 100%; margin-left: 58px; }
+    .settings-section, #import { padding: 18px; }
+    .settings-footer { align-items: flex-start; flex-direction: column; }
+    #import .import-row { grid-template-columns: minmax(0, 1fr); }
+    .order-card { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .order-actions { justify-content: flex-start; }
+    #runs .cell-actions { flex-wrap: wrap; justify-content: flex-start; }
+    .folder-browser { grid-template-columns: minmax(0, 1fr); }
+    #dataset-list { max-height: 12rem; border: 1px solid var(--line); }
+    #dataset-rows .dataset-detail { min-width: 0; }
+    #dataset-rows .dataset-detail .form-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+  }
+  #order-editor .section-heading { flex-wrap: nowrap; align-items: flex-start; margin-bottom: 4px; }
+  #order-editor .section-heading h2 { flex: 1 1 auto; }
+  #order-editor .dialog-close { flex: none; margin-left: 8px; }
+  #order-editor .heading-note { margin: 0 0 10px; }
+  #order-editor[open] { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+  #order-editor #order-form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  #order-editor .editor-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 2px; }
+  #order-editor .editor-footer { flex: none; margin: 14px -24px 0; padding: 12px 24px 24px; background: #fff; border-top: 1px solid var(--line); }
+  #order-editor .editor-footer .editor-actions { margin: 0; }
+  @media (max-width: 680px) {
+    #order-editor { padding: 20px 18px 0; }
+    #order-editor .editor-footer { margin-inline: -18px; padding-inline: 18px; padding-bottom: 20px; }
   }
 </style>
 </head>
@@ -446,16 +594,22 @@
       <span class="brand-copy"><strong>Nowcast-in-a-Box</strong><span>Local console</span></span>
     </div>
     <nav aria-label="Main navigation">
-      <a class="nav-item" href="#dashboard"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v8H3zM14 3h7v4h-7zM3 15h7v6H3zM14 11h7v10h-7z"/></svg></span>Dashboard</a>
-      <a class="nav-item" href="#settings"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h8m5 0h5M3 17h3m5 0h10"/><circle cx="13" cy="7" r="3"/><circle cx="8" cy="17" r="3"/></svg></span>Settings</a>
-      <a class="nav-item" href="#orders">
-        <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
-        Orders <span class="nav-count" id="nav-order-count" hidden>0</span>
-      </a>
-      <a class="nav-item" href="#triggers">
-        <span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m13 2-10 12h8l-1 8 11-13h-8l1-7z"/></svg></span>
-        Triggers <span class="nav-count" id="nav-trigger-count" hidden>0</span>
-      </a>
+      <div class="nav-section">
+        <p class="nav-section-title">Operations</p>
+        <a class="nav-item" href="#dashboard" title="Dashboard" aria-label="Dashboard"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v8H3zM14 3h7v4h-7zM3 15h7v6H3zM14 11h7v10h-7z"/></svg></span><span class="nav-label">Dashboard</span></a>
+        <a class="nav-item" href="#orders" title="Orders" aria-label="Orders">
+          <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
+          <span class="nav-label">Orders</span> <span class="nav-count" id="nav-order-count" hidden>0</span>
+        </a>
+        <a class="nav-item" href="#triggers" title="Triggers" aria-label="Triggers">
+          <span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m13 2-10 12h8l-1 8 11-13h-8l1-7z"/></svg></span>
+          <span class="nav-label">Triggers</span> <span class="nav-count" id="nav-trigger-count" hidden>0</span>
+        </a>
+      </div>
+      <div class="nav-section">
+        <p class="nav-section-title">Configuration</p>
+        <a class="nav-item" href="#settings" title="Settings" aria-label="Settings"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h8m5 0h5M3 17h3m5 0h10"/><circle cx="13" cy="7" r="3"/><circle cx="8" cy="17" r="3"/></svg></span><span class="nav-label">Settings</span></a>
+      </div>
     </nav>
     <p class="sidebar-note"><strong>Offline</strong> no Hub needed</p>
   </aside>
@@ -473,36 +627,75 @@
     </header>
 
     <main id="main" tabindex="-1">
-      <section id="dashboard-view" aria-label="Runtime overview">
-        <div class="instrument"><div><h2>Active tasks</h2><strong id="active-count">…</strong></div><dl><dt>Docker</dt><dd id="dash-docker">Checking…</dd><dt>Handler version</dt><dd id="dash-version">Checking…</dd></dl></div>
-        <div id="dashboard-error" role="status"></div>
-        <div id="dashboard-activity" class="activity-grid" hidden><section><h2>Current work</h2><ul id="dash-running"></ul></section><section><h2>Recent outcomes</h2><ul id="dash-outcomes"></ul></section></div>
-        <section id="first-run" hidden><h2>No runs yet</h2><div class="first-actions"><a class="primary" href="#settings">Set dataset folders</a><a href="#orders">Open orders</a></div></section>
-      </section>
-      <section class="panel" id="management" aria-labelledby="management-title">
-        <h2 id="management-title">Local configuration</h2>
-        <div id="local-settings">
-          <form id="image-settings-form">
-            <fieldset id="image-settings-fields" disabled><legend>Container image source</legend><div class="parameter-grid">
-              <label class="field"><span>Source policy</span><select id="image-source"><option value="official">Official registry</option><option value="mirror">Mirror</option><option value="auto">Automatic fallback</option></select></label>
-              <label class="field"><span>Registry override (optional)</span><input id="image-override" autocomplete="off" spellcheck="false"></label>
-            </div><p class="priority-strip"><span>Pull order</span><output id="image-priority" for="image-source image-override"></output></p>
-            <div class="form-actions editor-actions"><button class="secondary" type="submit">Save image settings</button></div></fieldset>
-          </form>
-          <fieldset id="data-settings-fields" disabled><legend>Dataset folders</legend>
-            <p class="muted">Clearing a folder removes its association. Files stay on this machine.</p>
-            <div class="folder-browser"><div id="dataset-list" role="group" aria-label="Datasets"></div><div id="dataset-rows"></div></div>
-          </fieldset>
-          <template id="dataset-row"><fieldset>
-            <legend></legend>
-            <label class="field"><span>Local folder path</span><input name="root" autocomplete="off" spellcheck="false"></label>
-            <div class="form-actions editor-actions"><button type="button" class="primary" name="save" data-icon="save">Save folder</button><button type="button" class="secondary" name="inspect" data-icon="inspect">Inspect sample</button><button type="button" class="secondary" name="clear">Clear folder</button></div>
-            <p role="status" class="dataset-feedback"></p><div class="inspect-result" hidden></div>
-          </fieldset></template>
-          <p id="settings-status" role="status"></p><button id="reload-settings" type="button" class="secondary">Reload settings</button>
+      <section id="dashboard-view" class="dashboard-page" aria-label="Runtime overview">
+        <div class="overview-grid">
+          <article class="overview-card overview-card--primary">
+            <span class="overview-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v8H3zM14 3h7v4h-7zM3 15h7v6H3zM14 11h7v10h-7z"/></svg></span>
+            <div class="overview-copy"><span>Active tasks</span><strong id="active-count">…</strong><small>Running on this handler</small></div>
+          </article>
+          <article class="overview-card">
+            <span class="overview-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 8l2-4h12l2 4M9 13h6"/></svg></span>
+            <div class="overview-copy"><span>Docker</span><strong id="dash-docker" class="overview-value">Checking…</strong><small>Container runtime</small></div>
+          </article>
+          <article class="overview-card">
+            <span class="overview-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7M12 3v12M8 7l4-4 4 4"/></svg></span>
+            <div class="overview-copy"><span>Handler version</span><strong id="dash-version" class="overview-value">Checking…</strong><small>Installed binary</small></div>
+          </article>
         </div>
-        <section class="handler-controls" aria-label="Handler controls">
-          <div class="section-heading"><h2>Handler</h2><span id="handler-health" role="status">Connecting…</span></div>
+        <div id="dashboard-error" role="status"></div>
+        <div id="dashboard-activity" class="dashboard-columns" hidden>
+          <section class="panel dashboard-panel" aria-labelledby="current-work-title">
+            <div class="section-heading"><h2 id="current-work-title">Current work</h2></div>
+            <ul id="dash-running" class="activity-list"></ul>
+          </section>
+          <section class="panel dashboard-panel" aria-labelledby="recent-outcomes-title">
+            <div class="section-heading"><h2 id="recent-outcomes-title">Recent outcomes</h2></div>
+            <ul id="dash-outcomes" class="activity-list"></ul>
+          </section>
+        </div>
+        <section id="first-run" class="first-run-card" hidden>
+          <span class="first-run-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span>
+          <div><h2>No runs yet</h2><p>Set the local dataset folder, then create or import an order to start inference.</p></div>
+          <div class="first-actions"><a class="primary" href="#settings/datasets">Set dataset folders</a><a class="secondary" href="#orders">Open orders</a></div>
+        </section>
+        <section class="panel quick-actions" aria-labelledby="quick-actions-title">
+          <div class="section-heading"><h2 id="quick-actions-title">Quick actions</h2></div>
+          <div class="quick-grid">
+            <a class="quick-action" href="#settings/datasets"><span class="quick-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h18"/></svg></span><span class="quick-copy"><strong>Dataset folders</strong><small>Point the handler at local observation data.</small></span><span class="quick-arrow" aria-hidden="true">→</span></a>
+            <a class="quick-action" href="#orders/new"><span class="quick-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4"/></svg></span><span class="quick-copy"><strong>Create an order</strong><small>Choose inputs, models and diagnostics.</small></span><span class="quick-arrow" aria-hidden="true">→</span></a>
+            <a class="quick-action" href="#triggers/new"><span class="quick-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-10 12h8l-1 8 11-13h-8l1-7z"/></svg></span><span class="quick-copy"><strong>Automate a run</strong><small>Run a saved order when new data arrives.</small></span><span class="quick-arrow" aria-hidden="true">→</span></a>
+          </div>
+        </section>
+      </section>
+      <section id="management" class="settings-page" aria-labelledby="management-title">
+        <div class="page-intro"><h2 id="management-title">Local configuration</h2><p>Choose container images, point datasets at local folders, and control the handler process.</p></div>
+        <div id="local-settings" class="settings-stack">
+          <section class="panel settings-section" aria-labelledby="image-settings-title">
+            <div class="section-heading"><div><h2 id="image-settings-title">Container images</h2><p class="section-copy">Select the registry used for model and diagnostics images.</p></div></div>
+            <form id="image-settings-form">
+              <fieldset id="image-settings-fields" disabled><legend class="sr-only">Container image source</legend><div class="parameter-grid">
+                <label class="field"><span>Source policy</span><select id="image-source"><option value="official">Official registry</option><option value="mirror">Mirror</option><option value="auto">Automatic fallback</option></select></label>
+                <label class="field"><span>Registry override (optional)</span><input id="image-override" autocomplete="off" spellcheck="false"></label>
+              </div><p class="priority-strip"><span>Pull order</span><output id="image-priority" for="image-source image-override"></output></p>
+              <div class="form-actions editor-actions"><button class="secondary" type="submit">Save image settings</button><span id="image-settings-status" role="status"></span></div></fieldset>
+            </form>
+          </section>
+          <section class="panel settings-section" aria-labelledby="data-settings-title">
+            <div class="section-heading"><div><h2 id="data-settings-title" tabindex="-1">Dataset folders</h2><p class="section-copy">Map each dataset to its local observation directory. Clearing a folder removes the association; files stay on this machine.</p></div></div>
+            <fieldset id="data-settings-fields" disabled><legend class="sr-only">Dataset folders</legend>
+              <div class="folder-browser"><div id="dataset-list" role="group" aria-label="Datasets"></div><div id="dataset-rows"></div></div>
+            </fieldset>
+            <template id="dataset-row"><fieldset class="dataset-detail">
+              <legend></legend>
+              <label class="field"><span>Local folder path</span><input name="root" autocomplete="off" spellcheck="false"></label>
+              <div class="form-actions editor-actions"><button type="button" class="primary" name="save" data-icon="save">Save folder</button><button type="button" class="secondary" name="inspect" data-icon="inspect">Inspect sample</button><button type="button" class="secondary" name="clear">Clear folder</button></div>
+              <p role="status" class="dataset-feedback"></p><div class="inspect-result" hidden></div>
+            </fieldset></template>
+            <div class="settings-footer"><p id="settings-status" role="status"></p><button id="reload-settings" type="button" class="secondary">Reload settings</button></div>
+          </section>
+        </div>
+        <section class="panel settings-section handler-controls" aria-label="Handler controls">
+          <div class="section-heading"><div><h2>Handler</h2><p class="section-copy">Runtime state and installation paths for the local process.</p></div><span id="handler-health" role="status">Connecting…</span></div>
           <p id="docker-health" role="status">Docker: not checked</p>
           <details><summary>Installation and runtime paths</summary><p id="runtime-identity" class="muted"></p><pre id="runtime-config" class="config-output"></pre></details>
           <div class="form-actions editor-actions"><button id="restart-handler" type="button" class="secondary" disabled>Restart Handler</button><button id="stop-handler" type="button" class="secondary" disabled>Stop Handler</button></div>
@@ -527,9 +720,11 @@
       </section>
 
       <dialog class="panel editor-dialog" id="order-editor" aria-labelledby="editor-title">
-        <div class="section-heading"><h2 id="editor-title">Order settings</h2><span class="heading-note" id="editor-revision"></span><button id="close-order" class="secondary table-button dialog-close" type="button">Close</button></div>
+        <div class="section-heading"><h2 id="editor-title">Order settings</h2><button id="close-order" class="secondary table-button dialog-close" type="button">Close</button></div>
+        <p class="heading-note" id="editor-revision"></p>
         <p class="muted">Editing settings affects future runs only. Changes to data, times, region or inference models require a new run.</p>
         <form id="order-form">
+          <div class="editor-scroll">
           <fieldset id="order-fields" disabled>
             <legend>Inference inputs</legend>
             <div class="parameter-grid">
@@ -542,7 +737,7 @@
                 <span class="field-hint" id="sample-hint">Choose one or more runnable windows from the local dataset.</span>
               </div>
             </div>
-            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div><button id="add-models" class="secondary table-button" type="button" hidden>Add model</button></fieldset>
+            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div><p class="field-hint">Models come from the imported Hub selection. Use Hub to add or remove one.</p></fieldset>
             <fieldset id="order-region" hidden><legend>Region centre</legend><div class="parameter-grid">
               <div class="field"><label for="order-lon">Longitude (°E)</label><input id="order-lon" type="number" step="any"></div>
               <div class="field"><label for="order-lat">Latitude (°N)</label><input id="order-lat" type="number" step="any"></div>
@@ -553,15 +748,16 @@
           </fieldset>
           <div id="editor-status" role="status" class="muted"></div>
           <div id="editor-error" role="status"></div>
-          <fieldset class="order-action-group"><legend>Draft</legend><div class="form-actions editor-actions">
-            <button id="validate-order" class="secondary" type="button">Validate draft</button>
-            <button id="preflight-order" class="secondary" type="button">Check readiness</button>
-            <button id="save-defaults" data-icon="save" class="primary" type="submit">Save settings</button>
-          </div></fieldset>
           <p id="preflight-status" role="status">Readiness not checked. Every start also runs backend checks.</p><div id="preflight-checks"></div>
           <fieldset class="order-action-group"><legend>Saved order</legend><div class="form-actions editor-actions">
             <button id="start-selected" class="secondary" type="button" disabled>Start new run</button>
             <button id="export-order" class="secondary" type="button" disabled>Export saved YAML</button>
+          </div></fieldset>
+          </div>
+          <fieldset class="order-action-group editor-footer"><legend>Draft</legend><div class="form-actions editor-actions">
+            <button id="validate-order" class="secondary" type="button">Validate draft</button>
+            <button id="preflight-order" class="secondary" type="button">Check readiness</button>
+            <button id="save-defaults" data-icon="save" class="primary" type="submit">Save settings</button>
           </div></fieldset>
         </form>
       </dialog>
@@ -571,27 +767,22 @@
           <h2>Saved orders</h2>
           <span class="heading-note" id="orders-note"></span>
         </div>
-        <label class="field">Show runs for<select id="order-filter"><option value="">All runs</option></select></label>
         <div id="orders-error"></div>
         <div id="orders-docker" hidden></div>
         <div id="orders-action-error"></div>
         <div id="orders-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading orders"></div></div>
-        <div class="orders-table-wrap" id="orders-wrap" hidden tabindex="0">
-          <table class="orders-table">
-            <colgroup><col style="width:22%"><col style="width:18%"><col style="width:11%"><col style="width:11%"><col style="width:7%"><col style="width:12%"><col style="width:19%"></colgroup>
-            <thead><tr><th>Package</th><th>Order</th><th class="optional">Data</th><th class="optional">Models</th><th class="optional">Samples</th><th class="optional">Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
-            <tbody id="orders-body"></tbody>
-          </table>
+        <div id="orders-wrap" hidden>
+          <div id="orders-body" class="order-list"></div>
         </div>
         <div id="orders-empty" hidden></div>
       </section>
 
-      <section class="panel" id="triggers-view" style="margin-top:22px" aria-label="Triggers">
+      <section class="panel" id="triggers-view" aria-label="Triggers">
         <div class="section-heading">
           <h2>Saved triggers</h2><span class="heading-note" id="triggers-note"></span>
           <button class="primary" type="button" id="new-trigger" data-icon="add" disabled>New trigger</button>
         </div>
-        <p id="trigger-no-orders" hidden><a href="#orders">Create a saved order</a> to add a trigger.</p>
+        <p id="trigger-no-orders" hidden><a href="#orders/new">Create a saved order</a> to add a trigger.</p>
         <div id="triggers-error"></div>
         <dialog class="panel editor-dialog trigger-dialog" id="trigger-dialog" aria-labelledby="trigger-form-title">
           <div class="dialog-head"><h3 id="trigger-form-title">New trigger</h3><button id="trigger-close" class="secondary table-button" type="button">Close</button></div>
@@ -654,9 +845,9 @@
       <section class="panel" id="runs" aria-label="Recent runs">
         <div class="section-heading">
           <h2>Recent runs</h2>
-          <span class="heading-note">results open in the diagnostics page</span>
+          <label class="run-filter" for="order-filter">Order <select id="order-filter"><option value="">All runs</option></select></label>
         </div>
-        <div class="form-actions paging"><span id="runs-filter" role="status">All runs</span><button id="all-runs" class="secondary" type="button">Show all runs</button></div>
+        <span class="sr-only" id="runs-filter" role="status">All runs</span>
         <div id="runs-error" role="status"></div>
         <div id="runs-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading runs"></div></div>
         <div class="orders-table-wrap" id="runs-wrap" hidden tabindex="0">
@@ -674,6 +865,7 @@
           <div id="run-detail-error" role="status"></div>
           <div id="run-stage-timeline" class="stage-rail" aria-label="Run stages" hidden></div>
           <div id="run-summary"></div>
+          <details class="run-meta" id="run-meta"><summary>Run details</summary><p id="run-revision"></p></details>
           <button id="repeat-inference" class="secondary" type="button" disabled>Repeat inference</button>
           <p id="repeat-status" role="status"></p>
           <details><summary>Frozen configuration and saved forecasts</summary><pre id="run-config" class="config-output"></pre></details>
@@ -681,7 +873,7 @@
           <p class="muted">Uses this run's saved forecasts. Coverage and layers are in the results viewer.</p>
           <form id="run-diagnostics-form"><div id="run-diagnostics"></div><button id="run-diagnostics-submit" class="primary" type="submit" disabled>Run diagnostics</button></form>
           <div id="run-diagnostics-status" role="status"></div>
-          <h3>Operation history</h3><div id="run-operations"></div>
+          <details class="operation-history" id="run-history"><summary id="run-history-title">Operation history</summary><div id="run-operations"></div></details>
         </section>
       </section>
     </main>
@@ -781,7 +973,8 @@ async function loadStatus() {
     $("handler-health").textContent = "Handler: " + (status.handler_state || "online") + " · Active jobs: " + (status.active_jobs ?? "unknown");
     $("docker-health").textContent = "Docker: " + (dockerReady ? "ready" : "not ready") + (status.docker?.message ? " · " + status.docker.message : "");
     $("status-detail").textContent = dockerReady ? "" : "Start Docker to run inference or diagnostics. Local editing remains available.";
-    $("active-count").textContent = status.active_jobs ?? "?"; $("dash-version").textContent = status.version || "Unknown";
+    const version = status.version || "Unknown";
+    $("active-count").textContent = status.active_jobs ?? "?"; $("dash-version").textContent = version.startsWith("dev-") ? "Development build" : version; $("dash-version").title = version;
     $("dash-docker").textContent = dockerReady ? "Ready" : "Not ready";
     $("runtime-identity").textContent = "Version " + status.version + " · " + location.origin + " · Config: " + status.config_file;
     if (currentPage === "settings") {
@@ -836,6 +1029,12 @@ async function loadOrders() {
   loading.hidden = true;
   paintOrders(); paintTriggerOrderOptions();
 }
+function orderMeta(label, value) {
+  const item = el("span");
+  item.className = "order-meta-item";
+  item.append(el("span", label), document.createTextNode(" " + (value || "—")));
+  return item;
+}
 function paintOrders() {
   const ids = new Set(ordersCache.map(order => order.order_id || order.package_id).filter(Boolean));
   if (runOrderFilter) ids.add(runOrderFilter);
@@ -848,21 +1047,37 @@ function paintOrders() {
   note("orders-note", ordersCache.length + (ordersCache.length === 1 ? " order" : " orders"));
   const rows = [];
   for (const order of ordersCache) {
-    const row = document.createElement("tr");
+    const card = el("article");
+    card.className = "order-card";
+    if (order.error) card.classList.add("order-card--error");
+    const main = el("div"); main.className = "order-main";
+    const titleRow = el("div"); titleRow.className = "order-title-row";
+    const title = el("strong", order.package_id || order.order_id || "Order");
+    title.title = order.package_id || order.order_id || "";
+    titleRow.append(title, sourceTag(order));
     if (order.error) {
-      const actions = el("div"); actions.className = "cell-actions";
       const badge = el("span", "cannot start"); badge.className = "badge badge--danger";
-      actions.append(badge, el("span", order.error));
-      const history = el("button", "View history"); history.type = "button"; history.className = "secondary table-button";
-      history.addEventListener("click", () => filterRuns(order.order_id || order.package_id)); actions.append(history);
-      row.append(
-        cell(order.package_id, "identity"),
-        cell("", "cell-code optional"), cell("", "cell-code optional"), cell("", "optional"), cell("", "numeric optional"),
-        cell(sourceTag(order), "optional"),
-        cell(actions, "actions-cell")
-      );
+      titleRow.append(badge);
+    }
+    main.append(titleRow);
+    const meta = el("div"); meta.className = "order-meta";
+    if (order.error) {
+      meta.append(orderMeta("Order", order.order_id || order.package_id));
     } else {
-      const actions = el("div"); actions.className = "cell-actions";
+      meta.append(
+        orderMeta("Data", [order.data_id, order.event_id].filter(Boolean).join(" · ")),
+        orderMeta("Models", (order.models || []).join(", ") || "none"),
+        orderMeta("Samples", order.samples)
+      );
+    }
+    main.append(meta);
+    if (order.error) { const message = el("p", order.error); message.className = "order-error-copy"; main.append(message); }
+    const actions = el("div"); actions.className = "order-actions";
+    if (order.error) {
+      const history = el("button", "View history"); history.type = "button"; history.className = "secondary table-button";
+      history.addEventListener("click", () => filterRuns(order.order_id || order.package_id, true));
+      actions.append(history);
+    } else {
       const open = el("button", order.read_only ? "View history" : "Settings"); open.className = "secondary table-button"; open.type = "button";
       open.addEventListener("click", () => openOrder(order));
       actions.append(open);
@@ -873,17 +1088,9 @@ function paintOrders() {
         trigger.onclick = () => { location.hash = "#triggers"; openTriggerForm(order.package_id); };
         actions.append(start, trigger);
       }
-      row.append(
-        cell(identityCode(order.package_id), "cell-code identity"),
-        cell(identityCode(order.order_id), "cell-code identity"),
-        cell([order.data_id, order.event_id].filter(Boolean).map(code), "cell-code optional"),
-        cell((order.models || []).join(", "), "optional"),
-        cell(order.samples, "numeric optional"),
-        cell(sourceTag(order), "optional"),
-        cell(actions, "actions-cell")
-      );
     }
-    rows.push(row);
+    card.append(main, actions);
+    rows.push(card);
   }
   paint("orders-body", "orders-wrap", "orders-empty", rows, emptyOrdersBlock());
 }
@@ -937,15 +1144,18 @@ async function loadRuns() {
         const actions = el("div"); actions.className = "cell-actions";
         const report = reportEntry(run);
         if (report) {
-          const link = el("a", "Open results");
+          const link = el("a", "Results");
           link.className = "row-link";
           link.href = "/v1/runs/" + encodeURIComponent(run.id) + "/files/" + report.split("/").map(encodeURIComponent).join("/");
-          link.target = "_blank"; link.rel = "noopener";
+          link.target = "_blank"; link.rel = "noopener"; link.title = "Run report: metrics, coverage and data arrival";
           link.append(icon(ARROW));
           actions.append(link);
         }
-        const inspect = el("button", "Details / diagnostics"); inspect.type = "button"; inspect.className = "secondary table-button";
-        inspect.addEventListener("click", () => openRun(run.id)); actions.append(inspect);
+        const inspect = el("a", "Details"); inspect.className = "secondary table-button";
+        inspect.href = "#orders/run/" + encodeURIComponent(run.id);
+        inspect.addEventListener("click", () => { if (location.hash === inspect.hash) $("run-title").focus(); });
+        inspect.title = "Frozen configuration, diagnostics and operation history";
+        actions.append(inspect);
         const toggle = el("button", openLogId === run.id ? "Hide log" : "Log");
         toggle.dataset.logToggle = "true";
         toggle.type = "button";
@@ -1176,7 +1386,7 @@ async function startOrder(order, button) {
     startAttempts.delete(attemptId);
     if ($("order-editor").open) $("order-editor").close();
     await filterRuns(id);
-    if (result.id || result.job?.id) await openRun(result.id || result.job.id);
+    if (result.id || result.job?.id) location.hash = "#orders/run/" + encodeURIComponent(result.id || result.job.id);
     await loadOrders();
   } catch (cause) {
     showActionError("Could not start " + id + ": " + cause.message + " Retry uses the same submission key; reload the order if its revision changed.");
@@ -1247,7 +1457,6 @@ const $ = id => document.getElementById(id);
 const jsonRequest = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 let orderOptions = null;
 let selectedOrder = null;
-let modelsExpanded = false;
 let editorDirty = false;
 let editorBusy = false;
 let editorGeneration = 0;
@@ -1256,6 +1465,7 @@ let runOrderFilter = "";
 const runPageSize = 50;
 let runsGeneration = 0;
 let selectedRunId = null;
+let runInFlight = false;
 let diagnosticsRunId = null;
 let diagnosticsModels = [];
 function storedDiagnostics(id) {
@@ -1512,8 +1722,15 @@ function diagnosticFields(holderId, prefix, models, config, data) {
     if (kind === "verification") {
       const metrics = el("fieldset"); metrics.append(el("legend", "Metrics"));
       const methodList = el("div"); methodList.className = "choice-list";
-      choices(methodList, prefix + "-methods", orderOptions.methods, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
-      metrics.append(methodList); fields.append(metrics);
+      const methodOptions = (orderOptions.methods || []).map(id => ({ id, name: String(id).toUpperCase() }));
+      choices(methodList, prefix + "-methods", methodOptions, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
+      const methodActions = el("div"); methodActions.className = "choice-actions";
+      for (const [label, value] of [["Select all", true], ["Clear", false]]) {
+        const button = el("button", label); button.type = "button"; button.className = "secondary table-button";
+        button.addEventListener("click", () => { for (const box of methodList.querySelectorAll("input")) box.checked = value; });
+        methodActions.append(button);
+      }
+      metrics.append(methodList, methodActions); fields.append(metrics);
       const grid = el("div"); grid.className = "parameter-grid";
       const levelMin = data?.verification ? Number(data.verification.level_min) : 0;
       const levelMax = data?.verification ? Number(data.verification.level_max) : 75;
@@ -1576,15 +1793,12 @@ function renderInferenceModels(order) {
   const selected = order.models || [];
   const available = data.models || [];
   const known = selected.filter(id => available.some(item => item.id === id));
-  const visible = selected.length && known.length && !modelsExpanded ? available.filter(item => selected.includes(item.id)) : available;
+  const visible = selected.length && known.length ? available.filter(item => selected.includes(item.id)) : available;
   choices($("order-models").querySelector(".choice-list"), "inference-models", visible, selected);
-  const add = $("add-models");
-  if (add) add.hidden = !selected.length || modelsExpanded || visible.length >= available.length;
 }
 function populateDataFields(order) {
   const data = orderOptions.data.find(item => item.id === $("order-data").value);
   if (!data) throw new Error("This data source is not available locally.");
-  modelsExpanded = false;
   renderInferenceModels(order);
   $("order-region").hidden = !data.region;
   for (const axis of ["lon", "lat"]) {
@@ -1618,12 +1832,14 @@ function syncDiagnosticModels() {
   }
 }
 function showOrder(detail, draft) {
-  selectedOrder = detail; editorDirty = false; editorGeneration++; modelsExpanded = false;
+  selectedOrder = detail; editorDirty = false; editorGeneration++;
   invalidatePreflight();
   const order = draft || detail?.order || { data_id: orderOptions.data[0]?.id, models: [] };
   if (!$("order-editor").open) $("order-editor").showModal();
   $("editor-title").textContent = detail ? "Order settings · " + order.order_id : draft?.order_id ? "Imported draft · " + order.order_id : "Create an order";
-  $("editor-revision").textContent = detail?.revision ? "Revision " + detail.revision : "Not saved";
+  const revision = detail?.revision || "";
+  $("editor-revision").textContent = revision ? "Revision " + revision.slice(0, 12) + "…" : "Not saved";
+  $("editor-revision").title = revision;
   $("order-id").value = order.order_id || ""; $("order-id").readOnly = Boolean(detail);
   $("order-data").value = order.data_id;
   const lockedData = Boolean(detail || draft);
@@ -1639,7 +1855,7 @@ function showOrder(detail, draft) {
 async function openOrder(summary) {
   if (!discardDraft()) return;
   const generation = ++editorGeneration;
-  await filterRuns(summary.order_id || summary.package_id);
+  await filterRuns(summary.order_id || summary.package_id, summary.read_only || summary.source !== "saved");
   if (generation !== editorGeneration) return;
   if (summary.read_only || summary.source !== "saved") {
     selectedOrder = null; editorDirty = false; if ($("order-editor").open) $("order-editor").close();
@@ -1713,17 +1929,20 @@ async function filterRuns(orderId, reveal = false) {
   runOrderFilter = orderId || ""; runOffset = 0; paintOrders();
   $("runs-filter").textContent = runOrderFilter ? "Order: " + runOrderFilter : "All runs";
   await loadRuns();
-  if (reveal) $("runs").scrollIntoView({ block: "start", behavior: "smooth" });
+  if (reveal) $("order-filter").focus();
 }
 async function openRun(id) {
   if (diagnosticsBusy) return;
   selectedRunId = id; diagnosticsRunId = null;
   $("run-inspector").hidden = false; $("run-title").textContent = "Run · " + id;
+  $("run-meta").open = $("run-history").open = false; $("run-revision").textContent = "";
+  $("run-history-title").textContent = "Operation history";
   $("run-summary").replaceChildren(); $("run-config").textContent = "Loading frozen configuration…";
   $("run-operations").replaceChildren(); $("run-diagnostics").replaceChildren(); $("run-diagnostics-status").replaceChildren(); $("run-stage-timeline").hidden = true; $("run-stage-timeline").replaceChildren();
-  $("run-diagnostics-submit").disabled = true;
+  $("run-diagnostics-submit").disabled = $("repeat-inference").disabled = true;
+  $("run-detail-error").replaceChildren();
   await loadRunDetail(id);
-  $("run-title").focus();
+  if (id === selectedRunId && currentPage === "orders") $("run-title").focus();
 }
 function runFlag(label, value) {
   const state = String(value || "not requested");
@@ -1740,6 +1959,7 @@ async function loadRunDetail(id) {
   try {
     const run = await api("/v1/runs/" + encodeURIComponent(id));
     if (id !== selectedRunId) return;
+    runInFlight = ["queued", "running"].includes(run.status) || ["queued", "running"].includes(run.operation?.status);
     $("run-detail-error").replaceChildren();
     const summary = $("run-summary"); summary.replaceChildren();
     const overview = el("div"); overview.className = "run-overview";
@@ -1748,24 +1968,20 @@ async function loadRunDetail(id) {
     flags.append(runFlag("Inference", run.inference_status || run.status), runFlag("Diagnostics", run.diagnostics_status || "not requested"));
     overview.append(flags);
     const report = reportEntry(run);
-    if (report) { const link = el("a", "Results & Coverage"); link.className = "secondary table-button run-report"; link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; link.title = "Forecast metrics, coverage and data-arrival completeness"; overview.append(link); }
+    if (report) { const link = el("a", "Results"); link.className = "secondary table-button run-report"; link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; link.title = "Forecast metrics, coverage and data-arrival completeness"; overview.append(link); }
     summary.append(overview);
     if (run.job?.error) summary.append(noteBlock(run.job.error));
     const runChecks = el("div"); summary.append(runChecks);
     renderRunStages(run);
     renderChecks(runChecks, run.job?.preflight || [], true);
-    const meta = el("details"); meta.className = "run-meta";
-    meta.append(el("summary", "Run details"), el("p", "Revision: " + (run.revision || "legacy history")));
-    summary.append(meta);
+    $("run-revision").textContent = "Revision: " + (run.revision || "legacy history");
     $("repeat-inference").disabled = !run.order || repeatBusy || ["queued", "running"].includes(run.status);
     $("run-config").textContent = JSON.stringify({ order: run.order || null, request: run.job?.request, execution_context: run.job?.execution_context, revision: run.revision, forecasts: run.forecasts, samples: run.samples }, null, 2);
     const operations = run.operations?.length ? run.operations : run.operation ? [run.operation] : [];
     const list = el("ol");
     for (const operation of operations) { const item = el("li"); item.append(statusBadge(operation.status), el("pre", JSON.stringify(operation, null, 2))); item.lastChild.className = "config-output"; list.append(item); }
-    const history = el("details"); history.className = "operation-history";
-    history.append(el("summary", operations.length ? "Operation history · " + operations.length : "Operation history"));
-    history.append(operations.length ? list : el("p", "No diagnostic operations recorded."));
-    $("run-operations").replaceChildren(history);
+    $("run-history-title").textContent = operations.length ? "Operation history · " + operations.length : "Operation history";
+    $("run-operations").replaceChildren(operations.length ? list : el("p", "No diagnostic operations recorded."));
     const models = Object.keys(run.forecasts || {});
     diagnosticsModels = models;
     const savedDiagnostics = storedDiagnostics(id);
@@ -1901,8 +2117,8 @@ function triggerRow(trigger) {
   edit.onclick = () => openTriggerForm(trigger.package_id, trigger);
   actions.append(edit, toggle, fire);
   if (trigger.last_run_id) {
-    const run = el("button", "View last run"); run.className = "secondary table-button"; run.type = "button";
-    run.onclick = async () => { location.hash = "#orders"; await filterRuns(trigger.package_id); await openRun(trigger.last_run_id); };
+    const run = el("a", "View last run"); run.className = "secondary table-button";
+    run.href = "#orders/run/" + encodeURIComponent(trigger.last_run_id);
     actions.append(run);
   }
   remove.className = "delete-trigger table-button";
@@ -2137,6 +2353,22 @@ function renderRunStages(run) {
   }
   const now = el("p", finished ? "All stages complete." : (failed ? "Run stopped at " + humanStage(stage) + "." : "Current: " + humanStage(stage)));
   now.className = "stage-now"; holder.append(now);
+  const models = run.order?.models || Object.keys(run.forecasts || {});
+  if (models.length > 1) {
+    const sequence = el("ol"); sequence.className = "model-sequence";
+    for (const [index, model] of models.entries()) {
+      const done = Boolean(run.forecasts?.[model]);
+      const current = !finished && (stage === model || stage.endsWith("-" + model));
+      const currentIndex = models.findIndex(item => stage === item || stage.endsWith("-" + item));
+      const allModelsDone = finished || stage === "diagnostics";
+      const state = done || allModelsDone || currentIndex > index ? "done" : failed && current ? "failed" : current ? "active" : "pending";
+      const item = el("li"); item.className = "model-step model-step--" + state;
+      const name = el("span", (index + 1) + ". " + model); name.className = "model-step-name";
+      const meta = el("span", { done: "done", active: "running", failed: "failed", pending: "waiting" }[state]); meta.className = "model-step-meta";
+      item.append(name, meta); sequence.append(item);
+    }
+    holder.append(sequence);
+  }
 }
 function checkLabel(id) {
   const parts = String(id || "").split(":");
@@ -2338,7 +2570,7 @@ async function loadSettings() {
     else panels.append(el("p", "No datasets available."));
     settingsCache = config; $("image-source").value = config.image_source || "auto";
     $("image-override").value = config.image_override || ""; previewImagePriority();
-    imageSettingsDirty = dataSettingsDirty = false; invalidatePreflight();
+    imageSettingsDirty = dataSettingsDirty = false; invalidatePreflight(); $("image-settings-status").textContent = "";
     $("settings-status").textContent = "Settings loaded from this Handler.";
   } catch (cause) { $("settings-status").textContent = "Could not load settings: " + cause.message; }
   finally { settingsBusy = false; $("image-settings-fields").disabled = $("data-settings-fields").disabled = !settingsCache; }
@@ -2348,8 +2580,8 @@ async function saveImageSettings() {
   settingsBusy = true; $("image-settings-fields").disabled = true;
   try {
     await api("/v1/settings", jsonRequest("PATCH", {image_source: $("image-source").value, image_override: $("image-override").value.trim()}));
-    imageSettingsDirty = false; invalidatePreflight(); $("settings-status").textContent = "Image settings saved.";
-  } catch (cause) { $("settings-status").textContent = "Save failed: " + cause.message + " Your edits are retained."; }
+    imageSettingsDirty = false; invalidatePreflight(); $("image-settings-status").textContent = "Image settings saved.";
+  } catch (cause) { $("image-settings-status").textContent = "Save failed: " + cause.message + " Your edits are retained."; }
   finally { settingsBusy = false; $("image-settings-fields").disabled = false; }
 }
 async function controlHandler(action) {
@@ -2387,20 +2619,26 @@ async function repeatInference() {
     repeatAttempts.delete(id);
     $("repeat-status").textContent = "New inference submitted. Backend readiness checks run automatically.";
     await loadRuns();
-    if (result.id || result.job?.id) await openRun(result.id || result.job.id);
+    if (result.id || result.job?.id) location.hash = "#orders/run/" + encodeURIComponent(result.id || result.job.id);
   } catch (cause) { $("repeat-status").textContent = "Repeat failed: " + cause.message + " Inspect Runs before retrying: a lost response may still have created a run."; }
   finally { repeatBusy = false; if (selectedRunId) await loadRunDetail(selectedRunId); }
 }
-let currentPage = "", pendingPage = "";
+let currentPage = "", pendingPage = "", landing = "";
 async function loadDashboard() {
   try {
     const overview = await api("/v1/dashboard", {signal:AbortSignal.timeout(8000)});
     for (const [id, runs, empty] of [["dash-running", overview.active, "No active tasks."], ["dash-outcomes", overview.recent, "No recent outcomes."]]) {
       const rows = runs.map(run => {
-        const li = el("li"), link = el("a", run.order_id || run.id); link.href = "#orders";
-        link.onclick = () => openRun(run.id); li.append(link, statusBadge(run.status)); return li;
+        const li = el("li"), body = el("div"), link = el("a", run.order_id || run.id);
+        link.href = "#orders/run/" + encodeURIComponent(run.id);
+        body.className = "activity-main";
+        body.append(link);
+        const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(run.id);
+        if (match) { const meta = el("span", match[1] + "-" + match[2] + "-" + match[3] + " " + match[4] + ":" + match[5] + " UTC"); meta.className = "activity-meta"; body.append(meta); }
+        li.append(body, statusBadge(run.status)); return li;
       });
-      $(id).replaceChildren(...(rows.length ? rows : [el("li", empty)]));
+      if (!rows.length) { const item = el("li", empty); item.className = "activity-empty"; rows.push(item); }
+      $(id).replaceChildren(...rows);
     }
     const hasRuns = overview.active.length > 0 || overview.recent.length > 0;
     $("dashboard-activity").hidden = !hasRuns; $("first-run").hidden = hasRuns; $("dashboard-error").replaceChildren();
@@ -2421,11 +2659,34 @@ async function refresh() {
       if (page === "triggers") tasks.push(loadOrders(),loadTriggers());
     }
     await Promise.allSettled(tasks); updateDockerNotice();
+    if (page === currentPage && landing && landing === location.hash && !pendingPage) {
+      const target = landing;
+      landing = "";
+      if (target === "#settings/datasets") {
+        (document.querySelector('#dataset-list button[aria-pressed="true"]') || $("data-settings-title")).focus();
+      } else if (target === "#orders/new" || target === "#triggers/new") {
+        history.replaceState(null, "", "#" + page);
+        const button = $(page === "orders" ? "new-order" : "new-trigger");
+        if (!button.disabled) { button.focus(); button.click(); }
+        else if (page === "triggers") $("trigger-no-orders").querySelector("a").focus();
+      } else if (/^#orders\/run\/[a-zA-Z0-9_-]+$/.test(target)) {
+        await openRun(target.slice("#orders/run/".length));
+      }
+    }
   } finally { refreshing = false; if (pendingPage) { pendingPage = ""; refresh(); } }
 }
 function route() {
   const names = {dashboard:"Dashboard", settings:"Settings", orders:"Orders", triggers:"Triggers"};
-  const hash = location.hash.slice(1); currentPage = Object.hasOwn(names,hash) ? hash : "dashboard";
+  const [page] = location.hash.slice(1).split("/");
+  const nextPage = Object.hasOwn(names, page) ? page : "dashboard";
+  if (currentPage !== nextPage) {
+    if ($("order-editor").open) $("order-editor").close();
+    if (currentPage === "triggers" && $("trigger-dialog").open) closeTriggerForm();
+  }
+  currentPage = nextPage;
+  landing = location.hash.includes("/") ? location.hash : "";
+  selectedRunId = null;
+  $("run-inspector").hidden = true;
   document.body.dataset.page = currentPage; $("page-title").textContent = names[currentPage]; document.title = names[currentPage] + " | NiB local console";
   for (const link of document.querySelectorAll("nav a")) { const active = link.hash === "#" + currentPage; link.classList.toggle("nav-item--active", active); if (active) link.setAttribute("aria-current","page"); else link.removeAttribute("aria-current"); }
   window.scrollTo(0,0); $("page-title").focus({preventScroll:true}); refresh();
@@ -2466,22 +2727,12 @@ $("order-form").addEventListener("input", markOrderDirty);
 $("order-form").addEventListener("change", markOrderDirty);
 $("order-form").addEventListener("submit", event => { event.preventDefault(); submitOrder(false); });
 $("order-data").addEventListener("change", () => { populateDataFields({}); markOrderDirty(); });
-$("add-models").addEventListener("click", () => {
-  const data = orderOptions?.data.find(item => item.id === $("order-data").value);
-  if (!data) return;
-  const selected = checked("inference-models");
-  modelsExpanded = true;
-  choices($("order-models").querySelector(".choice-list"), "inference-models", data.models, selected);
-  $("add-models").hidden = true;
-  syncDiagnosticModels();
-});
 $("order-event").addEventListener("change", () => { const dataId = $("order-data").value, eventId = $("order-event").value; if (dataId && eventId) void loadSampleDay(dataId, eventId, new Set()); markOrderDirty(); });
 $("order-models").addEventListener("change", syncDiagnosticModels);
 $("validate-order").addEventListener("click", () => submitOrder(true));
 $("export-order").addEventListener("click", exportOrder);
 $("start-selected").addEventListener("click", event => { if (selectedOrder) startOrder(selectedOrder, event.currentTarget); });
-$("order-filter").addEventListener("change", event => filterRuns(event.target.value, true));
-$("all-runs").addEventListener("click", () => filterRuns(""));
+$("order-filter").addEventListener("change", event => filterRuns(event.target.value));
 $("runs-prev").addEventListener("click", () => { runOffset = Math.max(0, runOffset - runPageSize); loadRuns(); });
 $("runs-next").addEventListener("click", () => { runOffset += runPageSize; loadRuns(); });
 $("run-diagnostics-form").addEventListener("submit", event => { event.preventDefault(); submitDiagnostics(); });
@@ -2490,7 +2741,7 @@ $("preflight-order").addEventListener("click", checkReadiness);
 $("restart-handler").addEventListener("click", () => controlHandler("restart"));
 $("stop-handler").addEventListener("click", () => controlHandler("stop"));
 $("reload-settings").addEventListener("click", loadSettings);
-$("image-settings-form").addEventListener("input", () => { imageSettingsDirty = true; previewImagePriority(); invalidatePreflight(); $("settings-status").textContent = "Unsaved image settings."; });
+$("image-settings-form").addEventListener("input", () => { imageSettingsDirty = true; previewImagePriority(); invalidatePreflight(); $("image-settings-status").textContent = "Unsaved image settings."; });
 $("image-settings-form").addEventListener("submit", event => { event.preventDefault(); saveImageSettings(); });
 $("repeat-inference").addEventListener("click", repeatInference);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
@@ -2504,7 +2755,8 @@ function decorateButtons(root) {
   }
 }
 decorateButtons(document); route();
-setInterval(() => { if (!document.hidden && (currentPage === "dashboard" || lifecycle === "restarting" || (currentPage === "orders" && selectedRunId))) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && currentPage === "orders" && selectedRunId && runInFlight) void loadRunDetail(selectedRunId); }, 3000);
+setInterval(() => { if (!document.hidden && (currentPage === "dashboard" || lifecycle === "restarting" || (currentPage === "orders" && selectedRunId && !runInFlight))) refresh(); }, 15000);
 </script>
 </body>
 </html>

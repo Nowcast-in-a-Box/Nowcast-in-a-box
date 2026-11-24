@@ -196,6 +196,12 @@ function renderVisualization(data, sampleId) {
     const cases = model.cases || [];
     const selected = sampleId ? cases.find(item => item.sample_id === sampleId) : cases[0];
     const images = selected ? selected.images || [] : [];
+    const artifacts = images.length
+      ? h("div", { class: "viz-artifacts" }, images.map(image =>
+          h("figure", { class: "viz-shot" },
+            h("img", { src: image.url, alt: image.alt || image.caption || "" }),
+            h("figcaption", { text: image.caption || "" }))))
+      : null;
     if (selected?.viewer_url) {
       const mapHost = h("div", { class: "viz-map" });
       import("/map-viewer/visualization.js").then(({ mountVisualization }) => {
@@ -209,7 +215,7 @@ function renderVisualization(data, sampleId) {
       return h("section", { class: "card viz-model" },
         h("h2", { text: model.name || model.id }),
         model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
-        mapHost);
+        artifacts, mapHost);
     }
     if (cases.length && !cases.some(item => item.sample_id === sampleId)) {
       return h("section", { class: "card viz-model" },
@@ -1154,7 +1160,7 @@ async function onConfigPicked() {
   const available = cfg.metrics_available || [];
   const select = $("#q-method");
   const previous = select.value;
-  mount(select, available.map(m => h("option", { value: m.method, text: m.method })));
+  mount(select, available.map(m => h("option", { value: m.method, text: m.method.toUpperCase() })));
   if (previous && available.some(m => m.method === previous)) select.value = previous;
   else if (available.length) select.value = available[0].method;
   if (serial !== selectionGeneration) return true;
@@ -1748,7 +1754,7 @@ function renderMetricGroups() {
           h("button", { class: "link danger", text: "remove",
             onclick: () => { groups.splice(i, 1); renderMetricGroups(); } })),
         h("div", { class: "chips", style: "margin-top:6px" },
-          g.items.map(x => h("span", { class: "chip", text: x }))),
+          g.items.map(x => h("span", { class: "chip", text: x.toUpperCase() }))),
         metricParamFields(g)))
     : empty("No families. A config with no metrics computes nothing."));
 
@@ -1791,9 +1797,9 @@ function syncMethodChips() {
   }
   const on = "background:#e7eefb;color:#1f5fbf;font-weight:600;border-color:#b9cdf0";
   mount(host, rows.map(row => h("div", { class: "field", style: "margin-bottom:9px" },
-    h("label", { text: row.family.replace(/_/g, " ") }),
+    h("label", { text: familyLabel(row.family) }),
     h("div", { class: "chips" }, row.items.map(m => h("button", {
-      class: "chip", type: "button", text: m.method, title: m.label || m.method,
+      class: "chip", type: "button", text: m.method.toUpperCase(), title: m.label || m.method,
       style: m.method === select.value ? on : "",
       onclick: () => { select.value = m.method;
         select.dispatchEvent(new Event("change")); syncMethodChips(); },

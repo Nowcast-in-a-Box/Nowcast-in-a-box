@@ -10,7 +10,6 @@
 .agents/
 .grok/
 .reasonix/
-/skills-lock.json
 
 __pycache__/
 *.py[cod]
@@ -27,6 +26,8 @@ logs/
 nib-settings.json
 # Triggers written next to config.yaml. State, not configuration.
 nib-triggers.json
+
+skills-lock.json
 
 handler/nib-handler
 handler/nib-handler.exe

@@ -68,7 +68,7 @@ FAMILIES: tuple[Family, ...] = (
     ),
     Family(
         "yes_or_no",
-        "Yes or no",
+        "Binarization",
         ("H", "F", "M", "C"),
         ("H", "F", "M", "C"),
         ("level",),
