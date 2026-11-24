@@ -1,164 +1,78 @@
 # AGENTS.md
 
-Nowcast-in-a-Box local runtime. Users run a Go handler on Linux, macOS, or
-Windows. The handler talks to Docker Compose for model inference. Metrics
-and visualization run in the diagnostics container, outside the model
-image. The handler diagnostics CLI can invoke that container; its computation
-entry point and HTTP integration are not implemented yet. The Hub only selects
-and configures.
+## Model and reader changes
 
-Architecture notes live under `docs/` as markdown. Visio, Word, and PDF
-drafts stay on disk and are not committed.
-Contribution: [CONTRIBUTING.md][contrib]. GitHub UI: [github-setup.md][gh].
-Weights: [weights.md][weights].
+Trace one existing caller to its interface, implementation and declaration before editing.
+Keep one source for each shared fact, even when a change touches several implementations.
 
-Work IDs are GitHub issue numbers. Branches `feat/short-slug`, commits
-`feat: … (#12)`, PRs `Closes #12`. Letter codes such as E1 or C2 are a
-planning map in `docs/modules.yaml`, not git ids.
+- Model identity, input/output requirements and weights belong in
+  `atlas/contracts/models/<data>/<model>.json`. Use `DeclaredModelAdapter` in
+  `interfaces/model.py` to read them. Implement backend preparation and inference
+  in `adapters/<data>/<model>/adapter.py`. Name each data directory after its data source.
+  Place each model adapter only under its paired data source. Follow the
+  [model template](docs/templates/model/adapter.py) and [SEVIR NowcastNet example](adapters/sevir/nowcastnet/adapter.py).
+- Reader declarations live in `atlas/contracts/data/<data-id>.json`. Implement
+  reader behavior in `adapters/<data-id>/source.py` or its existing shared base.
+  Use `DataAdapter` in `interfaces/data.py` for operations every reader supports.
+  Use `RuntimeDataAdapter` for runtime window operations. When a shared operation
+  changes, update the interface, affected implementations, callers and contract tests together.
+  The [sample probe](adapters/reader_probe/__main__.py) shows how callers use `adapter_for()`.
+- Atlas is a pinned submodule. Shared protocol schemas also belong in `atlas/contracts/`.
+  `atlas/runtime/adapters-catalog.json` is the public reader index.
+  Follow the [contribution guide](docs/guides/model-contribution.md) for packaging and manual Atlas registration.
+- Ask before adding a second editable source for an Atlas declaration, a new top-level
+  catalog layout, or a reader entry point that bypasses an adapter interface.
+  Explain which existing declaration or interface you checked and what it cannot express.
 
-## Approach
+## Repository layout
 
-Read existing files before writing. Don't re-read unless changed.
-Thorough in reasoning, concise in output.
-Skip files over 100KB unless required.
-No sycophantic openers or closing fluff.
-No emojis or em-dashes.
-Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by reading code or docs before asserting.
+| Path                  | Responsibility                                                                                                                                           |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `handler/`            | Host daemon. `handler/cmd/nib-handler/` is its entry point.                                                                                              |
+| `bin/<os>/`           | Prebuilt binaries and platform launchers for Linux, macOS and Windows.                                                                                   |
+| `adapters/`, `utils/` | Packaging-time adapter code and optional conversions. `utils/` provides path resolution and weight downloads. Runtime reads go through the Data Adapter. |
+| `diagnostics/`        | Container code for verification metrics and visualization.                                                                                               |
+| `scripts/`            | Maintainer tools only, including cross-build, formatting, packaging and export.                                                                          |
+| `tests/`              | Handler, adapter, runtime and diagnostics tests. Put Go handler tests in `tests/handler/`.                                                               |
+| `docs/`               | Architecture and process documentation in Markdown.                                                                                                      |
+| `orders/`             | Local order definitions in YAML (gitignored).                                                                                                            |
+| `runs/`               | Per-run forecasts, logs and diagnostic outputs (gitignored).                                                                                             |
+| `artifacts/`          | Downloaded weights and generated Docker files (gitignored).                                                                                              |
 
-## Layout
+## Runtime boundaries
 
-```text
-handler/          host daemon source (Go)
-handler/cmd/      nib-handler process entry
-bin/              prebuilt binaries and OS entry points
-  linux/          run.sh, uninstall.sh
-  macos/          start.command, uninstall.command
-  windows/        run.ps1, uninstall.ps1
-diagnostics/      image scaffold and rendering library; computation entry pending
-runs/             diagnostics run outputs (gitignored)
-orders/           saved offline order packages (gitignored)
-artifacts/        downloaded weights and docker config (not committed)
-atlas/contracts/  shared data and model declarations and protocol schemas.
-  data/           data-reader declarations
-  models/<data>/  model declarations grouped by data source
-interfaces/       data and model contracts. Not a host package.
-utils/            path resolution and weight download. Not a host package.
-adapters/         packaging-time source; not a host package
-  <data-id>/      one data source; source.py
-    <model-id>/   one model; its program is adapter.py
-docs/             architecture and process
-scripts/          maintainer tooling only (cross-build, format, package, export)
-tests/             handler, runtime, verification, and visualization tests
-config.yaml       bind addresses, ports, paths
-Start NiB.*       user-facing start shims (macOS, Windows, Linux)
-Open NiB.*        user-facing console-page openers (macOS, Windows, Linux)
-Uninstall NiB.*   user-facing uninstall shims
-```
+- The Hub selects and configures. Users run a prebuilt Go handler on Linux, macOS or Windows.
+  The handler owns loopback HTTP, URI scheme handling, preflight and jobs. It invokes
+  Docker Compose for inference. Each algorithm has one model container.
+  Metrics and visualization run in the diagnostics container.
+- Keep `interfaces/`, `utils/` and `adapters/` out of the host runtime. Do not add a root
+  `pyproject.toml` or `uv.lock`. Ask before moving inference to the host, installing arbitrary
+  adapter code at runtime, or introducing a second task profile.
+- Bind the handler, review page and published Docker ports to loopback. Ask before changing
+  that boundary. Reject Docker arguments and shell commands from the browser.
+- Read bind addresses and paths from `config.yaml`. Flags override the file. Use `filepath`
+  and `os.PathSeparator` for host paths so they work on Windows too. If the data root is
+  missing, fail without inventing a host path. Mount `/inputs/data` read-only.
+- Store weights under `artifacts/` with a pinned Hugging Face revision and SHA-256.
+  Use `--network none` at runtime. Keep failed runs inspectable.
+- Uninstall keeps `runs/` and `artifacts/` by default. An explicit `--purge` may remove
+  generated files. Always preserve the user’s data directory, including during a purge.
+- Keep weights, ONNX, HDF5, observation files, run outputs, PDFs, Word and Visio files out of git.
+  Do not copy `~/Dev/AINPP/prototype` trees wholesale.
 
-No repository-root `pyproject.toml` or `uv.lock`. Python belongs
-inside a Model Container, or in the diagnostics image.
-`adapters/` is that packaging source. The handler does not import it.
-Data directory names are data names. Model adapters live only under the
-data source they were paired with. `atlas/runtime/adapters-catalog.json` is the public index.
-Observation samples stay outside git. `scripts/fetch-demo-data.py` downloads a
-small set into the gitignored `testdata/demo-data/`; file-backed tests read
-`NIB_DATA_ROOT` and skip when nothing is there.
+## Working in this repo
 
-## Commands
-
-Users run a prebuilt binary. They do not install Go. CI runs the full
-test matrix on every pull request and push to main; the release workflow
-stays parked.
-
-```sh
-bin/linux/run.sh           # Linux
-bin/macos/start.command    # macOS (Finder or terminal)
-bin/windows/run.ps1        # Windows
-```
-
-The root `Start NiB.command`, `Start NiB.cmd`, and `Start NiB.sh` are the
-three user entry points; each calls its `bin/<os>/` launcher. The launcher
-uses `bin/<os>/nib-handler-<os>-<arch>`, or fetches it from the latest GitHub
-Release. Host and port come from `config.yaml`.
-
-`Uninstall NiB.command`, `Uninstall NiB.cmd`, and `Uninstall NiB.sh` remove
-the local Handler installation. They preserve runs, artifacts, and user data
-by default; `--purge` is explicit.
-
-All suites, one entry (contributors; local precheck, GitHub checks are the
-gate; Python suites need the lock installs from the script header):
-
-```sh
-scripts/run-tests.sh
-```
-
-Handler source only (contributors with Go 1.22+):
-
-```sh
-go vet ./...
-go test ./...
-go build -o "bin/nib-handler$(go env GOEXE)" ./handler/cmd/nib-handler
-scripts/cross-build.sh
-```
-
-## Architecture
-
-```text
-NiB HUB / Catalog                 selection + config; does not execute
-        ↓
-Handler (host daemon)             loopback HTTP, URI scheme, preflight, jobs
-        ↓ Docker Compose
-Data Adapter                    read-only /inputs/data
-Model Container                   one image per algorithm
-        ↓
-diagnostics container             metrics and frames; not the model image
-artifacts/                        downloaded weights and docker config
-runs/                             diagnostics outputs (gitignored)
-```
-
-Adapters are optional packaging-time conversion. Runtime data access is
-Data Adapter.
-
-## Invariants
-
-Always:
-
-- Bind the handler and the review page to loopback (`127.0.0.1` or `::1`).
-  Published Docker ports stay loopback.
-- Users do not compile the handler. CI will build Linux, macOS, and Windows binaries when that workflow is turned on.
-- Read bind addresses and paths from `config.yaml`. Flags override the file.
-- Fail if the data root is missing. Never invent a host path.
-- One container per AI algorithm. Metrics and visualization run in the
-  diagnostics container, outside the model image.
-- Weights land in `artifacts/` (pinned Hugging Face revision + sha256).
-  Runtime `--network none`.
-- Failed runs remain inspectable.
-
-Ask first:
-
-- A second task profile.
-- Binding a non-loopback address.
-- Installing arbitrary adapter code at runtime.
-- Putting inference back on the host as a Python package.
-- A top-level catalog directory layout for data and models.
-
-Never:
-
-- Accept Docker arguments or shell commands from the browser.
-- Commit weights, ONNX, HDF5, run PNGs, PDF, Word, or Visio files.
-- Add a root uv/Python project so end users `uv sync`.
-- Copy `~/Dev/AINPP/prototype` trees wholesale.
-
-## Style
-
-Handler: Go 1.22, stdlib plus `gopkg.in/yaml.v3`, tests in `tests/handler/`.
-Use `filepath` and `os.PathSeparator` for host paths; do not assume `/`.
-Container modules follow their own image. File an issue and get it
-assigned before you write code.
-
-Python: Ruff. Config is `ruff.toml`, not a root `pyproject.toml`.
-Run `ruff format .` and `ruff check .` before sending Python changes.
-
-[contrib]: CONTRIBUTING.md
-[gh]: docs/guides/github-setup.md
-[weights]: docs/guides/weights.md
+- Start code changes from an assigned GitHub issue. Use the issue number in the commit
+  subject and `Closes #12` in the PR body for issue 12. Use branches such as `feat/short-slug`.
+  E1 and C2 are planning IDs in `docs/modules.yaml`. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for commit syntax.
+- Verify APIs, flags, versions, package names and commit SHAs against source or docs.
+  Keep responses concise. Omit emojis and em dashes.
+- The handler targets Go 1.22 and uses the standard library plus `gopkg.in/yaml.v3`.
+  Run `go vet ./...` and `go test ./...` for handler changes. Build locally with
+  `go build -o "bin/nib-handler$(go env GOEXE)" ./handler/cmd/nib-handler` or use
+  `scripts/cross-build.sh` for all supported platforms.
+- Run `scripts/run-tests.sh` for the full local precheck. Its header lists the Python lockfiles.
+  For Python changes, use the root `ruff.toml` and run `ruff format .` and `ruff check .`.
+  `scripts/fetch-demo-data.py` downloads samples into the gitignored `testdata/demo-data/`.
+  File-backed tests read `NIB_DATA_ROOT` and skip when the required samples are missing.
+- For launch, uninstall and release instructions, see the [README](README.md).
