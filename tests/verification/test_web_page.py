@@ -264,7 +264,7 @@ def test_the_family_words_are_sent_with_the_registry():
     words = {f["family"]: f["label"] for f in list_families()}
     assert words == {
         "continuous": "Continuous",
-        "yes_or_no": "Yes or no",
+        "yes_or_no": "Binarization",
         "spatial": "Spatial",
         "moments": "Moments",
     }

@@ -1,0 +1,39 @@
+{
+  "schema_version": "nib-hub-selection-v1",
+  "catalog_revision": "02b2957dc35cc5a3e0cdaea68fa95de704b3dfba096dc7dfaca1e22b5e66b4e3",
+  "items": [
+    {
+      "product_id": "cma-radar",
+      "version_id": "v2",
+      "configuration_schema_ref": {
+        "kind": "configuration_schema",
+        "ref_id": "cma-radar-configuration",
+        "revision": "v1",
+        "sha256": "26d7131a4241cc2e24e0c5d83e27203ad5b19524099d965a6ab8eacdbf1c392b",
+        "path": "catalog/configuration/cma-radar-configuration/v1.json"
+      }
+    },
+    {
+      "product_id": "nowcastnet-cma",
+      "version_id": "v2",
+      "configuration_schema_ref": {
+        "kind": "configuration_schema",
+        "ref_id": "nowcastnet-cma-configuration",
+        "revision": "v1",
+        "sha256": "001d6d1e10c445dea274b2062ef2403f53273c2142b9f8fc608024601ad3b3a6",
+        "path": "catalog/configuration/nowcastnet-cma-configuration/v1.json"
+      }
+    },
+    {
+      "product_id": "wadepre-cma",
+      "version_id": "v2",
+      "configuration_schema_ref": {
+        "kind": "configuration_schema",
+        "ref_id": "wadepre-cma-configuration",
+        "revision": "v1",
+        "sha256": "001d6d1e10c445dea274b2062ef2403f53273c2142b9f8fc608024601ad3b3a6",
+        "path": "catalog/configuration/wadepre-cma-configuration/v1.json"
+      }
+    }
+  ]
+}

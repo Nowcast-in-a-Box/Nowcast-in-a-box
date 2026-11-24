@@ -71,6 +71,7 @@ def visualization(
     )
     text = json.dumps(bundle, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     (out / "viewer.json").write_text(text)
+    _comparison_image(source, model_id, original, out)
     access = StoredFields(directory)
     forecast = access.manifest["forecasts"][model_id]
     if sha256(access.root / forecast["path"]) != forecast["sha256"]:
@@ -87,6 +88,81 @@ def visualization(
     access.manifest["diagnostics"].append(attempt)
     save_manifest(directory, access.manifest)
     return attempt
+
+
+def _comparison_image(source, model_id, forecast_field, out):
+    """Write latest input, observed target and first forecast lead together."""
+    observations = source.manifest.get("observations") or {}
+    context = observations.get("context")
+    target = observations.get("target")
+    forecast = source.manifest["forecasts"][model_id]
+    if not context or not target or not forecast.get("times"):
+        return
+    valid_time = forecast["times"][0]
+    try:
+        target_index = target["times"].index(valid_time)
+    except ValueError:
+        return
+    context_cube = source.cube(context)
+    target_cube = source.cube(target)
+    panels = [
+        (
+            "Latest input",
+            context["times"][-1],
+            context_cube["values"][-1],
+            context_cube["mask"][-1],
+        ),
+        (
+            "Observed",
+            target["times"][target_index],
+            target_cube["values"][target_index],
+            target_cube["mask"][target_index],
+        ),
+        (
+            "Forecast",
+            valid_time,
+            forecast_field.values.isel(lead_time=0).values,
+            np.zeros(forecast_field.values.shape[1:], dtype=bool),
+        ),
+    ]
+    import matplotlib.pyplot as plt
+
+    cmap = reflectivity_colormap(_REF_COLORS)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
+    image = None
+    for axis, (title, stamp, values, mask) in zip(axes, panels, strict=True):
+        image = axis.imshow(
+            np.ma.masked_where(mask, values),
+            origin="lower",
+            cmap=cmap,
+            vmin=0,
+            vmax=75,
+            aspect="auto",
+        )
+        axis.set_title(f"{title}\n{stamp}", fontsize=9)
+        axis.set_xticks([])
+        axis.set_yticks([])
+    fig.colorbar(image, ax=list(axes), shrink=0.8, label=forecast_field.units)
+    fig.savefig(out / "comparison.png", dpi=110)
+    label_fig, label_axis = plt.subplots(figsize=(4.2, 4.2), constrained_layout=True)
+    label_axis.imshow(
+        np.ma.masked_where(
+            target_cube["mask"][target_index], target_cube["values"][target_index]
+        ),
+        origin="lower",
+        cmap=cmap,
+        vmin=0,
+        vmax=75,
+        aspect="auto",
+    )
+    label_axis.set_title(
+        f"Label (observed)\n{target['times'][target_index]}", fontsize=9
+    )
+    label_axis.set_xticks([])
+    label_axis.set_yticks([])
+    label_fig.savefig(out / "label.png", dpi=110)
+    plt.close(label_fig)
+    plt.close(fig)
 
 
 def _notice(manifest):

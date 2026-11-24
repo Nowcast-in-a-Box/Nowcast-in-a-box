@@ -1,7 +1,7 @@
 <!doctype html>
-<!-- Visual language mirrors the NiB Hub provisioning interface: Inter,
-     #0057dc primary, light canvas #f6f8fc, white panels, 12px radius.
-     Fonts: Inter (SIL OFL 1.1, see console_assets/fonts/LICENSE).
+<!-- Visual language mirrors the NiB Hub: Source Sans 3, #1e4fd7 accent,
+     paper #d7deea, board #eef1f6, white panels, 16px radius.
+     Fonts: Source Sans 3 (SIL OFL 1.1, see console_assets/fonts/LICENSE).
      Icons: Tabler (MIT), same stroke set the Hub uses. -->
 <html lang="en">
 <head>
@@ -10,86 +10,91 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NiB local console</title>
 <style>
-  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-400-normal.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
-  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-500-normal.woff2") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; }
-  @font-face { font-family: Inter; src: url("/console/fonts/inter-latin-600-normal.woff2") format("woff2"); font-style: normal; font-weight: 600; font-display: swap; }
+  @font-face { font-family: "Source Sans 3"; src: url("/console/fonts/source-sans-3-latin-400-normal.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Source Sans 3"; src: url("/console/fonts/source-sans-3-latin-500-normal.woff2") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; }
+  @font-face { font-family: "Source Sans 3"; src: url("/console/fonts/source-sans-3-latin-600-normal.woff2") format("woff2"); font-style: normal; font-weight: 600; font-display: swap; }
 
   :root {
     color-scheme: light;
-    --blue: #0057dc; --blue-deep: #0047bc; --blue-soft: #eff5ff;
-    --ink: #17212b; --muted: #5f7086;
-    --line: #dce5f0; --line-strong: #c6d4e6; --bg: #f6f8fc;
-    --green: #05ae51; --green-soft: #effaf3;
-    --orange: #ef8000; --orange-soft: #fff5eb;
-    --red: #c43b30; --red-soft: #fdf1ef;
-    --radius: 12px; --rail: 228px;
-    font-family: Inter, Arial, Helvetica, sans-serif;
-    color: var(--ink); font-size: 14px; line-height: 1.5;
-    background: var(--bg);
+    --blue: #1e4fd7; --blue-deep: #163db0; --blue-soft: #eef2ff;
+    --ink: #111827; --muted: #5b6776; --body: #3d4a58;
+    --line: #dfe3ea; --line-strong: #cfd8e3; --bg: #eef1f6;
+    --paper: #d7deea; --surface: #ffffff;
+    --green: #0f9d58; --green-soft: #e8f7ee;
+    --orange: #c05621; --orange-soft: #fef3c7;
+    --red: #c53030; --red-soft: #fce8e8;
+    --radius: 16px; --button-radius: 12px; --rail: 88px;
+    --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    font-family: "Source Sans 3", "Segoe UI", Arial, Helvetica, sans-serif;
+    color: var(--ink); font-size: 16px; line-height: 1.45;
+    background: var(--paper);
   }
   * { box-sizing: border-box; }
   /* .state-block and .orders-table-wrap set their own display, which would
      otherwise win over the UA [hidden] rule and leave hidden nodes visible. */
   [hidden] { display: none !important; }
-  body { margin: 0; min-width: 320px; background: var(--bg); }
-  ::selection { background: #dceaff; color: var(--ink); }
+  body { margin: 0; min-width: 320px; background: var(--paper); }
+  ::selection { background: #c9d6fb; color: var(--ink); }
   h1, h2, p { margin: 0; }
-  h1 { font-size: clamp(24px, 2vw, 30px); line-height: 1.15; letter-spacing: -0.5px; font-weight: 600; text-wrap: balance; }
-  h2 { font-size: 20px; line-height: 1.25; letter-spacing: -0.3px; font-weight: 600; text-wrap: balance; }
+  h1 { font-size: 2rem; line-height: 1.15; letter-spacing: -0.03em; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 1.25rem; line-height: 1.25; letter-spacing: -0.02em; font-weight: 600; text-wrap: balance; }
   a { color: var(--blue); text-underline-offset: 3px; }
-  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; color: #3d5573; overflow-wrap: anywhere; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; color: var(--body); overflow-wrap: anywhere; }
   .muted { color: var(--muted); line-height: 1.5; }
   .ui-icon { display: inline-block; flex: 0 0 auto; width: 20px; height: 20px; line-height: 0; }
   .ui-icon svg { width: 100%; height: 100%; stroke: currentColor; }
 
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
-  * { scrollbar-width: thin; scrollbar-color: #c9d6e6 transparent; }
+  * { scrollbar-width: thin; scrollbar-color: #b7c4d8 transparent; }
   *::-webkit-scrollbar { width: 10px; height: 10px; }
-  *::-webkit-scrollbar-thumb { background: #c9d6e6; border-radius: 6px; border: 2px solid var(--bg); }
+  *::-webkit-scrollbar-thumb { background: #b7c4d8; border-radius: 6px; border: 2px solid var(--paper); }
   *::-webkit-scrollbar-track { background: transparent; }
 
-  .skip-link { position: fixed; top: 12px; left: 12px; z-index: 10; padding: 10px 16px; border-radius: 7px; background: var(--blue); color: #fff; transform: translateY(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
+  .skip-link { position: fixed; top: 12px; left: 12px; z-index: 10; padding: 10px 16px; border-radius: 12px; background: var(--blue); color: #fff; transform: translateY(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
   .skip-link:focus-visible { transform: none; opacity: 1; pointer-events: auto; }
   #page-title:focus, #main:focus { outline: none; }
 
   /* ------------------------------------------------------------- shell */
-  .app-frame { display: flex; min-height: 100vh; }
-  .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--rail); background: #fff; border-right: 1px solid var(--line); z-index: 5; overflow-y: auto; display: flex; flex-direction: column; padding: 0 14px 18px; }
-  .brand { min-height: 88px; display: flex; align-items: center; gap: 12px; padding: 0 8px; }
-  .brand-mark { display:grid; place-items:center; width:40px; height:40px; border-radius:8px; background:#143c72; color:white; font-weight:600; }
-  .brand-copy { display: flex; flex-direction: column; min-width: 0; }
-  .brand-copy strong { font-size: 14px; letter-spacing: -0.2px; white-space: nowrap; }
-  .brand-copy span { color: var(--muted); font-size: 11px; margin-top: 2px; }
-  .sidebar nav { padding:12px 0 0; display:flex; flex-direction:column; gap:4px; }
-  .nav-section-title { min-height: 36px; display: flex; align-items: center; padding: 0 10px; color: #5b6f88; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }
-  .nav-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 42px; padding: 8px 10px; border-left: 2px solid transparent; border-radius: 8px; color: #4f627a; font-size: 13px; text-decoration: none; }
-  .nav-item:hover { background: #f3f7fc; }
-  .nav-item--active { background: var(--blue-soft); border-left-color: var(--blue); color: var(--blue); font-weight: 600; }
-  .nav-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--blue); color: #fff; font-size: 11px; font-weight: 600; }
-  .nav-item:not(.nav-item--active) .nav-count { background: #e3eaf3; color: #51637a; }
-  .sidebar-note { display: flex; align-items: center; gap: 8px; margin: auto 8px 0; padding-top: 18px; color: var(--muted); font-size: 11px; }
-  .sidebar-note strong { color: #5c6c80; background: #eef2f7; border-radius: 4px; padding: 3px 6px; text-transform: uppercase; }
+  .app-frame { display: flex; min-height: 100vh; background: var(--paper); }
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--rail); background: var(--blue); z-index: 5; overflow-y: auto; display: flex; flex-direction: column; padding: 20px 12px; scrollbar-color: rgb(255 255 255 / 28%) transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 28%); border: 2px solid var(--blue); }
+  .brand { display: flex; align-items: center; justify-content: center; min-height: 0; margin-bottom: 10px; padding: 0; }
+  .brand-mark { display: block; flex: none; width: 44px; height: 48px; object-fit: contain; filter: brightness(0) invert(1); }
+  .brand-copy { display: none; }
+  .sidebar nav { display: flex; flex-direction: column; gap: 4px; padding: 0; }
+  .nav-section { display: flex; flex-direction: column; gap: 4px; }
+  .nav-section + .nav-section { margin-top: 14px; }
+  .nav-section-title { display: none; }
+  .nav-item { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 64px; padding: 8px 4px; border: 0; border-radius: 16px; color: rgb(255 255 255 / 78%); font-size: 11px; font-weight: 600; line-height: 1.2; text-decoration: none; transition: background 160ms var(--ease), color 160ms var(--ease); }
+  .nav-item .ui-icon { width: 22px; height: 22px; }
+  .nav-item:hover { background: rgb(255 255 255 / 12%); color: #fff; }
+  .nav-item--active { background: rgb(255 255 255 / 18%); color: #fff; }
+  .nav-item:focus-visible { outline-color: #fff; }
+  .nav-count { position: absolute; top: 7px; right: 8px; display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: rgb(255 255 255 / 22%); color: #fff; font-size: 10px; font-weight: 700; }
+  .nav-item:not(.nav-item--active) .nav-count { background: rgb(255 255 255 / 22%); color: #fff; }
+  .sidebar-note { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; margin: auto 0 0; padding-top: 18px; color: rgb(255 255 255 / 55%); font-size: 9.5px; line-height: 1.3; text-align: center; }
+  .sidebar-note strong { color: #fff; background: rgb(255 255 255 / 16%); border-radius: 999px; padding: 2px 6px; text-transform: uppercase; }
 
-  .app-shell { margin-left: var(--rail); flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
-  .topbar { width: 100%; min-height: 88px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 14px 28px; border-bottom: 1px solid var(--line); background: #fff; }
-  .title-group { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
-  .title-group p { color: var(--muted); line-height: 1.4; max-width: 72ch; }
-  .topbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .app-shell { margin: 16px 16px 16px var(--rail); flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: calc(100vh - 32px); padding: 28px 36px 40px; background: var(--board); border-radius: 24px; }
+  .topbar { width: 100%; min-height: 0; flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 28px; padding: 0; border: 0; background: transparent; }
+  .title-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+  .title-group p { color: var(--muted); font-size: 13px; line-height: 1.45; max-width: 72ch; }
+  .topbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 
-  .runtime-status { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 38px; padding: 8px 12px; border: 1px solid transparent; border-radius: 999px; background: #f2f5f9; color: #52667f; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .runtime-status { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 36px; padding: 7px 12px; border: 1px solid transparent; border-radius: 999px; background: #f2f4f8; color: #52667f; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .runtime-status-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #98a7b8; }
-  .runtime-status--connected { background: var(--green-soft); color: #0b6b3a; }
-  .runtime-status--connected .runtime-status-dot { background: var(--green); box-shadow: 0 0 0 3px rgb(5 174 81 / 12%); }
-  .runtime-status--reconnecting { background: var(--orange-soft); color: #8a5900; }
+  .runtime-status--connected { background: var(--green-soft); color: #027a48; }
+  .runtime-status--connected .runtime-status-dot { background: var(--green); box-shadow: 0 0 0 3px rgb(15 157 88 / 12%); }
+  .runtime-status--reconnecting { background: var(--orange-soft); color: #92400e; }
   .runtime-status--reconnecting .runtime-status-dot { background: var(--orange); }
-  .runtime-status--disconnected { background: var(--red-soft); color: #8d342b; }
+  .runtime-status--disconnected { background: var(--red-soft); color: #b42318; }
   .runtime-status--disconnected .runtime-status-dot { background: var(--red); }
 
-  main { width: 100%; max-width: 1480px; margin: 0 auto; padding: 28px clamp(20px, 2.5vw, 36px) 44px; flex: 1; min-width: 0; }
+  main { width: 100%; max-width: 1480px; margin: 0 auto; padding: 0; flex: 1; min-width: 0; }
 
   /* ------------------------------------------------------------- panels */
-  .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 1px 2px rgb(41 60 85 / 4%); padding: 22px 22px 24px; min-width: 0; }
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(17 24 39 / 4%); padding: 24px 28px; min-width: 0; }
   .editor-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 32px); margin: auto; overflow: auto; padding: 22px 24px 24px; box-shadow: 0 24px 70px rgb(16 35 60 / 22%); }
   .editor-dialog::backdrop { background: rgb(13 29 48 / 38%); backdrop-filter: blur(2px); }
   .editor-dialog .section-heading { align-items: center; }
@@ -99,7 +104,7 @@
   .trigger-dialog { width:min(560px, calc(100vw - 32px)); }
   .trigger-dialog .trigger-form { max-width:none; margin:0; padding:0; border:0; }
   .trigger-dialog .trigger-form .field { max-width:none; }
-  .panel + .panel { margin-top: 22px; }
+  .panel + .panel { margin-top: 18px; }
   .panel.editor-dialog { margin: auto; }
   body:has(dialog[open]) { overflow: hidden; }
   .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -110,35 +115,34 @@
   button, input { font: inherit; color: inherit; }
   button { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
-  button:focus-visible, a:focus-visible, summary:focus-visible, .orders-table-wrap:focus-visible { outline: 3px solid #78aaff; outline-offset: 2px; }
-  .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid transparent; border-radius: 7px; padding: 10px 18px; line-height: 1.3; text-decoration: none; transition: transform 160ms ease-out; }
+  button:focus-visible, a:focus-visible, summary:focus-visible, .orders-table-wrap:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+  .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1px solid transparent; border-radius: var(--button-radius); padding: 10px 20px; line-height: 1.3; text-decoration: none; transition: transform 160ms var(--ease), background 160ms var(--ease), border-color 160ms var(--ease); }
   .primary .ui-icon, .secondary .ui-icon { width: 18px; height: 18px; }
   .primary { background: var(--blue); color: #fff; font-weight: 600; }
   .primary:hover:not(:disabled) { background: var(--blue-deep); }
-  .primary:disabled { background: #e3e7ed; color: #8c98a7; }
-  .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: scale(0.97); }
-  .secondary { background: #fff; border-color: var(--line-strong); color: var(--ink); }
-  .secondary:hover:not(:disabled) { border-color: #a9bede; background: #f6f9fd; }
-  .secondary:disabled { color: var(--muted); background: #f2f5f9; border-color: var(--line); }
-  .table-button { min-height: 32px; padding: 6px 12px; font-size: 13px; }
+  .primary:disabled { background: #e5e9f0; color: #9aa4b2; }
+  .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: scale(0.98); }
+  .secondary { background: #fff; border-color: var(--line); color: var(--ink); }
+  .secondary:hover:not(:disabled) { border-color: var(--blue); background: #f8faff; }
+  .secondary:disabled { color: var(--muted); background: #f4f6fa; border-color: var(--line); }
+  .table-button { min-height: 34px; padding: 6px 12px; font-size: 13px; }
 
   /* ------------------------------------------------------------- badges */
-  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; white-space: nowrap; border: 1px solid transparent; }
-  .badge--neutral { color: #66768a; background: #eef2f6; border-color: #dbe3ec; }
-  .badge--info { color: #1c5fd6; background: #eff5ff; border-color: #c9dcfb; }
-  .badge--success { color: #0a8a3f; background: var(--green-soft); border-color: #c6ead4; }
-  .badge--warning { color: #a35c00; background: var(--orange-soft); border-color: #ffdcb9; }
-  .badge--danger { color: var(--red); background: var(--red-soft); border-color: #efb9b3; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: none; white-space: nowrap; border: 1px solid transparent; }
+  .badge--neutral { color: #5b6776; background: #f2f4f8; border-color: #dfe3ea; }
+  .badge--info { color: #2d31a6; background: #dbe4ff; border-color: #c7d2fe; }
+  .badge--success { color: #027a48; background: #d1fadf; border-color: #a7e8c0; }
+  .badge--warning { color: #92400e; background: #fef3c7; border-color: #f6dba0; }
+  .badge--danger { color: #c53030; background: #fce8e8; border-color: #f3c6c4; }
   .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
   /* ------------------------------------------------------------- tables */
   .orders-table-wrap { max-width: 100%; overflow-x: auto; }
-  .orders-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13.5px; }
-  .orders-table-wrap .orders-table { min-width: 720px; }
-  .orders-table th { text-align: left; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-  .orders-table td { padding: 13px 12px; border-bottom: 1px solid #edf2f8; vertical-align: middle; }
+  .orders-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+  .orders-table-wrap .orders-table { min-width: 760px; }
+  .orders-table th { text-align: left; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 12px; border-bottom: 1px solid var(--line); }
+  .orders-table td { padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   .orders-table tr:last-child td { border-bottom: 0; }
-  .orders-table tbody tr:hover td { background: #f7fafd; }
+  .orders-table tbody tr:hover td { background: #f8fafc; }
   .orders-table td.numeric, .orders-table td.time { white-space: nowrap; font-variant-numeric: tabular-nums; }
   /* Identifiers are long and unbreakable: clip them instead of letting every
      row grow to two lines. The full value stays in the title attribute. */
@@ -146,21 +150,21 @@
   .orders-table td.identity code, .orders-table td.identity span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .orders-table td { overflow: hidden; text-overflow: ellipsis; }
   .orders-table th.sticky-head { position: sticky; top: 0; z-index: 1; background: #fff; }
-  .orders-table td.muted-cell { color: var(--muted); font-size: 12px; }
-  .source-tag { display: inline-block; padding: 2px 7px; border-radius: 4px; background: #eef3f9; color: #4f6b8a; font-size: 11px; font-weight: 600; }
+  .orders-table td.muted-cell { color: var(--muted); font-size: 13px; }
+  .source-tag { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 600; }
   .source-tag--run { background: #f3efff; color: #6a45c8; }
-  .row-link { color: var(--blue); font-weight: 500; text-decoration: none; }
+  .row-link { color: var(--blue); font-weight: 600; text-decoration: none; }
   .row-link:hover { text-decoration: underline; }
   .cell-code code { display: block; }
   .cell-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 
   /* ------------------------------------------------------------- states */
-  .state-block { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+  .state-block { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #f8fafc; }
   .empty-title { font-weight: 600; }
   .trigger-empty { align-items: center; justify-content: center; min-height: 260px; text-align: center; border-style: dashed; }
-  .trigger-empty-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #edf4ff; color: var(--blue); }
+  .trigger-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); }
   .trigger-empty .muted { max-width: 44rem; margin: 0; }
-  .error-note { display: flex; gap: 10px; align-items: baseline; margin: 12px 0 0; padding: 12px 14px; border: 1px solid #efb9b3; border-radius: 8px; background: var(--red-soft); color: #7c2d24; line-height: 1.55; overflow-wrap: anywhere; }
+  .error-note { display: flex; gap: 10px; align-items: baseline; margin: 12px 0 0; padding: 12px 14px; border: 1px solid #f3c6c4; border-radius: 12px; background: var(--red-soft); color: #b42318; line-height: 1.55; overflow-wrap: anywhere; }
   .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #d8e3f2; border-top-color: var(--blue); animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -170,8 +174,8 @@
 
   /* ------------------------------------------------------------- import */
   .import-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-  .file-label { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 10px 16px; border: 1px dashed var(--line-strong); border-radius: 7px; background: #f8fafc; color: #4f627a; font-size: 13px; cursor: pointer; }
-  .file-label:hover { border-color: #a9bede; background: #f6f9fd; color: var(--blue); }
+  .file-label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px dashed var(--line-strong); border-radius: 12px; background: #fff; color: var(--body); font-size: 13px; cursor: pointer; }
+  .file-label:hover { border-color: var(--blue); background: #f8faff; color: var(--blue); }
   .file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
   .file-name { color: var(--ink); font-weight: 500; }
   .file-name:empty::after { content: "no file chosen"; color: var(--muted); font-weight: 400; }
@@ -179,40 +183,40 @@
   /* ------------------------------------------------------------- log */
   /* A run log is terminal output, so it gets Hub's dark technical panel and
      opens as a full-width row instead of widening a table cell. */
-  .run-detail > td { padding: 0 0 16px; background: #f7fafd; }
+  .run-detail > td { padding: 0 0 16px; background: var(--board); }
   .run-detail .run-log { margin: 0 12px; }
-  .run-log-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border: 1px solid #24364b; border-bottom: 0; border-radius: 9px 9px 0 0; background: #172536; color: #aebdd0; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
-  .run-log-output { max-height: 320px; margin: 0; padding: 7px 0; overflow: auto; border: 1px solid #24364b; border-top: 0; border-radius: 0 0 9px 9px; background: #101b29; color: #d6e2ee; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.55; white-space: normal; }
-  .run-log-line { display: flex; align-items: flex-start; gap: 10px; padding: 1px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .run-log-line:hover { background: #162638; }
-  .run-log-number { flex: 0 0 26px; color: #5e7085; text-align: right; user-select: none; }
-  .run-log-prefix { flex: 0 0 150px; max-width: 150px; overflow: hidden; color: #71859b; text-overflow: ellipsis; white-space: nowrap; }
+  .run-log-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid #374151; border-bottom: 0; border-radius: 12px 12px 0 0; background: #1f2937; color: #d1d5db; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+  .run-log-output { max-height: 320px; margin: 0; padding: 8px 0; overflow: auto; border: 1px solid #374151; border-top: 0; border-radius: 0 0 12px 12px; background: #111827; color: #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.6; white-space: normal; }
+  .run-log-line { display: flex; align-items: flex-start; gap: 10px; padding: 2px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .run-log-line:hover { background: #1f2937; }
+  .run-log-number { flex: 0 0 26px; color: #6b7280; text-align: right; user-select: none; }
+  .run-log-prefix { flex: 0 0 150px; max-width: 150px; overflow: hidden; color: #9ca3af; text-overflow: ellipsis; white-space: nowrap; }
   .run-log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .run-log-line--file { margin-top: 8px; padding-top: 8px; border-top: 1px solid #24364b; }
-  .run-log-line--file:first-child { margin-top: 0; padding-top: 1px; border-top: 0; }
-  .run-log-file { padding: 1px 6px; border-radius: 4px; background: #1a2c42; color: #8ec0ff; font-size: 10px; font-weight: 600; }
-  .run-log-line--success .run-log-message { color: #7be0a0; }
-  .run-log-line--warning .run-log-message { color: #ffc56e; }
-  .run-log-line--error .run-log-message { color: #ff9b91; }
-  .run-log-line--json .run-log-message { color: #a8c7ff; }
-  .run-log-line--muted .run-log-message { color: #8497aa; }
-  .run-log-json-key { color: #9cc8ff; }
-  .run-log-json-string { color: #9bdfb2; }
-  .run-log-json-number { color: #ffc56e; }
-  .run-log-json-literal { color: #ff9b91; }
-  .run-log-empty { padding: 14px 12px; color: #8497aa; }
+  .run-log-line--file { margin-top: 8px; padding-top: 8px; border-top: 1px solid #374151; }
+  .run-log-line--file:first-child { margin-top: 0; padding-top: 2px; border-top: 0; }
+  .run-log-file { padding: 1px 6px; border-radius: 4px; background: #374151; color: #bfdbfe; font-size: 10px; font-weight: 600; }
+  .run-log-line--success .run-log-message { color: #86efac; }
+  .run-log-line--warning .run-log-message { color: #fcd34d; }
+  .run-log-line--error .run-log-message { color: #fca5a5; }
+  .run-log-line--json .run-log-message { color: #93c5fd; }
+  .run-log-line--muted .run-log-message { color: #9ca3af; }
+  .run-log-json-key { color: #93c5fd; }
+  .run-log-json-string { color: #86efac; }
+  .run-log-json-number { color: #fcd34d; }
+  .run-log-json-literal { color: #fca5a5; }
+  .run-log-empty { padding: 16px 14px; color: #9ca3af; }
 
   /* ------------------------------------------------------------ triggers */
   .trigger-form { display:grid; gap:14px; max-width:47rem; margin:18px 0 24px; padding:18px 0; border-block:1px solid var(--line); }
   .trigger-form fieldset { margin:0; padding:0; border:0; min-width:0; }
   .trigger-form legend { padding:0 0 6px; font-weight:600; }
-  .trigger-modes { display:flex; flex-wrap:wrap; gap:4px; } .trigger-modes label { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border:1px solid var(--line); border-radius:4px; cursor:pointer; }
-  .trigger-modes label:has(:checked) { background:#edf4ff; color:#194d90; border-color:#608ac5; } .trigger-modes input { margin:0; }
+  .trigger-modes { display:flex; flex-wrap:wrap; gap:8px; } .trigger-modes label { display:inline-flex; align-items:center; gap:7px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; cursor:pointer; }
+  .trigger-modes label:has(:checked) { background:var(--blue-soft); color:#1e40af; border-color:var(--blue); } .trigger-modes input { margin:0; accent-color:var(--blue); }
   .trigger-form .field { max-width:28rem; } .trigger-form details label {margin:8px 0;} .trigger-form input[type=number], .trigger-form input[type=time] {max-width:12rem;}
   .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .field > span { font-size: 11px; font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase; color: var(--muted); }
-  .field select, .field input { min-height: 40px; width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: #fff; font-size: 13.5px; }
-  .field select:focus-visible, .field input:focus-visible { outline: 3px solid #78aaff; outline-offset: 1px; }
+  .field > span, .field > label { font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--body); }
+  .field select, .field input { min-height: 44px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 14px; }
+  .field select:focus-visible, .field input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   .field .field-hint { font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
   .form-actions { display: flex; align-items: center; gap: 10px; }
   .trigger-flag { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
@@ -225,7 +229,7 @@
     .orders-table { font-size: 13px; }
     .orders-table thead { display: none; }
     .orders-table, .orders-table tbody, .orders-table tr, .orders-table td { display: block; width: auto; }
-    .orders-table tr { padding: 13px 0; border-bottom: 1px solid #edf2f8; }
+    .orders-table tr { padding: 13px 0; border-bottom: 1px solid var(--line); }
     .orders-table tr:last-child { border-bottom: 0; }
     .orders-table tbody tr:hover td { background: transparent; }
     .orders-table td { padding: 1px 0; border: 0; overflow: hidden; }
@@ -237,46 +241,31 @@
     .run-detail .run-log { margin: 0; }
     .run-log-output { max-height: 260px; }
     .run-log-prefix { display: none; }
-    main { padding-top: 18px; }
+    main { padding-top: 0; }
   }
 
-  @media (max-width: 880px) {
-    /* The rail becomes a top bar, so the frame must stack instead of staying a row. */
-    .app-frame { flex-direction: column; }
-    .sidebar { position: static; width: auto; flex-direction: row; align-items: center; gap: 10px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
-    .brand { min-height: 0; padding: 0; }
-    .sidebar nav { flex-direction: row; padding: 0 0 0 8px; }
-    .nav-section-title, .sidebar-note { display: none; }
-    .app-shell { margin-left: 0; }
-    .topbar { min-height: 0; flex-wrap: wrap; }
-  }
-
-  @media (max-width: 560px) {
-    .brand-copy { display: none; }
-    .sidebar { gap: 6px; padding: 8px 12px; }
-  }
-  .panel + .panel { margin-top: 22px; }
   fieldset { min-width: 0; margin: 18px 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); }
   legend { padding: 0 10px 0 0; font-weight: 600; }
   .parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   .field-wide { grid-column: 1 / -1; }
-  .field label { font-weight: 500; }
-  .field textarea { width: 100%; padding: 10px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 7px; font: inherit; }
+  .field label { font-weight: 600; }
+  .field textarea { width: 100%; padding: 10px 12px; resize: vertical; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
   input, textarea { caret-color: var(--blue); }
   input[readonly] { background: var(--bg); color: var(--muted); }
-  :focus-visible { outline: 3px solid #78aaff; outline-offset: 3px; }
-  .file-label:focus-within { outline: 3px solid #78aaff; outline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+  .file-label:focus-within { outline: 2px solid var(--blue); outline-offset: 3px; }
   .choice-list { display: flex; flex-wrap: wrap; gap: 8px 20px; }
   .check-field { display: flex; gap: 8px; align-items: center; min-height: 36px; }
   .check-field input { width: 18px; height: 18px; accent-color: var(--blue); }
+  .check-field label { color: var(--body); font-size: 13.5px; font-weight: 400; }
   .editor-actions, .paging { flex-wrap: wrap; margin-top: 16px; }
-  .config-output { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--bg); border-radius: 7px; }
+  .config-output { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--bg); border-radius: 12px; }
   .dataset-feedback { display:flex; align-items:flex-start; gap:8px; min-height:20px; margin:8px 0 0; font-size:13px; color:var(--muted); }
   .dataset-feedback--ok { color:#087a3a; }
   .dataset-feedback--error { color:var(--red); }
   .feedback-dot { width:7px; height:7px; margin-top:6px; border-radius:50%; background:currentColor; flex:none; }
-  .inspect-result { margin-top:10px; border:1px solid var(--line); border-radius:8px; background:#fbfcfe; overflow:hidden; }
-  .inspect-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:#f3f7fd; border-bottom:1px solid var(--line); }
+  .inspect-result { margin-top:10px; border:1px solid var(--line); border-radius:12px; background:#fff; overflow:hidden; }
+  .inspect-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:#eef2ff; border-bottom:1px solid var(--line); }
   .inspect-kicker { font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
   .inspect-result dl { display:grid; grid-template-columns:84px minmax(0,1fr); gap:9px 14px; margin:0; padding:12px; }
   .inspect-result dt { color:var(--muted); font-size:12px; }
@@ -288,24 +277,19 @@
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
   #runtime-identity { overflow-wrap: anywhere; }
   summary { cursor: pointer; padding: 10px 0; font-weight: 500; }
-  @media (max-width: 880px) { .sidebar { flex-wrap: wrap; } .sidebar nav { flex-wrap: wrap; } }
   @media (max-width: 680px) { .field input, .field select, .field textarea { font-size: 16px; } }
   main > section { display:none; }
   body[data-page="dashboard"] #dashboard-view, body[data-page="settings"] #management, body[data-page="orders"] :is(#orders-view,#import,#runs), body[data-page="triggers"] #triggers-view { display:block; }
+  #triggers-view { margin-top: 0; }
   [hidden] { display:none !important; }
   #status-chip:not(.runtime-status--disconnected) { display:none; }
-  .instrument { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:28px; background:#143c72; color:#fff; border-left:6px solid #75afff; }
-  .instrument h2 { color:inherit; font-size:1rem; margin:0; } #active-count { font-size:3.25rem; line-height:1.2; font-variant-numeric:tabular-nums; }
-  .instrument dl { margin:0; } .instrument dt { font-size:.8rem; color:#d2e6ff; } .instrument dd { margin:2px 0 8px; font-weight:600; } #dash-version { overflow-wrap:anywhere; }
-  .activity-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; margin-top:28px; } .activity-grid section { border-top:2px solid #7196c7; padding-top:14px; } .activity-grid ul { padding:0; list-style:none; } .activity-grid li { display:flex; justify-content:space-between; align-items:center; gap:8px; overflow-wrap:anywhere; padding:10px 0; border-bottom:1px solid var(--line); }
-  #first-run { margin-top:24px; padding:24px 0; border-block:1px solid var(--line); }
+  #first-run.first-run-card { margin-top: 18px; padding: 20px 22px; border-block: 0; }
   .first-actions { display:flex; gap:20px; flex-wrap:wrap; align-items:center; margin-top:16px; }
-  .instrument dl { min-width:0; max-width:100%; }
   .handler-controls { margin-top:32px; padding-top:24px; border-top:1px solid var(--line); }
   .handler-controls .section-heading { justify-content:flex-start; }
   .order-action-group > .editor-actions { margin:0; }
   #preflight-status { color:var(--muted); }
-  .delete-trigger { flex-basis:100%; text-align:start; background:none; color:#943b32; border:0; border-top:1px solid var(--line); margin-top:4px; }
+  .delete-trigger { flex-basis:100%; text-align:start; background:none; color:#b42318; border:0; border-top:1px solid var(--line); margin-top:4px; }
   .delete-trigger:hover { text-decoration:underline; }
   .orders-table td.time { font-family:ui-monospace,monospace; }
   .folder-browser { display:grid; grid-template-columns:minmax(11rem, 30%) minmax(0,1fr); gap:20px; align-items:start; }
@@ -318,20 +302,18 @@
   #dataset-list button[aria-pressed=true] { background:#edf3ff; color:#164d98; box-shadow:inset 3px 0 #1762c3; }
   #dataset-rows fieldset { margin:0; min-width:0; } #dataset-rows .form-actions { flex-wrap:wrap; }
   .priority-strip, #image-priority { display:flex; align-items:center; flex-wrap:wrap; gap:7px; } .priority-strip { color:var(--muted); font-size:.85rem; }
-  .source-step { color:#254e80; background:#edf4ff; padding:3px 9px; border-radius:4px; overflow-wrap:anywhere; }
+  .source-step { color:#3730a3; background:var(--blue-soft); padding:3px 9px; border-radius:6px; overflow-wrap:anywhere; }
   .config-output .run-log-json-key { color:#204f91; } .config-output .run-log-json-string { color:#216149; } .config-output :is(.run-log-json-literal,.run-log-json-number) { color:#813c75; }
   .action-icon { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
-  .field > span, .orders-table th, .badge { text-transform:none; letter-spacing:0; font-size:12px; }
-  @media(max-width:680px) { .folder-browser { grid-template-columns:minmax(0,1fr); gap:12px; } #dataset-list {max-height:9rem; border:1px solid var(--line); padding:4px;} .instrument { flex-wrap:wrap; } }
-  @media(max-width:680px) { .activity-grid {grid-template-columns:1fr;} .sidebar nav {width:100%; display:grid; grid-template-columns:1fr 1fr; padding:0;} .sidebar .nav-item {min-width:0;} .sidebar .ui-icon {display:inline-flex;} .nav-section-title {display:none;} }
+  @media(max-width:680px) { .folder-browser { grid-template-columns:minmax(0,1fr); gap:12px; } #dataset-list {max-height:9rem; border:1px solid var(--line); padding:4px;} }
   /* ------------------------------------------------------- order controls */
   .field-label-row { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
   .field-meta { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .window-picker { display:grid; grid-template-columns:repeat(auto-fill,minmax(142px,1fr)); gap:8px; max-height:224px; overflow:auto; padding:10px; border:1px solid var(--line); border-radius:8px; background:#fbfcfe; }
-  .window-option { display:flex; flex-direction:column; gap:2px; padding:9px 10px; border:1px solid var(--line); border-radius:7px; background:#fff; cursor:pointer; transition:border-color .12s, background .12s; }
-  .window-option:hover { border-color:#a9c5ea; }
+  .window-picker { display:grid; grid-template-columns:repeat(auto-fill,minmax(142px,1fr)); gap:8px; max-height:224px; overflow:auto; padding:12px; border:1px solid var(--line); border-radius:12px; background:#f8fafc; }
+  .window-option { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; cursor:pointer; transition:border-color .12s, background .12s; }
+  .window-option:hover { border-color:#b7c4f5; }
   .window-option:has(input:checked) { border-color:var(--blue); background:var(--blue-soft); box-shadow:inset 0 0 0 1px var(--blue); }
-  .window-option:has(input:disabled) { opacity:.52; cursor:not-allowed; background:#f7f9fc; }
+  .window-option:has(input:disabled) { opacity:.52; cursor:not-allowed; background:#f8fafc; }
   .window-option input { width:16px; height:16px; margin:0; accent-color:var(--blue); }
   .window-option span { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
   .window-option small { color:var(--muted); font-size:11px; }
@@ -339,8 +321,8 @@
   .diagnostics-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-top:22px; }
   .diagnostics-heading h3 { margin:0; font-size:14px; }
   .diagnostics-heading p { margin:0; font-size:12px; }
-  .diagnostic-group { margin:12px 0; padding:14px; border:1px solid var(--line); border-radius:9px; background:#fbfcfe; transition:border-color .12s, background .12s; }
-  .diagnostic-group[data-enabled="true"] { border-color:#b9d2f5; background:#fff; }
+  .diagnostic-group { margin:12px 0; padding:16px; border:1px solid var(--line); border-radius:12px; background:#f8fafc; transition:border-color .12s, background .12s; }
+  .diagnostic-group[data-enabled="true"] { border-color:#c7d2fe; background:#fff; }
   .diagnostic-purpose { margin:0 0 8px; color:var(--muted); font-size:12.5px; }
   .diagnostic-toggle label { font-weight:600; }
   .diagnostic-fields { margin:10px 0 0; padding:10px 0 0; border-top:1px solid var(--line); }
@@ -351,35 +333,36 @@
   .operation-history { margin-top:14px; }
   .operation-history > summary { font-weight:600; }
   .diagnostic-fields > legend { font-size:12px; font-weight:600; color:var(--muted); }
+  .choice-actions { display:flex; gap:8px; margin-top:8px; }
+  .choice-actions .table-button { padding:2px 8px; font-size:12px; }
   .diagnostic-fields .check-field label { font-weight:400; }
 
   /* ------------------------------------------------------ number inputs */
-  #add-models { margin-top:8px; }
-  .token-control { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:42px; padding:6px 8px; border:1px solid var(--line-strong); border-radius:7px; background:#fff; transition:border-color .12s, box-shadow .12s; }
-  .token-control:focus-within { border-color:#78aaff; box-shadow:0 0 0 3px rgb(120 170 255 / 18%); }
+  .token-control { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:44px; padding:6px 8px; border:1px solid var(--line); border-radius:10px; background:#fff; transition:border-color .12s, box-shadow .12s; }
+  .token-control:focus-within { border-color:var(--blue); box-shadow:0 0 0 3px rgb(30 79 215 / 14%); }
   .token-field.has-error .token-control { border-color:var(--red); }
   .token-chips { display:flex; flex-wrap:wrap; gap:5px; }
-  .token-chip { display:inline-flex; align-items:center; gap:2px; min-height:26px; padding:2px 3px 2px 8px; border:1px solid #c9daf1; border-radius:5px; background:#f2f7ff; color:#164d98; font-size:12px; font-variant-numeric:tabular-nums; }
+  .token-chip { display:inline-flex; align-items:center; gap:2px; min-height:26px; padding:2px 3px 2px 8px; border:1px solid #c7d2fe; border-radius:6px; background:var(--blue-soft); color:#3730a3; font-size:12px; font-variant-numeric:tabular-nums; }
   .token-remove { width:20px; height:20px; padding:0; border:0; border-radius:4px; background:transparent; color:#4d6b91; font:inherit; font-size:15px; line-height:1; cursor:pointer; }
-  .token-remove:hover { background:#dce9fb; color:#943b32; }
+  .token-remove:hover { background:#dbe4ff; color:var(--red); }
   .token-entry { flex:1 1 76px; width:auto; min-width:76px; height:26px; padding:0 2px; border:0; outline:0; box-shadow:none; background:transparent; font:inherit; font-size:13px; color:var(--ink); }
   .token-entry:focus-visible { outline:0; }
   .token-entry::placeholder { color:#7a8ba1; }
-  .field-error { display:block; margin-top:5px; color:#943b32; font-size:12px; }
+  .field-error { display:block; margin-top:5px; color:#b42318; font-size:12px; }
   .field-error[hidden] { display:none; }
 
   /* ------------------------------------------------------------ run detail */
   .run-overview { display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px; margin:14px 0 4px; }
   .run-flags { display:flex; flex-wrap:wrap; gap:6px; }
-  .run-flag { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border:1px solid var(--line); border-radius:999px; background:#fbfcfe; color:var(--muted); font-size:11.5px; }
+  .run-flag { display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border:1px solid var(--line); border-radius:999px; background:#f8fafc; color:var(--muted); font-size:11.5px; }
   .run-flag-label { color:var(--ink); font-weight:600; }
   .run-flag--ok { border-color:#cfe7d8; background:#f4fbf6; color:#286448; }
-  .run-flag--fail { border-color:#e6c2be; background:#fff8f7; color:#943b32; }
+  .run-flag--fail { border-color:#f3c6c4; background:#fff8f7; color:#b42318; }
   .run-flag--active { border-color:#c9daf1; background:#f3f7fd; color:#164d98; }
   .run-report { margin-left:auto; }
   .check-strip { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 12px; }
   .check-chip { display:inline-flex; align-items:center; gap:5px; min-height:28px; padding:3px 8px; border:1px solid #cfe7d8; border-radius:999px; background:#fbfefc; color:#245a3d; font-size:11.5px; line-height:1.3; }
-  .check-chip--fail { border-color:#e6c2be; background:#fff8f7; color:#943b32; }
+  .check-chip--fail { border-color:#f3c6c4; background:#fff8f7; color:#b42318; }
   .check-chip .check-icon { width:16px; height:16px; background:transparent; }
   .check-chip--fail .check-icon { background:var(--red-soft); color:var(--red); }
   .check-chip .check-icon svg { width:11px; height:11px; }
@@ -391,9 +374,9 @@
   .check-summary { display:flex; align-items:center; gap:10px; margin:12px 0 10px; font-size:13px; }
   .check-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; font-size:11.5px; font-weight:600; background:var(--blue-soft); color:var(--blue); }
   .check-pill--ok { background:var(--green-soft); color:#06733a; }
-  .check-pill--fail { background:var(--red-soft); color:#943b32; }
+  .check-pill--fail { background:var(--red-soft); color:#b42318; }
   .check-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; }
-  .check-card { display:grid; grid-template-columns:24px minmax(0,1fr); gap:9px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .check-card { display:grid; grid-template-columns:24px minmax(0,1fr); gap:9px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
   .check-card--ok { border-color:#cfe7d8; }
   .check-card--fail { border-color:#e6c2be; background:#fff8f7; }
   .check-card--compact { padding:8px 10px; }
@@ -403,12 +386,12 @@
   .check-card h4 { margin:0; font-size:12.5px; font-weight:600; }
   .check-card p { margin:3px 0 0; color:var(--muted); font-size:12px; line-height:1.45; }
   #preflight-status[data-state="ok"] { color:#06733a; font-weight:600; }
-  #preflight-status[data-state="fail"] { color:#943b32; font-weight:600; }
+  #preflight-status[data-state="fail"] { color:#b42318; font-weight:600; }
   #preflight-checks { margin-top:8px; }
   button.is-busy { cursor:progress; opacity:.72; }
 
   /* ----------------------------------------------------------- validation */
-  .validation-card { margin-top:12px; padding:14px; border:1px solid #bfe3cd; border-radius:9px; background:var(--green-soft); }
+  .validation-card { margin-top:12px; padding:16px; border:1px solid #a7e8c0; border-radius:12px; background:var(--green-soft); }
   .validation-card h3 { margin:0; font-size:14px; }
   .validation-card p { margin:4px 0 0; color:#286448; font-size:12.5px; }
   .validation-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:12px; }
@@ -416,7 +399,7 @@
   .validation-grid strong { display:block; margin-top:2px; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
 
   /* --------------------------------------------------------- run stages */
-  .stage-rail { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin:14px 0 18px; padding:18px 16px 12px; border:1px solid var(--line); border-radius:9px; background:#fff; }
+  .stage-rail { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin:14px 0 18px; padding:18px 16px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
   .stage-step { position:relative; display:flex; flex-direction:column; gap:4px; min-width:0; padding:18px 12px 0 0; }
   .stage-step::before { content:""; position:absolute; left:0; top:2px; width:10px; height:10px; border-radius:50%; background:#d5dfec; box-shadow:0 0 0 3px #fff; }
   .stage-step::after { content:""; position:absolute; left:12px; right:0; top:6px; height:2px; background:#e4ebf5; }
@@ -428,12 +411,170 @@
   .stage-label { font-size:12px; font-weight:600; line-height:1.25; overflow-wrap:anywhere; }
   .stage-meta { color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
   .stage-now { grid-column:1/-1; margin:14px 0 0; padding-top:10px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+  .model-sequence { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:8px; margin:0; padding:0; list-style:none; }
+  .model-step { display:flex; align-items:center; gap:7px; padding:5px 10px; border:1px solid var(--line); border-radius:999px; background:#fff; color:var(--muted); font-size:12px; }
+  .model-step--done { border-color:#bbf7d0; background:#f0fdf4; color:#166534; }
+  .model-step--active { border-color:#bfd3f6; background:var(--blue-soft); color:var(--blue); }
+  .model-step--failed { border-color:#fecaca; background:var(--red-soft); color:var(--red); }
+  .model-step-name { font-weight:600; }
+  .model-step-meta { font-size:11px; opacity:.8; }
   .stage-step--active .stage-label { color:var(--blue); }
   @media (max-width:680px) {
     .stage-rail { grid-template-columns:minmax(0,1fr); gap:10px; }
     .stage-step { padding:0 0 0 26px; }
     .stage-step::after { left:4px; top:14px; bottom:-8px; width:2px; height:auto; right:auto; }
     .stage-step:last-child::after { display:none; }
+  }
+  /* ------------------------------------------------------- hub refresh */
+  .page-intro { margin: 0 0 18px; }
+  .page-intro h2 { font-size: 20px; }
+  .page-intro p { max-width: 76ch; margin-top: 5px; color: var(--muted); }
+  .section-copy { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .section-heading { align-items: flex-start; }
+  .section-heading > .badge, .section-heading > [role="status"] { flex: none; }
+
+  .overview-grid { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 14px; }
+  .overview-card { display: flex; align-items: flex-start; gap: 14px; min-height: 116px; padding: 20px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: 0 8px 24px rgb(17 24 39 / 4%); }
+  .overview-card--primary { border-color: #c7d2fe; background: var(--blue-soft); }
+  .overview-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--blue-soft); color: var(--blue); }
+  .overview-card--primary .overview-icon { background: #fff; }
+  .overview-icon svg { width: 20px; height: 20px; }
+  .overview-copy { display: flex; flex-direction: column; min-width: 0; }
+  .overview-copy > span { color: var(--muted); font-size: 12px; font-weight: 500; }
+  .overview-copy strong { margin-top: 4px; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .overview-copy .overview-value { font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; }
+  .overview-copy small { margin-top: 7px; color: var(--muted); font-size: 11.5px; }
+  #dashboard-error:empty { display: none; }
+  #dashboard-error .error-note { margin: 14px 0 0; }
+
+  .dashboard-columns { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; margin-top: 18px; }
+  .dashboard-panel { padding: 24px 28px 12px; }
+  .dashboard-columns .panel + .panel { margin-top: 0; }
+  .dashboard-panel .section-heading { margin-bottom: 4px; }
+  .activity-list { display: grid; margin: 0; padding: 0; list-style: none; }
+  .activity-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  .activity-list li:last-child { border-bottom: 0; }
+  .activity-list li.activity-empty { min-height: 74px; color: var(--muted); }
+  .activity-list li a { min-width: 0; overflow: hidden; color: var(--ink); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+  .activity-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .activity-meta { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .activity-list li .badge { flex: none; }
+
+  .quick-actions { margin-top: 18px; }
+  .quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .quick-action { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); text-decoration: none; transition: border-color 160ms var(--ease), background 160ms var(--ease); }
+  .quick-action:hover { border-color: #b7c4f5; background: #f8faff; }
+  .quick-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--blue-soft); color: var(--blue); }
+  .quick-icon svg { width: 18px; height: 18px; }
+  .quick-copy { display: flex; flex-direction: column; min-width: 0; }
+  .quick-copy strong { font-size: 13px; }
+  .quick-copy small { margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+  .quick-arrow { margin-left: auto; color: #8a99ac; }
+  .first-run-card { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 20px 22px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: #f8fafc; }
+  .first-run-card > div:not(.first-actions) { flex: 1 1 220px; min-width: 0; }
+  .first-run-card h2 { font-size: 17px; }
+  .first-run-card p { margin-top: 3px; color: var(--muted); font-size: 12.5px; }
+  .first-run-icon { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); }
+  .first-run-icon svg { width: 20px; height: 20px; }
+  .first-run-card .first-actions { margin: 0 0 0 auto; flex-wrap: wrap; }
+
+  .settings-stack { display: grid; gap: 18px; }
+  .settings-stack .panel + .panel { margin-top: 0; }
+  .settings-section { padding: 24px 28px; }
+  .settings-section > .section-heading { margin-bottom: 18px; }
+  .settings-section > .section-heading h2 { font-size: 18px; }
+  .settings-section fieldset { margin: 0; padding: 0; border: 0; }
+  .settings-section .parameter-grid { margin-top: 2px; }
+  .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .settings-footer p { color: var(--muted); font-size: 12px; }
+  .settings-footer p:empty { display: none; }
+  .handler-controls { margin-top: 18px; padding-top: 24px; border-top: 0; }
+  .folder-browser { grid-template-columns: minmax(11rem, 240px) minmax(0, 1fr); gap: 22px; }
+  #dataset-list { max-height: 21rem; padding: 5px; border-right: 0; border-radius: 10px; background: #f8fafc; }
+  #dataset-list button { min-height: 52px; padding: 9px 11px; border-radius: 8px; }
+  #dataset-list button[aria-pressed="true"] { background: var(--blue-soft); color: #3730a3; box-shadow: inset 2px 0 var(--blue); }
+  #dataset-rows .dataset-detail { padding: 2px 0 0; border: 0; }
+  .dataset-detail > legend { display: block; padding: 0; margin-bottom: 12px; font-size: 16px; font-weight: 600; }
+  .dataset-detail > .form-actions { margin-top: 14px; }
+
+  #import { padding: 24px 28px; }
+  #import .section-heading { margin-bottom: 4px; }
+  #import .import-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 12px; background: #f8fafc; }
+  #import .file-label { min-height: 42px; padding: 8px 4px; border: 0; background: transparent; }
+  #import .file-label:hover { background: transparent; color: var(--blue); }
+  #import .file-name { margin-left: 2px; }
+
+  .order-list { display: grid; }
+  .order-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 16px 2px; border-bottom: 1px solid var(--line); }
+  .order-card:first-child { padding-top: 4px; }
+  .order-card:last-child { padding-bottom: 4px; border-bottom: 0; }
+  .order-main { min-width: 0; }
+  .order-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .order-title-row strong { min-width: 0; overflow: hidden; font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .order-meta { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 7px; color: var(--muted); font-size: 12px; }
+  .order-meta-item { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
+  .order-meta-item > span { color: #7b8ca1; font-size: 11px; }
+  .order-meta-item code { overflow-wrap: anywhere; }
+  .order-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
+  .order-actions .table-button { min-height: 36px; padding: 8px 14px; }
+  .order-card--error { border-color: #f3c6c4; background: #fffafa; padding-inline: 12px; border-radius: 12px; margin: 6px 0; }
+  .order-error-copy { margin-top: 6px; color: #b42318; font-size: 12px; }
+  #runs .cell-actions { flex-wrap: nowrap; justify-content: flex-end; }
+  #runs .cell-actions .row-link { white-space: nowrap; }
+  #runs .orders-table td { vertical-align: top; }
+  .run-filter { display: flex; align-items: center; gap: 8px; max-width: 100%; color: var(--muted); }
+  .run-filter select { min-width: 0; max-width: 26ch; padding: 10px 12px; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); font: inherit; }
+
+  @media (max-width: 960px) {
+    .app-frame { flex-direction: column; }
+    .sidebar { position: static; width: 100%; height: auto; flex-direction: row; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid rgb(255 255 255 / 14%); overflow: visible; }
+    .brand { margin: 0 8px 0 0; }
+    .brand-mark { width: 36px; height: 40px; }
+    .brand-copy, .nav-section-title, .sidebar-note { display: none; }
+    .sidebar nav { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 4px; }
+    .nav-section { display: contents; }
+    .nav-section + .nav-section { margin-top: 0; }
+    .nav-item { flex-direction: row; min-height: 44px; gap: 7px; padding: 8px 12px; border-radius: 12px; font-size: 12px; }
+    .nav-item .ui-icon { width: 18px; height: 18px; }
+    .nav-count { position: static; margin-left: 2px; }
+    .app-shell { margin: 0; min-height: 100vh; padding: 22px 18px 32px; border-radius: 0; }
+    .topbar { flex-direction: column; align-items: stretch; gap: 14px; margin-bottom: 18px; }
+    .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .overview-card--primary { grid-column: 1 / -1; }
+    .dashboard-columns { grid-template-columns: minmax(0, 1fr); }
+    .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 680px) {
+    .nav-item { flex-direction: column; gap: 3px; padding: 6px 8px; }
+    .nav-label { display: none; }
+    .overview-grid, .quick-grid { grid-template-columns: minmax(0, 1fr); }
+    .overview-card--primary { grid-column: auto; }
+    .overview-card { min-height: 0; padding: 17px 18px; }
+    .first-run-card { align-items: flex-start; flex-wrap: wrap; }
+    .first-run-card .first-actions { width: 100%; margin-left: 0; gap: 10px; }
+    .settings-section, #import { padding: 18px; }
+    .settings-footer { align-items: flex-start; flex-direction: column; }
+    #import .import-row { grid-template-columns: minmax(0, 1fr); }
+    .order-card { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .order-actions { justify-content: flex-start; }
+    #runs .cell-actions { flex-wrap: wrap; justify-content: flex-start; }
+    .folder-browser { grid-template-columns: minmax(0, 1fr); }
+    #dataset-list { max-height: 12rem; border: 1px solid var(--line); }
+    #dataset-rows .dataset-detail { min-width: 0; }
+    #dataset-rows .dataset-detail .form-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+  }
+  #order-editor .section-heading { flex-wrap: nowrap; align-items: flex-start; margin-bottom: 4px; }
+  #order-editor .section-heading h2 { flex: 1 1 auto; }
+  #order-editor .dialog-close { flex: none; margin-left: 8px; }
+  #order-editor .heading-note { margin: 0 0 10px; }
+  #order-editor[open] { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+  #order-editor #order-form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  #order-editor .editor-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 2px; }
+  #order-editor .editor-footer { flex: none; margin: 14px -24px 0; padding: 12px 24px 24px; background: #fff; border-top: 1px solid var(--line); }
+  #order-editor .editor-footer .editor-actions { margin: 0; }
+  @media (max-width: 680px) {
+    #order-editor { padding: 20px 18px 0; }
+    #order-editor .editor-footer { margin-inline: -18px; padding-inline: 18px; padding-bottom: 20px; }
   }
 </style>
 </head>
@@ -442,20 +583,26 @@
 <div class="app-frame">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">NiB</span>
+      <img class="brand-mark" src="/console/logo.svg" alt="" width="44" height="48">
       <span class="brand-copy"><strong>Nowcast-in-a-Box</strong><span>Local console</span></span>
     </div>
     <nav aria-label="Main navigation">
-      <a class="nav-item" href="#dashboard"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v8H3zM14 3h7v4h-7zM3 15h7v6H3zM14 11h7v10h-7z"/></svg></span>Dashboard</a>
-      <a class="nav-item" href="#settings"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h8m5 0h5M3 17h3m5 0h10"/><circle cx="13" cy="7" r="3"/><circle cx="8" cy="17" r="3"/></svg></span>Settings</a>
-      <a class="nav-item" href="#orders">
-        <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
-        Orders <span class="nav-count" id="nav-order-count" hidden>0</span>
-      </a>
-      <a class="nav-item" href="#triggers">
-        <span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m13 2-10 12h8l-1 8 11-13h-8l1-7z"/></svg></span>
-        Triggers <span class="nav-count" id="nav-trigger-count" hidden>0</span>
-      </a>
+      <div class="nav-section">
+        <p class="nav-section-title">Operations</p>
+        <a class="nav-item" href="#dashboard" title="Dashboard" aria-label="Dashboard"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v8H3zM14 3h7v4h-7zM3 15h7v6H3zM14 11h7v10h-7z"/></svg></span><span class="nav-label">Dashboard</span></a>
+        <a class="nav-item" href="#orders" title="Orders" aria-label="Orders">
+          <span class="ui-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12l4 0"/></svg></span>
+          <span class="nav-label">Orders</span> <span class="nav-count" id="nav-order-count" hidden>0</span>
+        </a>
+        <a class="nav-item" href="#triggers" title="Triggers" aria-label="Triggers">
+          <span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m13 2-10 12h8l-1 8 11-13h-8l1-7z"/></svg></span>
+          <span class="nav-label">Triggers</span> <span class="nav-count" id="nav-trigger-count" hidden>0</span>
+        </a>
+      </div>
+      <div class="nav-section">
+        <p class="nav-section-title">Configuration</p>
+        <a class="nav-item" href="#settings" title="Settings" aria-label="Settings"><span class="ui-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h8m5 0h5M3 17h3m5 0h10"/><circle cx="13" cy="7" r="3"/><circle cx="8" cy="17" r="3"/></svg></span><span class="nav-label">Settings</span></a>
+      </div>
     </nav>
     <p class="sidebar-note"><strong>Offline</strong> no Hub needed</p>
   </aside>
@@ -473,36 +620,75 @@
     </header>
 
     <main id="main" tabindex="-1">
-      <section id="dashboard-view" aria-label="Runtime overview">
-        <div class="instrument"><div><h2>Active tasks</h2><strong id="active-count">…</strong></div><dl><dt>Docker</dt><dd id="dash-docker">Checking…</dd><dt>Handler version</dt><dd id="dash-version">Checking…</dd></dl></div>
-        <div id="dashboard-error" role="status"></div>
-        <div id="dashboard-activity" class="activity-grid" hidden><section><h2>Current work</h2><ul id="dash-running"></ul></section><section><h2>Recent outcomes</h2><ul id="dash-outcomes"></ul></section></div>
-        <section id="first-run" hidden><h2>No runs yet</h2><div class="first-actions"><a class="primary" href="#settings">Set dataset folders</a><a href="#orders">Open orders</a></div></section>
-      </section>
-      <section class="panel" id="management" aria-labelledby="management-title">
-        <h2 id="management-title">Local configuration</h2>
-        <div id="local-settings">
-          <form id="image-settings-form">
-            <fieldset id="image-settings-fields" disabled><legend>Container image source</legend><div class="parameter-grid">
-              <label class="field"><span>Source policy</span><select id="image-source"><option value="official">Official registry</option><option value="mirror">Mirror</option><option value="auto">Automatic fallback</option></select></label>
-              <label class="field"><span>Registry override (optional)</span><input id="image-override" autocomplete="off" spellcheck="false"></label>
-            </div><p class="priority-strip"><span>Pull order</span><output id="image-priority" for="image-source image-override"></output></p>
-            <div class="form-actions editor-actions"><button class="secondary" type="submit">Save image settings</button></div></fieldset>
-          </form>
-          <fieldset id="data-settings-fields" disabled><legend>Dataset folders</legend>
-            <p class="muted">Clearing a folder removes its association. Files stay on this machine.</p>
-            <div class="folder-browser"><div id="dataset-list" role="group" aria-label="Datasets"></div><div id="dataset-rows"></div></div>
-          </fieldset>
-          <template id="dataset-row"><fieldset>
-            <legend></legend>
-            <label class="field"><span>Local folder path</span><input name="root" autocomplete="off" spellcheck="false"></label>
-            <div class="form-actions editor-actions"><button type="button" class="primary" name="save" data-icon="save">Save folder</button><button type="button" class="secondary" name="inspect" data-icon="inspect">Inspect sample</button><button type="button" class="secondary" name="clear">Clear folder</button></div>
-            <p role="status" class="dataset-feedback"></p><div class="inspect-result" hidden></div>
-          </fieldset></template>
-          <p id="settings-status" role="status"></p><button id="reload-settings" type="button" class="secondary">Reload settings</button>
+      <section id="dashboard-view" class="dashboard-page" aria-label="Runtime overview">
+        <div class="overview-grid">
+          <article class="overview-card overview-card--primary">
+            <span class="overview-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v8H3zM14 3h7v4h-7zM3 15h7v6H3zM14 11h7v10h-7z"/></svg></span>
+            <div class="overview-copy"><span>Active tasks</span><strong id="active-count">…</strong><small>Running on this handler</small></div>
+          </article>
+          <article class="overview-card">
+            <span class="overview-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 8l2-4h12l2 4M9 13h6"/></svg></span>
+            <div class="overview-copy"><span>Docker</span><strong id="dash-docker" class="overview-value">Checking…</strong><small>Container runtime</small></div>
+          </article>
+          <article class="overview-card">
+            <span class="overview-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7M12 3v12M8 7l4-4 4 4"/></svg></span>
+            <div class="overview-copy"><span>Handler version</span><strong id="dash-version" class="overview-value">Checking…</strong><small>Installed binary</small></div>
+          </article>
         </div>
-        <section class="handler-controls" aria-label="Handler controls">
-          <div class="section-heading"><h2>Handler</h2><span id="handler-health" role="status">Connecting…</span></div>
+        <div id="dashboard-error" role="status"></div>
+        <div id="dashboard-activity" class="dashboard-columns" hidden>
+          <section class="panel dashboard-panel" aria-labelledby="current-work-title">
+            <div class="section-heading"><h2 id="current-work-title">Current work</h2></div>
+            <ul id="dash-running" class="activity-list"></ul>
+          </section>
+          <section class="panel dashboard-panel" aria-labelledby="recent-outcomes-title">
+            <div class="section-heading"><h2 id="recent-outcomes-title">Recent outcomes</h2></div>
+            <ul id="dash-outcomes" class="activity-list"></ul>
+          </section>
+        </div>
+        <section id="first-run" class="first-run-card" hidden>
+          <span class="first-run-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span>
+          <div><h2>No runs yet</h2><p>Set the local dataset folder, then create or import an order to start inference.</p></div>
+          <div class="first-actions"><a class="primary" href="#settings/datasets">Set dataset folders</a><a class="secondary" href="#orders">Open orders</a></div>
+        </section>
+        <section class="panel quick-actions" aria-labelledby="quick-actions-title">
+          <div class="section-heading"><h2 id="quick-actions-title">Quick actions</h2></div>
+          <div class="quick-grid">
+            <a class="quick-action" href="#settings/datasets"><span class="quick-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h18"/></svg></span><span class="quick-copy"><strong>Dataset folders</strong><small>Point the handler at local observation data.</small></span><span class="quick-arrow" aria-hidden="true">→</span></a>
+            <a class="quick-action" href="#orders/new"><span class="quick-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4"/></svg></span><span class="quick-copy"><strong>Create an order</strong><small>Choose inputs, models and diagnostics.</small></span><span class="quick-arrow" aria-hidden="true">→</span></a>
+            <a class="quick-action" href="#triggers/new"><span class="quick-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-10 12h8l-1 8 11-13h-8l1-7z"/></svg></span><span class="quick-copy"><strong>Automate a run</strong><small>Run a saved order when new data arrives.</small></span><span class="quick-arrow" aria-hidden="true">→</span></a>
+          </div>
+        </section>
+      </section>
+      <section id="management" class="settings-page" aria-labelledby="management-title">
+        <div class="page-intro"><h2 id="management-title">Local configuration</h2><p>Choose container images, point datasets at local folders, and control the handler process.</p></div>
+        <div id="local-settings" class="settings-stack">
+          <section class="panel settings-section" aria-labelledby="image-settings-title">
+            <div class="section-heading"><div><h2 id="image-settings-title">Container images</h2><p class="section-copy">Select the registry used for model and diagnostics images.</p></div></div>
+            <form id="image-settings-form">
+              <fieldset id="image-settings-fields" disabled><legend class="sr-only">Container image source</legend><div class="parameter-grid">
+                <label class="field"><span>Source policy</span><select id="image-source"><option value="official">Official registry</option><option value="mirror">Mirror</option><option value="auto">Automatic fallback</option></select></label>
+                <label class="field"><span>Registry override (optional)</span><input id="image-override" autocomplete="off" spellcheck="false"></label>
+              </div><p class="priority-strip"><span>Pull order</span><output id="image-priority" for="image-source image-override"></output></p>
+              <div class="form-actions editor-actions"><button class="secondary" type="submit">Save image settings</button><span id="image-settings-status" role="status"></span></div></fieldset>
+            </form>
+          </section>
+          <section class="panel settings-section" aria-labelledby="data-settings-title">
+            <div class="section-heading"><div><h2 id="data-settings-title" tabindex="-1">Dataset folders</h2><p class="section-copy">Map each dataset to its local observation directory. Clearing a folder removes the association; files stay on this machine.</p></div></div>
+            <fieldset id="data-settings-fields" disabled><legend class="sr-only">Dataset folders</legend>
+              <div class="folder-browser"><div id="dataset-list" role="group" aria-label="Datasets"></div><div id="dataset-rows"></div></div>
+            </fieldset>
+            <template id="dataset-row"><fieldset class="dataset-detail">
+              <legend></legend>
+              <label class="field"><span>Local folder path</span><input name="root" autocomplete="off" spellcheck="false"></label>
+              <div class="form-actions editor-actions"><button type="button" class="primary" name="save" data-icon="save">Save folder</button><button type="button" class="secondary" name="inspect" data-icon="inspect">Inspect sample</button><button type="button" class="secondary" name="clear">Clear folder</button></div>
+              <p role="status" class="dataset-feedback"></p><div class="inspect-result" hidden></div>
+            </fieldset></template>
+            <div class="settings-footer"><p id="settings-status" role="status"></p><button id="reload-settings" type="button" class="secondary">Reload settings</button></div>
+          </section>
+        </div>
+        <section class="panel settings-section handler-controls" aria-label="Handler controls">
+          <div class="section-heading"><div><h2>Handler</h2><p class="section-copy">Runtime state and installation paths for the local process.</p></div><span id="handler-health" role="status">Connecting…</span></div>
           <p id="docker-health" role="status">Docker: not checked</p>
           <details><summary>Installation and runtime paths</summary><p id="runtime-identity" class="muted"></p><pre id="runtime-config" class="config-output"></pre></details>
           <div class="form-actions editor-actions"><button id="restart-handler" type="button" class="secondary" disabled>Restart Handler</button><button id="stop-handler" type="button" class="secondary" disabled>Stop Handler</button></div>
@@ -527,9 +713,11 @@
       </section>
 
       <dialog class="panel editor-dialog" id="order-editor" aria-labelledby="editor-title">
-        <div class="section-heading"><h2 id="editor-title">Order settings</h2><span class="heading-note" id="editor-revision"></span><button id="close-order" class="secondary table-button dialog-close" type="button">Close</button></div>
+        <div class="section-heading"><h2 id="editor-title">Order settings</h2><button id="close-order" class="secondary table-button dialog-close" type="button">Close</button></div>
+        <p class="heading-note" id="editor-revision"></p>
         <p class="muted">Editing settings affects future runs only. Changes to data, times, region or inference models require a new run.</p>
         <form id="order-form">
+          <div class="editor-scroll">
           <fieldset id="order-fields" disabled>
             <legend>Inference inputs</legend>
             <div class="parameter-grid">
@@ -542,7 +730,7 @@
                 <span class="field-hint" id="sample-hint">Choose one or more runnable windows from the local dataset.</span>
               </div>
             </div>
-            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div><button id="add-models" class="secondary table-button" type="button" hidden>Add model</button></fieldset>
+            <fieldset id="order-models"><legend>Inference models</legend><div class="choice-list"></div><p class="field-hint">Models come from the imported Hub selection. Use Hub to add or remove one.</p></fieldset>
             <fieldset id="order-region" hidden><legend>Region centre</legend><div class="parameter-grid">
               <div class="field"><label for="order-lon">Longitude (°E)</label><input id="order-lon" type="number" step="any"></div>
               <div class="field"><label for="order-lat">Latitude (°N)</label><input id="order-lat" type="number" step="any"></div>
@@ -553,15 +741,16 @@
           </fieldset>
           <div id="editor-status" role="status" class="muted"></div>
           <div id="editor-error" role="status"></div>
-          <fieldset class="order-action-group"><legend>Draft</legend><div class="form-actions editor-actions">
-            <button id="validate-order" class="secondary" type="button">Validate draft</button>
-            <button id="preflight-order" class="secondary" type="button">Check readiness</button>
-            <button id="save-defaults" data-icon="save" class="primary" type="submit">Save settings</button>
-          </div></fieldset>
           <p id="preflight-status" role="status">Readiness not checked. Every start also runs backend checks.</p><div id="preflight-checks"></div>
           <fieldset class="order-action-group"><legend>Saved order</legend><div class="form-actions editor-actions">
             <button id="start-selected" class="secondary" type="button" disabled>Start new run</button>
             <button id="export-order" class="secondary" type="button" disabled>Export saved YAML</button>
+          </div></fieldset>
+          </div>
+          <fieldset class="order-action-group editor-footer"><legend>Draft</legend><div class="form-actions editor-actions">
+            <button id="validate-order" class="secondary" type="button">Validate draft</button>
+            <button id="preflight-order" class="secondary" type="button">Check readiness</button>
+            <button id="save-defaults" data-icon="save" class="primary" type="submit">Save settings</button>
           </div></fieldset>
         </form>
       </dialog>
@@ -571,27 +760,22 @@
           <h2>Saved orders</h2>
           <span class="heading-note" id="orders-note"></span>
         </div>
-        <label class="field">Show runs for<select id="order-filter"><option value="">All runs</option></select></label>
         <div id="orders-error"></div>
         <div id="orders-docker" hidden></div>
         <div id="orders-action-error"></div>
         <div id="orders-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading orders"></div></div>
-        <div class="orders-table-wrap" id="orders-wrap" hidden tabindex="0">
-          <table class="orders-table">
-            <colgroup><col style="width:22%"><col style="width:18%"><col style="width:11%"><col style="width:11%"><col style="width:7%"><col style="width:12%"><col style="width:19%"></colgroup>
-            <thead><tr><th>Package</th><th>Order</th><th class="optional">Data</th><th class="optional">Models</th><th class="optional">Samples</th><th class="optional">Source</th><th><span class="sr-only">Actions</span></th></tr></thead>
-            <tbody id="orders-body"></tbody>
-          </table>
+        <div id="orders-wrap" hidden>
+          <div id="orders-body" class="order-list"></div>
         </div>
         <div id="orders-empty" hidden></div>
       </section>
 
-      <section class="panel" id="triggers-view" style="margin-top:22px" aria-label="Triggers">
+      <section class="panel" id="triggers-view" aria-label="Triggers">
         <div class="section-heading">
           <h2>Saved triggers</h2><span class="heading-note" id="triggers-note"></span>
           <button class="primary" type="button" id="new-trigger" data-icon="add" disabled>New trigger</button>
         </div>
-        <p id="trigger-no-orders" hidden><a href="#orders">Create a saved order</a> to add a trigger.</p>
+        <p id="trigger-no-orders" hidden><a href="#orders/new">Create a saved order</a> to add a trigger.</p>
         <div id="triggers-error"></div>
         <dialog class="panel editor-dialog trigger-dialog" id="trigger-dialog" aria-labelledby="trigger-form-title">
           <div class="dialog-head"><h3 id="trigger-form-title">New trigger</h3><button id="trigger-close" class="secondary table-button" type="button">Close</button></div>
@@ -654,9 +838,9 @@
       <section class="panel" id="runs" aria-label="Recent runs">
         <div class="section-heading">
           <h2>Recent runs</h2>
-          <span class="heading-note">results open in the diagnostics page</span>
+          <label class="run-filter" for="order-filter">Order <select id="order-filter"><option value="">All runs</option></select></label>
         </div>
-        <div class="form-actions paging"><span id="runs-filter" role="status">All runs</span><button id="all-runs" class="secondary" type="button">Show all runs</button></div>
+        <span class="sr-only" id="runs-filter" role="status">All runs</span>
         <div id="runs-error" role="status"></div>
         <div id="runs-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading runs"></div></div>
         <div class="orders-table-wrap" id="runs-wrap" hidden tabindex="0">
@@ -674,6 +858,7 @@
           <div id="run-detail-error" role="status"></div>
           <div id="run-stage-timeline" class="stage-rail" aria-label="Run stages" hidden></div>
           <div id="run-summary"></div>
+          <details class="run-meta" id="run-meta"><summary>Run details</summary><p id="run-revision"></p></details>
           <button id="repeat-inference" class="secondary" type="button" disabled>Repeat inference</button>
           <p id="repeat-status" role="status"></p>
           <details><summary>Frozen configuration and saved forecasts</summary><pre id="run-config" class="config-output"></pre></details>
@@ -681,7 +866,7 @@
           <p class="muted">Uses this run's saved forecasts. Coverage and layers are in the results viewer.</p>
           <form id="run-diagnostics-form"><div id="run-diagnostics"></div><button id="run-diagnostics-submit" class="primary" type="submit" disabled>Run diagnostics</button></form>
           <div id="run-diagnostics-status" role="status"></div>
-          <h3>Operation history</h3><div id="run-operations"></div>
+          <details class="operation-history" id="run-history"><summary id="run-history-title">Operation history</summary><div id="run-operations"></div></details>
         </section>
       </section>
     </main>
@@ -781,7 +966,8 @@ async function loadStatus() {
     $("handler-health").textContent = "Handler: " + (status.handler_state || "online") + " · Active jobs: " + (status.active_jobs ?? "unknown");
     $("docker-health").textContent = "Docker: " + (dockerReady ? "ready" : "not ready") + (status.docker?.message ? " · " + status.docker.message : "");
     $("status-detail").textContent = dockerReady ? "" : "Start Docker to run inference or diagnostics. Local editing remains available.";
-    $("active-count").textContent = status.active_jobs ?? "?"; $("dash-version").textContent = status.version || "Unknown";
+    const version = status.version || "Unknown";
+    $("active-count").textContent = status.active_jobs ?? "?"; $("dash-version").textContent = version.startsWith("dev-") ? "Development build" : version; $("dash-version").title = version;
     $("dash-docker").textContent = dockerReady ? "Ready" : "Not ready";
     $("runtime-identity").textContent = "Version " + status.version + " · " + location.origin + " · Config: " + status.config_file;
     if (currentPage === "settings") {
@@ -836,6 +1022,12 @@ async function loadOrders() {
   loading.hidden = true;
   paintOrders(); paintTriggerOrderOptions();
 }
+function orderMeta(label, value) {
+  const item = el("span");
+  item.className = "order-meta-item";
+  item.append(el("span", label), document.createTextNode(" " + (value || "—")));
+  return item;
+}
 function paintOrders() {
   const ids = new Set(ordersCache.map(order => order.order_id || order.package_id).filter(Boolean));
   if (runOrderFilter) ids.add(runOrderFilter);
@@ -848,21 +1040,37 @@ function paintOrders() {
   note("orders-note", ordersCache.length + (ordersCache.length === 1 ? " order" : " orders"));
   const rows = [];
   for (const order of ordersCache) {
-    const row = document.createElement("tr");
+    const card = el("article");
+    card.className = "order-card";
+    if (order.error) card.classList.add("order-card--error");
+    const main = el("div"); main.className = "order-main";
+    const titleRow = el("div"); titleRow.className = "order-title-row";
+    const title = el("strong", order.package_id || order.order_id || "Order");
+    title.title = order.package_id || order.order_id || "";
+    titleRow.append(title, sourceTag(order));
     if (order.error) {
-      const actions = el("div"); actions.className = "cell-actions";
       const badge = el("span", "cannot start"); badge.className = "badge badge--danger";
-      actions.append(badge, el("span", order.error));
-      const history = el("button", "View history"); history.type = "button"; history.className = "secondary table-button";
-      history.addEventListener("click", () => filterRuns(order.order_id || order.package_id)); actions.append(history);
-      row.append(
-        cell(order.package_id, "identity"),
-        cell("", "cell-code optional"), cell("", "cell-code optional"), cell("", "optional"), cell("", "numeric optional"),
-        cell(sourceTag(order), "optional"),
-        cell(actions, "actions-cell")
-      );
+      titleRow.append(badge);
+    }
+    main.append(titleRow);
+    const meta = el("div"); meta.className = "order-meta";
+    if (order.error) {
+      meta.append(orderMeta("Order", order.order_id || order.package_id));
     } else {
-      const actions = el("div"); actions.className = "cell-actions";
+      meta.append(
+        orderMeta("Data", [order.data_id, order.event_id].filter(Boolean).join(" · ")),
+        orderMeta("Models", (order.models || []).join(", ") || "none"),
+        orderMeta("Samples", order.samples)
+      );
+    }
+    main.append(meta);
+    if (order.error) { const message = el("p", order.error); message.className = "order-error-copy"; main.append(message); }
+    const actions = el("div"); actions.className = "order-actions";
+    if (order.error) {
+      const history = el("button", "View history"); history.type = "button"; history.className = "secondary table-button";
+      history.addEventListener("click", () => filterRuns(order.order_id || order.package_id, true));
+      actions.append(history);
+    } else {
       const open = el("button", order.read_only ? "View history" : "Settings"); open.className = "secondary table-button"; open.type = "button";
       open.addEventListener("click", () => openOrder(order));
       actions.append(open);
@@ -873,17 +1081,9 @@ function paintOrders() {
         trigger.onclick = () => { location.hash = "#triggers"; openTriggerForm(order.package_id); };
         actions.append(start, trigger);
       }
-      row.append(
-        cell(identityCode(order.package_id), "cell-code identity"),
-        cell(identityCode(order.order_id), "cell-code identity"),
-        cell([order.data_id, order.event_id].filter(Boolean).map(code), "cell-code optional"),
-        cell((order.models || []).join(", "), "optional"),
-        cell(order.samples, "numeric optional"),
-        cell(sourceTag(order), "optional"),
-        cell(actions, "actions-cell")
-      );
     }
-    rows.push(row);
+    card.append(main, actions);
+    rows.push(card);
   }
   paint("orders-body", "orders-wrap", "orders-empty", rows, emptyOrdersBlock());
 }
@@ -937,15 +1137,18 @@ async function loadRuns() {
         const actions = el("div"); actions.className = "cell-actions";
         const report = reportEntry(run);
         if (report) {
-          const link = el("a", "Open results");
+          const link = el("a", "Results");
           link.className = "row-link";
           link.href = "/v1/runs/" + encodeURIComponent(run.id) + "/files/" + report.split("/").map(encodeURIComponent).join("/");
-          link.target = "_blank"; link.rel = "noopener";
+          link.target = "_blank"; link.rel = "noopener"; link.title = "Run report: metrics, coverage and data arrival";
           link.append(icon(ARROW));
           actions.append(link);
         }
-        const inspect = el("button", "Details / diagnostics"); inspect.type = "button"; inspect.className = "secondary table-button";
-        inspect.addEventListener("click", () => openRun(run.id)); actions.append(inspect);
+        const inspect = el("a", "Details"); inspect.className = "secondary table-button";
+        inspect.href = "#orders/run/" + encodeURIComponent(run.id);
+        inspect.addEventListener("click", () => { if (location.hash === inspect.hash) $("run-title").focus(); });
+        inspect.title = "Frozen configuration, diagnostics and operation history";
+        actions.append(inspect);
         const toggle = el("button", openLogId === run.id ? "Hide log" : "Log");
         toggle.dataset.logToggle = "true";
         toggle.type = "button";
@@ -1176,7 +1379,7 @@ async function startOrder(order, button) {
     startAttempts.delete(attemptId);
     if ($("order-editor").open) $("order-editor").close();
     await filterRuns(id);
-    if (result.id || result.job?.id) await openRun(result.id || result.job.id);
+    if (result.id || result.job?.id) location.hash = "#orders/run/" + encodeURIComponent(result.id || result.job.id);
     await loadOrders();
   } catch (cause) {
     showActionError("Could not start " + id + ": " + cause.message + " Retry uses the same submission key; reload the order if its revision changed.");
@@ -1247,7 +1450,6 @@ const $ = id => document.getElementById(id);
 const jsonRequest = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 let orderOptions = null;
 let selectedOrder = null;
-let modelsExpanded = false;
 let editorDirty = false;
 let editorBusy = false;
 let editorGeneration = 0;
@@ -1256,6 +1458,7 @@ let runOrderFilter = "";
 const runPageSize = 50;
 let runsGeneration = 0;
 let selectedRunId = null;
+let runInFlight = false;
 let diagnosticsRunId = null;
 let diagnosticsModels = [];
 function storedDiagnostics(id) {
@@ -1512,8 +1715,15 @@ function diagnosticFields(holderId, prefix, models, config, data) {
     if (kind === "verification") {
       const metrics = el("fieldset"); metrics.append(el("legend", "Metrics"));
       const methodList = el("div"); methodList.className = "choice-list";
-      choices(methodList, prefix + "-methods", orderOptions.methods, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
-      metrics.append(methodList); fields.append(metrics);
+      const methodOptions = (orderOptions.methods || []).map(id => ({ id, name: String(id).toUpperCase() }));
+      choices(methodList, prefix + "-methods", methodOptions, config.verification?.methods?.length ? config.verification.methods : ["mae"]);
+      const methodActions = el("div"); methodActions.className = "choice-actions";
+      for (const [label, value] of [["Select all", true], ["Clear", false]]) {
+        const button = el("button", label); button.type = "button"; button.className = "secondary table-button";
+        button.addEventListener("click", () => { for (const box of methodList.querySelectorAll("input")) box.checked = value; });
+        methodActions.append(button);
+      }
+      metrics.append(methodList, methodActions); fields.append(metrics);
       const grid = el("div"); grid.className = "parameter-grid";
       const levelMin = data?.verification ? Number(data.verification.level_min) : 0;
       const levelMax = data?.verification ? Number(data.verification.level_max) : 75;
@@ -1576,15 +1786,12 @@ function renderInferenceModels(order) {
   const selected = order.models || [];
   const available = data.models || [];
   const known = selected.filter(id => available.some(item => item.id === id));
-  const visible = selected.length && known.length && !modelsExpanded ? available.filter(item => selected.includes(item.id)) : available;
+  const visible = selected.length && known.length ? available.filter(item => selected.includes(item.id)) : available;
   choices($("order-models").querySelector(".choice-list"), "inference-models", visible, selected);
-  const add = $("add-models");
-  if (add) add.hidden = !selected.length || modelsExpanded || visible.length >= available.length;
 }
 function populateDataFields(order) {
   const data = orderOptions.data.find(item => item.id === $("order-data").value);
   if (!data) throw new Error("This data source is not available locally.");
-  modelsExpanded = false;
   renderInferenceModels(order);
   $("order-region").hidden = !data.region;
   for (const axis of ["lon", "lat"]) {
@@ -1618,12 +1825,14 @@ function syncDiagnosticModels() {
   }
 }
 function showOrder(detail, draft) {
-  selectedOrder = detail; editorDirty = false; editorGeneration++; modelsExpanded = false;
+  selectedOrder = detail; editorDirty = false; editorGeneration++;
   invalidatePreflight();
   const order = draft || detail?.order || { data_id: orderOptions.data[0]?.id, models: [] };
   if (!$("order-editor").open) $("order-editor").showModal();
   $("editor-title").textContent = detail ? "Order settings · " + order.order_id : draft?.order_id ? "Imported draft · " + order.order_id : "Create an order";
-  $("editor-revision").textContent = detail?.revision ? "Revision " + detail.revision : "Not saved";
+  const revision = detail?.revision || "";
+  $("editor-revision").textContent = revision ? "Revision " + revision.slice(0, 12) + "…" : "Not saved";
+  $("editor-revision").title = revision;
   $("order-id").value = order.order_id || ""; $("order-id").readOnly = Boolean(detail);
   $("order-data").value = order.data_id;
   const lockedData = Boolean(detail || draft);
@@ -1639,7 +1848,7 @@ function showOrder(detail, draft) {
 async function openOrder(summary) {
   if (!discardDraft()) return;
   const generation = ++editorGeneration;
-  await filterRuns(summary.order_id || summary.package_id);
+  await filterRuns(summary.order_id || summary.package_id, summary.read_only || summary.source !== "saved");
   if (generation !== editorGeneration) return;
   if (summary.read_only || summary.source !== "saved") {
     selectedOrder = null; editorDirty = false; if ($("order-editor").open) $("order-editor").close();
@@ -1713,17 +1922,20 @@ async function filterRuns(orderId, reveal = false) {
   runOrderFilter = orderId || ""; runOffset = 0; paintOrders();
   $("runs-filter").textContent = runOrderFilter ? "Order: " + runOrderFilter : "All runs";
   await loadRuns();
-  if (reveal) $("runs").scrollIntoView({ block: "start", behavior: "smooth" });
+  if (reveal) $("order-filter").focus();
 }
 async function openRun(id) {
   if (diagnosticsBusy) return;
   selectedRunId = id; diagnosticsRunId = null;
   $("run-inspector").hidden = false; $("run-title").textContent = "Run · " + id;
+  $("run-meta").open = $("run-history").open = false; $("run-revision").textContent = "";
+  $("run-history-title").textContent = "Operation history";
   $("run-summary").replaceChildren(); $("run-config").textContent = "Loading frozen configuration…";
   $("run-operations").replaceChildren(); $("run-diagnostics").replaceChildren(); $("run-diagnostics-status").replaceChildren(); $("run-stage-timeline").hidden = true; $("run-stage-timeline").replaceChildren();
-  $("run-diagnostics-submit").disabled = true;
+  $("run-diagnostics-submit").disabled = $("repeat-inference").disabled = true;
+  $("run-detail-error").replaceChildren();
   await loadRunDetail(id);
-  $("run-title").focus();
+  if (id === selectedRunId && currentPage === "orders") $("run-title").focus();
 }
 function runFlag(label, value) {
   const state = String(value || "not requested");
@@ -1740,6 +1952,7 @@ async function loadRunDetail(id) {
   try {
     const run = await api("/v1/runs/" + encodeURIComponent(id));
     if (id !== selectedRunId) return;
+    runInFlight = ["queued", "running"].includes(run.status) || ["queued", "running"].includes(run.operation?.status);
     $("run-detail-error").replaceChildren();
     const summary = $("run-summary"); summary.replaceChildren();
     const overview = el("div"); overview.className = "run-overview";
@@ -1748,24 +1961,20 @@ async function loadRunDetail(id) {
     flags.append(runFlag("Inference", run.inference_status || run.status), runFlag("Diagnostics", run.diagnostics_status || "not requested"));
     overview.append(flags);
     const report = reportEntry(run);
-    if (report) { const link = el("a", "Results & Coverage"); link.className = "secondary table-button run-report"; link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; link.title = "Forecast metrics, coverage and data-arrival completeness"; overview.append(link); }
+    if (report) { const link = el("a", "Results"); link.className = "secondary table-button run-report"; link.href = "/v1/runs/" + encodeURIComponent(id) + "/files/" + report.split("/").map(encodeURIComponent).join("/"); link.target = "_blank"; link.rel = "noopener"; link.title = "Forecast metrics, coverage and data-arrival completeness"; overview.append(link); }
     summary.append(overview);
     if (run.job?.error) summary.append(noteBlock(run.job.error));
     const runChecks = el("div"); summary.append(runChecks);
     renderRunStages(run);
     renderChecks(runChecks, run.job?.preflight || [], true);
-    const meta = el("details"); meta.className = "run-meta";
-    meta.append(el("summary", "Run details"), el("p", "Revision: " + (run.revision || "legacy history")));
-    summary.append(meta);
+    $("run-revision").textContent = "Revision: " + (run.revision || "legacy history");
     $("repeat-inference").disabled = !run.order || repeatBusy || ["queued", "running"].includes(run.status);
     $("run-config").textContent = JSON.stringify({ order: run.order || null, request: run.job?.request, execution_context: run.job?.execution_context, revision: run.revision, forecasts: run.forecasts, samples: run.samples }, null, 2);
     const operations = run.operations?.length ? run.operations : run.operation ? [run.operation] : [];
     const list = el("ol");
     for (const operation of operations) { const item = el("li"); item.append(statusBadge(operation.status), el("pre", JSON.stringify(operation, null, 2))); item.lastChild.className = "config-output"; list.append(item); }
-    const history = el("details"); history.className = "operation-history";
-    history.append(el("summary", operations.length ? "Operation history · " + operations.length : "Operation history"));
-    history.append(operations.length ? list : el("p", "No diagnostic operations recorded."));
-    $("run-operations").replaceChildren(history);
+    $("run-history-title").textContent = operations.length ? "Operation history · " + operations.length : "Operation history";
+    $("run-operations").replaceChildren(operations.length ? list : el("p", "No diagnostic operations recorded."));
     const models = Object.keys(run.forecasts || {});
     diagnosticsModels = models;
     const savedDiagnostics = storedDiagnostics(id);
@@ -1901,8 +2110,8 @@ function triggerRow(trigger) {
   edit.onclick = () => openTriggerForm(trigger.package_id, trigger);
   actions.append(edit, toggle, fire);
   if (trigger.last_run_id) {
-    const run = el("button", "View last run"); run.className = "secondary table-button"; run.type = "button";
-    run.onclick = async () => { location.hash = "#orders"; await filterRuns(trigger.package_id); await openRun(trigger.last_run_id); };
+    const run = el("a", "View last run"); run.className = "secondary table-button";
+    run.href = "#orders/run/" + encodeURIComponent(trigger.last_run_id);
     actions.append(run);
   }
   remove.className = "delete-trigger table-button";
@@ -2137,6 +2346,22 @@ function renderRunStages(run) {
   }
   const now = el("p", finished ? "All stages complete." : (failed ? "Run stopped at " + humanStage(stage) + "." : "Current: " + humanStage(stage)));
   now.className = "stage-now"; holder.append(now);
+  const models = run.order?.models || Object.keys(run.forecasts || {});
+  if (models.length > 1) {
+    const sequence = el("ol"); sequence.className = "model-sequence";
+    for (const [index, model] of models.entries()) {
+      const done = Boolean(run.forecasts?.[model]);
+      const current = !finished && (stage === model || stage.endsWith("-" + model));
+      const currentIndex = models.findIndex(item => stage === item || stage.endsWith("-" + item));
+      const allModelsDone = finished || stage === "diagnostics";
+      const state = done || allModelsDone || currentIndex > index ? "done" : failed && current ? "failed" : current ? "active" : "pending";
+      const item = el("li"); item.className = "model-step model-step--" + state;
+      const name = el("span", (index + 1) + ". " + model); name.className = "model-step-name";
+      const meta = el("span", { done: "done", active: "running", failed: "failed", pending: "waiting" }[state]); meta.className = "model-step-meta";
+      item.append(name, meta); sequence.append(item);
+    }
+    holder.append(sequence);
+  }
 }
 function checkLabel(id) {
   const parts = String(id || "").split(":");
@@ -2338,7 +2563,7 @@ async function loadSettings() {
     else panels.append(el("p", "No datasets available."));
     settingsCache = config; $("image-source").value = config.image_source || "auto";
     $("image-override").value = config.image_override || ""; previewImagePriority();
-    imageSettingsDirty = dataSettingsDirty = false; invalidatePreflight();
+    imageSettingsDirty = dataSettingsDirty = false; invalidatePreflight(); $("image-settings-status").textContent = "";
     $("settings-status").textContent = "Settings loaded from this Handler.";
   } catch (cause) { $("settings-status").textContent = "Could not load settings: " + cause.message; }
   finally { settingsBusy = false; $("image-settings-fields").disabled = $("data-settings-fields").disabled = !settingsCache; }
@@ -2348,8 +2573,8 @@ async function saveImageSettings() {
   settingsBusy = true; $("image-settings-fields").disabled = true;
   try {
     await api("/v1/settings", jsonRequest("PATCH", {image_source: $("image-source").value, image_override: $("image-override").value.trim()}));
-    imageSettingsDirty = false; invalidatePreflight(); $("settings-status").textContent = "Image settings saved.";
-  } catch (cause) { $("settings-status").textContent = "Save failed: " + cause.message + " Your edits are retained."; }
+    imageSettingsDirty = false; invalidatePreflight(); $("image-settings-status").textContent = "Image settings saved.";
+  } catch (cause) { $("image-settings-status").textContent = "Save failed: " + cause.message + " Your edits are retained."; }
   finally { settingsBusy = false; $("image-settings-fields").disabled = false; }
 }
 async function controlHandler(action) {
@@ -2387,20 +2612,26 @@ async function repeatInference() {
     repeatAttempts.delete(id);
     $("repeat-status").textContent = "New inference submitted. Backend readiness checks run automatically.";
     await loadRuns();
-    if (result.id || result.job?.id) await openRun(result.id || result.job.id);
+    if (result.id || result.job?.id) location.hash = "#orders/run/" + encodeURIComponent(result.id || result.job.id);
   } catch (cause) { $("repeat-status").textContent = "Repeat failed: " + cause.message + " Inspect Runs before retrying: a lost response may still have created a run."; }
   finally { repeatBusy = false; if (selectedRunId) await loadRunDetail(selectedRunId); }
 }
-let currentPage = "", pendingPage = "";
+let currentPage = "", pendingPage = "", landing = "";
 async function loadDashboard() {
   try {
     const overview = await api("/v1/dashboard", {signal:AbortSignal.timeout(8000)});
     for (const [id, runs, empty] of [["dash-running", overview.active, "No active tasks."], ["dash-outcomes", overview.recent, "No recent outcomes."]]) {
       const rows = runs.map(run => {
-        const li = el("li"), link = el("a", run.order_id || run.id); link.href = "#orders";
-        link.onclick = () => openRun(run.id); li.append(link, statusBadge(run.status)); return li;
+        const li = el("li"), body = el("div"), link = el("a", run.order_id || run.id);
+        link.href = "#orders/run/" + encodeURIComponent(run.id);
+        body.className = "activity-main";
+        body.append(link);
+        const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(run.id);
+        if (match) { const meta = el("span", match[1] + "-" + match[2] + "-" + match[3] + " " + match[4] + ":" + match[5] + " UTC"); meta.className = "activity-meta"; body.append(meta); }
+        li.append(body, statusBadge(run.status)); return li;
       });
-      $(id).replaceChildren(...(rows.length ? rows : [el("li", empty)]));
+      if (!rows.length) { const item = el("li", empty); item.className = "activity-empty"; rows.push(item); }
+      $(id).replaceChildren(...rows);
     }
     const hasRuns = overview.active.length > 0 || overview.recent.length > 0;
     $("dashboard-activity").hidden = !hasRuns; $("first-run").hidden = hasRuns; $("dashboard-error").replaceChildren();
@@ -2421,11 +2652,34 @@ async function refresh() {
       if (page === "triggers") tasks.push(loadOrders(),loadTriggers());
     }
     await Promise.allSettled(tasks); updateDockerNotice();
+    if (page === currentPage && landing && landing === location.hash && !pendingPage) {
+      const target = landing;
+      landing = "";
+      if (target === "#settings/datasets") {
+        (document.querySelector('#dataset-list button[aria-pressed="true"]') || $("data-settings-title")).focus();
+      } else if (target === "#orders/new" || target === "#triggers/new") {
+        history.replaceState(null, "", "#" + page);
+        const button = $(page === "orders" ? "new-order" : "new-trigger");
+        if (!button.disabled) { button.focus(); button.click(); }
+        else if (page === "triggers") $("trigger-no-orders").querySelector("a").focus();
+      } else if (/^#orders\/run\/[a-zA-Z0-9_-]+$/.test(target)) {
+        await openRun(target.slice("#orders/run/".length));
+      }
+    }
   } finally { refreshing = false; if (pendingPage) { pendingPage = ""; refresh(); } }
 }
 function route() {
   const names = {dashboard:"Dashboard", settings:"Settings", orders:"Orders", triggers:"Triggers"};
-  const hash = location.hash.slice(1); currentPage = Object.hasOwn(names,hash) ? hash : "dashboard";
+  const [page] = location.hash.slice(1).split("/");
+  const nextPage = Object.hasOwn(names, page) ? page : "dashboard";
+  if (currentPage !== nextPage) {
+    if ($("order-editor").open) $("order-editor").close();
+    if (currentPage === "triggers" && $("trigger-dialog").open) closeTriggerForm();
+  }
+  currentPage = nextPage;
+  landing = location.hash.includes("/") ? location.hash : "";
+  selectedRunId = null;
+  $("run-inspector").hidden = true;
   document.body.dataset.page = currentPage; $("page-title").textContent = names[currentPage]; document.title = names[currentPage] + " | NiB local console";
   for (const link of document.querySelectorAll("nav a")) { const active = link.hash === "#" + currentPage; link.classList.toggle("nav-item--active", active); if (active) link.setAttribute("aria-current","page"); else link.removeAttribute("aria-current"); }
   window.scrollTo(0,0); $("page-title").focus({preventScroll:true}); refresh();
@@ -2466,22 +2720,12 @@ $("order-form").addEventListener("input", markOrderDirty);
 $("order-form").addEventListener("change", markOrderDirty);
 $("order-form").addEventListener("submit", event => { event.preventDefault(); submitOrder(false); });
 $("order-data").addEventListener("change", () => { populateDataFields({}); markOrderDirty(); });
-$("add-models").addEventListener("click", () => {
-  const data = orderOptions?.data.find(item => item.id === $("order-data").value);
-  if (!data) return;
-  const selected = checked("inference-models");
-  modelsExpanded = true;
-  choices($("order-models").querySelector(".choice-list"), "inference-models", data.models, selected);
-  $("add-models").hidden = true;
-  syncDiagnosticModels();
-});
 $("order-event").addEventListener("change", () => { const dataId = $("order-data").value, eventId = $("order-event").value; if (dataId && eventId) void loadSampleDay(dataId, eventId, new Set()); markOrderDirty(); });
 $("order-models").addEventListener("change", syncDiagnosticModels);
 $("validate-order").addEventListener("click", () => submitOrder(true));
 $("export-order").addEventListener("click", exportOrder);
 $("start-selected").addEventListener("click", event => { if (selectedOrder) startOrder(selectedOrder, event.currentTarget); });
-$("order-filter").addEventListener("change", event => filterRuns(event.target.value, true));
-$("all-runs").addEventListener("click", () => filterRuns(""));
+$("order-filter").addEventListener("change", event => filterRuns(event.target.value));
 $("runs-prev").addEventListener("click", () => { runOffset = Math.max(0, runOffset - runPageSize); loadRuns(); });
 $("runs-next").addEventListener("click", () => { runOffset += runPageSize; loadRuns(); });
 $("run-diagnostics-form").addEventListener("submit", event => { event.preventDefault(); submitDiagnostics(); });
@@ -2490,7 +2734,7 @@ $("preflight-order").addEventListener("click", checkReadiness);
 $("restart-handler").addEventListener("click", () => controlHandler("restart"));
 $("stop-handler").addEventListener("click", () => controlHandler("stop"));
 $("reload-settings").addEventListener("click", loadSettings);
-$("image-settings-form").addEventListener("input", () => { imageSettingsDirty = true; previewImagePriority(); invalidatePreflight(); $("settings-status").textContent = "Unsaved image settings."; });
+$("image-settings-form").addEventListener("input", () => { imageSettingsDirty = true; previewImagePriority(); invalidatePreflight(); $("image-settings-status").textContent = "Unsaved image settings."; });
 $("image-settings-form").addEventListener("submit", event => { event.preventDefault(); saveImageSettings(); });
 $("repeat-inference").addEventListener("click", repeatInference);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
@@ -2504,7 +2748,8 @@ function decorateButtons(root) {
   }
 }
 decorateButtons(document); route();
-setInterval(() => { if (!document.hidden && (currentPage === "dashboard" || lifecycle === "restarting" || (currentPage === "orders" && selectedRunId))) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && currentPage === "orders" && selectedRunId && runInFlight) void loadRunDetail(selectedRunId); }, 3000);
+setInterval(() => { if (!document.hidden && (currentPage === "dashboard" || lifecycle === "restarting" || (currentPage === "orders" && selectedRunId && !runInFlight))) refresh(); }, 15000);
 </script>
 </body>
 </html>

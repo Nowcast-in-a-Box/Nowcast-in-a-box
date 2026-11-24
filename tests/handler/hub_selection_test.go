@@ -56,6 +56,22 @@ func TestImportHubSelection(t *testing.T) {
 	if cmaOrder.SchemaVersion != "nib.order.v1" || cmaOrder.DataID != "cma_radar" || !reflect.DeepEqual(cmaOrder.Models, []string{"nowcastnet"}) || cmaOrder.Verification == nil || len(cmaOrder.Verification.Methods) == 0 || !reflect.DeepEqual(cmaOrder.Verification.Models, cmaOrder.Models) || cmaOrder.Visualization == nil || !reflect.DeepEqual(cmaOrder.Visualization.Models, cmaOrder.Models) {
 		t.Fatalf("unexpected CMA draft: %+v", cmaOrder)
 	}
+	wadepreRaw, err := os.ReadFile(filepath.Join("fixtures", "hub-cma-wadepre-selection-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w = post(string(wadepreRaw), s.Token)
+	if w.Code != 200 {
+		t.Fatalf("CMA WADEPre import: %d %s", w.Code, w.Body.String())
+	}
+	var wadepreResponse struct{ Order handler.Order }
+	if err := json.Unmarshal(w.Body.Bytes(), &wadepreResponse); err != nil {
+		t.Fatal(err)
+	}
+	wadepreOrder := wadepreResponse.Order
+	if !reflect.DeepEqual(wadepreOrder.Models, []string{"nowcastnet", "wadepre"}) || wadepreOrder.Verification != nil || wadepreOrder.Visualization != nil {
+		t.Fatalf("unexpected CMA WADEPre draft: %+v", wadepreOrder)
+	}
 	for name, body := range map[string]string{"unknown schema": strings.Replace(fixture, "nib-hub-selection-v1", "v3", 1), "unknown version": strings.Replace(fixture, `"v2"`, `"v9"`, 1), "mixed versions": strings.Replace(fixture, `"v2"`, `"v1"`, 1), "path": strings.Replace(fixture, "catalog/configuration/sevir-vil-configuration/v1.json", "../untrusted", 1), "config identity": strings.Replace(fixture, "sevir-vil-configuration", "other", 1), "unknown field": strings.Replace(fixture, `"items":`, `"command":"run", "items":`, 1), "duplicate key": strings.Replace(fixture, `"schema_version":`, `"schema_version":"bad", "schema_version":`, 1), "trailing document": fixture + "{}"} {
 		t.Run(name, func(t *testing.T) {
 			if w := post(body, s.Token); w.Code != 400 {
