@@ -14,7 +14,7 @@ container:
   build:
     context: "."
     dockerfile: adapters/cma_radar/pysteps_lk/Dockerfile
-  command: ["--run", "/run", "--algorithm-manifest", "/opt/nib/pysteps/algorithm-manifest.json"]
+  command: ["--run", "/run", "--weights", "/opt/nib/pysteps/algorithm-manifest.json"]
   mounts:
     - name: run
       target: /run

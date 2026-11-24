@@ -28,7 +28,7 @@ CMA CREF history (dBZ)
 adapters/cma_radar/pysteps_lk/
   Dockerfile                 # Python and pySTEPS runtime
   requirements.txt
-  run.py                     # reads /run and writes forecasts
+  model_run.py               # standard entrypoint from adapters/model_runner.py
   model.py                   # LK optical flow and extrapolation
   adapter.py                 # run/NPZ hand-off
   runtime.yaml               # Handler resource declaration
@@ -62,7 +62,7 @@ Replace `--data-dir` with the actual CMA CREF directory when necessary:
 ## 3. Create a local NiB run
 
 Until the final Handler/Data Adapter orchestration is wired, this command
-creates the same run structure locally:
+This command creates the same run structure locally for standalone checks:
 
 ```powershell
 New-Item -ItemType Directory -Force .\runs | Out-Null
@@ -92,7 +92,7 @@ docker run --rm --network none --read-only --tmpfs /tmp `
   -v "${PWD}\runs\pysteps-cma-20240705-0000:/run" `
   nib-pysteps-lk:cma-1 `
   --run /run `
-  --algorithm-manifest /opt/nib/pysteps/algorithm-manifest.json
+  --weights /opt/nib/pysteps/algorithm-manifest.json
 ```
 
 The container writes:
@@ -115,7 +115,9 @@ forecast and observation panels.
 
 ## Handler integration status
 
-The model already follows the `/run` input/output contract. In the final
-workflow, the CMA Data Adapter should create `context.npz` and Handler should
-launch the image declared in `runtime.yaml`; the local preparation script is a
-reproducible stand-in until that orchestration is connected.
+The model is registered in Atlas as `pysteps-lk-cma` v2 and
+`atlas/runtime/products-v2.json` maps that product to `cma_radar/pysteps_lk`.
+The image carries `atlas/contracts/models/cma_radar/pysteps_lk.json` and uses
+the standard model entrypoint, so Handler can select the product and launch the
+image declared in `runtime.yaml`. The local preparation script remains a
+reproducible offline check.

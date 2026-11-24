@@ -6,9 +6,10 @@ weights and does not turn CREF into rainfall rate.
 
 ## Runtime contract
 
-The Handler mounts one run directory at `/run`.  The entrypoint reads
-`/run/inputs/context.npz`, requires finite `CREF` values in `dBZ`, estimates
-Lucas-Kanade motion from the latest three frames, and writes twenty forecasts
+The Handler mounts one run directory at `/run`.  The standard model entrypoint
+reads the run manifest and `/run/inputs/context.npz`, requires finite `CREF`
+values in `dBZ`, estimates Lucas-Kanade motion from the latest three frames, and
+writes twenty forecasts at 6-minute spacing to `/run/forecasts/pysteps_lk/fields.npz`.
 at 6-minute spacing to `/run/forecasts/pysteps_lk/fields.npz`.
 
 `algorithm-manifest.json` records the pinned pySTEPS version and algorithm
@@ -73,7 +74,7 @@ docker run --rm --network none --read-only --tmpfs /tmp `
   -v "${PWD}\runs\pysteps-cma-20240705-0000:/run" `
   nib-pysteps-lk:cma-1 `
   --run /run `
-  --algorithm-manifest /opt/nib/pysteps/algorithm-manifest.json
+  --weights /opt/nib/pysteps/algorithm-manifest.json
 ```
 
 On success the same `manifest.json` gains a `forecasts.pysteps_lk` record and
