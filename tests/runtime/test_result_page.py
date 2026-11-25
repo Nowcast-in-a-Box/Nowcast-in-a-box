@@ -204,6 +204,7 @@ def test_map_only_attempt_is_visible_and_supports_byte_ranges(tmp_path):
     with TestClient(build_app(run)) as client:
         case = client.get("/visualization").json()["models"][0]["cases"][0]
         assert case["images"] == []
+        assert [source["id"] for source in case["sources"]] == ["forecast"]
         assert client.get(case["viewer_url"]).json()["viewer_bundle_version"] == 1
         url = case["viewer_url"].replace("viewer.json", "weather/frame-0000.tif")
         response = client.get(url, headers={"Range": "bytes=0-1023"})

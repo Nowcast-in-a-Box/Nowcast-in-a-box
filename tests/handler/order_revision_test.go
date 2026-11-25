@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler"
 )
@@ -175,5 +176,122 @@ func TestRunFreezesOrderBeforeSavedOrderIsEdited(t *testing.T) {
 	newJob := waitJob(t, server, next["id"].(string), "succeeded")
 	if newJob.Request.OrderRevision != updated["revision"] || newJob.Request.OrderRevision == revision {
 		t.Fatalf("new run used stale content: %+v", newJob.Request)
+	}
+}
+
+func TestDeleteSavedOrderRemovesYAMLOnly(t *testing.T) {
+	cfg := consoleConfig(t)
+	server := handler.NewServer(cfg)
+	server.Runner = forbiddenOrderRunner{t}
+	deleted := orderFixture()
+	deleted.OrderID = "delete-order"
+	out, _ := triggerDo(t, server, "POST", "/v1/orders", map[string]any{"order": deleted})
+	if out.Code != 201 {
+		t.Fatal(out.Body.String())
+	}
+	path := filepath.Join(cfg.Paths.Orders, "delete-order.yaml")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = triggerDo(t, server, "DELETE", "/v1/orders/delete-order", nil)
+	if out.Code != 204 {
+		t.Fatalf("delete: %d %s", out.Code, out.Body.String())
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("saved YAML still exists: %v", err)
+	}
+	out, _ = triggerDo(t, server, "GET", "/v1/orders/delete-order", nil)
+	if out.Code != 404 {
+		t.Fatalf("deleted order still readable: %d", out.Code)
+	}
+	out, _ = triggerDo(t, server, "DELETE", "/v1/orders/delete-order", nil)
+	if out.Code != 404 {
+		t.Fatalf("second delete: %d", out.Code)
+	}
+}
+
+func TestSavedOrdersSortNewestAndKeepCreationTime(t *testing.T) {
+	cfg := consoleConfig(t)
+	server := handler.NewServer(cfg)
+	server.Runner = forbiddenOrderRunner{t}
+	for id, created := range map[string]string{
+		"older-order": "2025-01-01T00:00:00Z",
+		"newer-order": "2025-01-02T00:00:00Z",
+	} {
+		order := orderFixture()
+		order.OrderID = id
+		out, _ := triggerDo(t, server, "POST", "/v1/orders", map[string]any{"order": order})
+		if out.Code != 201 {
+			t.Fatalf("save %s: %d %s", id, out.Code, out.Body.String())
+		}
+		path := filepath.Join(cfg.Paths.Orders, id+".yaml")
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, append([]byte("# nib-handler-created-at: "+created+"\n"), raw...), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, list := triggerDo(t, server, "GET", "/v1/orders", nil)
+	orders := list["orders"].([]any)
+	if out.Code != 200 || len(orders) != 2 || orders[0].(map[string]any)["order_id"] != "newer-order" {
+		t.Fatalf("saved orders not newest-first: %d %#v", out.Code, orders)
+	}
+	newest := orders[0].(map[string]any)
+	created := newest["created_at"].(string)
+	order := orderFixture()
+	order.OrderID = "newer-order"
+	out, _ = triggerDo(t, server, "PATCH", "/v1/orders/newer-order", map[string]any{"order": order, "revision": newest["revision"]})
+	if out.Code != 200 {
+		t.Fatalf("patch saved order: %d %s", out.Code, out.Body.String())
+	}
+	raw, err := os.ReadFile(filepath.Join(cfg.Paths.Orders, "newer-order.yaml"))
+	if err != nil || !bytes.Contains(raw, []byte("nib-handler-created-at: "+created)) {
+		t.Fatalf("patch changed creation time %s: %v", created, err)
+	}
+	out, _ = triggerDo(t, server, "GET", "/v1/orders/newer-order?download=1", nil)
+	if out.Code != 200 || bytes.Contains(out.Body.Bytes(), []byte("nib-handler-created-at")) {
+		t.Fatalf("download includes local metadata: %d %s", out.Code, out.Body.String())
+	}
+}
+
+func TestLegacyOrderKeepsFileTimeWhenFirstEdited(t *testing.T) {
+	cfg := consoleConfig(t)
+	server := handler.NewServer(cfg)
+	server.Runner = forbiddenOrderRunner{t}
+	order := orderFixture()
+	out, _ := triggerDo(t, server, "POST", "/v1/orders", map[string]any{"order": order})
+	if out.Code != 201 {
+		t.Fatal(out.Body.String())
+	}
+	path := filepath.Join(cfg.Paths.Orders, order.OrderID+".yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, bytes.SplitN(raw, []byte("\n"), 2)[1], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	created := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(path, created, created); err != nil {
+		t.Fatal(err)
+	}
+	out, listing := triggerDo(t, server, "GET", "/v1/orders", nil)
+	if out.Code != 200 {
+		t.Fatal(out.Body.String())
+	}
+	items := listing["orders"].([]any)
+	original := items[0].(map[string]any)
+	if original["created_at"] != created.Format(time.RFC3339Nano) {
+		t.Fatalf("legacy order creation time: %#v", original["created_at"])
+	}
+	out, _ = triggerDo(t, server, "PATCH", "/v1/orders/"+order.OrderID, map[string]any{"order": order, "revision": original["revision"]})
+	if out.Code != 200 {
+		t.Fatalf("patch legacy order: %d %s", out.Code, out.Body.String())
+	}
+	raw, err = os.ReadFile(path)
+	if err != nil || !bytes.Contains(raw, []byte("nib-handler-created-at: "+created.Format(time.RFC3339Nano))) {
+		t.Fatalf("first edit did not preserve file time: %v", err)
 	}
 }

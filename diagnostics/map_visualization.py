@@ -11,7 +11,9 @@ from pathlib import Path
 
 import matplotlib
 import numpy as np
+import xarray as xr
 from nib_visualization.cma_demo import reflectivity_colormap
+from nib_visualization.field import VisualizationField, validate_field
 from nib_visualization.viewer_basemap import cache_relative
 from nib_visualization.viewer_bundle import export_field_cogs
 
@@ -23,6 +25,20 @@ _REF_COLORS = _VIS / "resources" / "cma_ref_colormap.json"
 _MAP_PREFIX = "/map-basemap/"
 _PREPARE = "diagnostics image basemap is missing or corrupt; pull the current diagnostics image"
 _DEFAULT_NOTICE = "Stored model forecast; this map does not validate forecast skill."
+_OBSERVATION_VIEWERS = (
+    (
+        "target",
+        "Observed",
+        "observed",
+        "Observed fields from the stored sample; this map is not a model forecast.",
+    ),
+    (
+        "context",
+        "Model input",
+        "input",
+        "Observation history supplied to the model; this map is not a forecast.",
+    ),
+)
 _WORLD = [-180.0, -90.0, 180.0, 90.0]
 DEFAULT_BASEMAP = Path("/basemap")
 
@@ -51,27 +67,18 @@ def visualization(
         raise FileExistsError(
             f"visualization attempt already exists: {attempt_id}"
         ) from err
-    bundle = export_field_cogs(display, out)
     names = source.manifest.get("model_names") or {}
     label = names.get(model_id) or model_id
-    bundle.update(
-        mock=False,
-        is_real_forecast=True,
+    _write_bundle(
+        out,
+        display,
+        shared,
         title=f"{label} · {original.name}",
         notice=_notice(source.manifest),
-        native_shape=[
-            int(original.values.sizes["y"]),
-            int(original.values.sizes["x"]),
-        ],
-        spatial_sampling=display.provenance.get("display_resampling", "native"),
-        weather_style=_weather_style(display),
-        map_extent=shared["map_extent"],
-        terrain=shared["terrain"],
-        boundaries=shared["boundaries"],
+        mock=False,
+        is_real_forecast=True,
     )
-    text = json.dumps(bundle, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
-    (out / "viewer.json").write_text(text)
-    _comparison_image(source, model_id, original, out)
+    _write_observation_bundles(source, out, shared)
     access = StoredFields(directory)
     forecast = access.manifest["forecasts"][model_id]
     if sha256(access.root / forecast["path"]) != forecast["sha256"]:
@@ -90,79 +97,76 @@ def visualization(
     return attempt
 
 
-def _comparison_image(source, model_id, forecast_field, out):
-    """Write latest input, observed target and first forecast lead together."""
-    observations = source.manifest.get("observations") or {}
-    context = observations.get("context")
-    target = observations.get("target")
-    forecast = source.manifest["forecasts"][model_id]
-    if not context or not target or not forecast.get("times"):
-        return
-    valid_time = forecast["times"][0]
-    try:
-        target_index = target["times"].index(valid_time)
-    except ValueError:
-        return
-    context_cube = source.cube(context)
-    target_cube = source.cube(target)
-    panels = [
-        (
-            "Latest input",
-            context["times"][-1],
-            context_cube["values"][-1],
-            context_cube["mask"][-1],
-        ),
-        (
-            "Observed",
-            target["times"][target_index],
-            target_cube["values"][target_index],
-            target_cube["mask"][target_index],
-        ),
-        (
-            "Forecast",
-            valid_time,
-            forecast_field.values.isel(lead_time=0).values,
-            np.zeros(forecast_field.values.shape[1:], dtype=bool),
-        ),
-    ]
-    import matplotlib.pyplot as plt
+def _write_bundle(out, field, shared, *, title, notice, mock, is_real_forecast):
+    bundle = export_field_cogs(field, out)
+    bundle.update(
+        mock=mock,
+        is_real_forecast=is_real_forecast,
+        title=title,
+        notice=notice,
+        native_shape=[
+            int(field.values.sizes["y"]),
+            int(field.values.sizes["x"]),
+        ],
+        spatial_sampling=field.provenance.get("display_resampling", "native"),
+        weather_style=_weather_style(field),
+        map_extent=shared["map_extent"],
+        terrain=shared["terrain"],
+        boundaries=shared["boundaries"],
+    )
+    text = json.dumps(bundle, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    (out / "viewer.json").write_text(text)
+    return bundle
 
-    cmap = reflectivity_colormap(_REF_COLORS)
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
-    image = None
-    for axis, (title, stamp, values, mask) in zip(axes, panels, strict=True):
-        image = axis.imshow(
-            np.ma.masked_where(mask, values),
-            origin="lower",
-            cmap=cmap,
-            vmin=0,
-            vmax=75,
-            aspect="auto",
+
+def _write_observation_bundles(source, out, shared):
+    observations = source.manifest.get("observations") or {}
+    for key, label, directory, notice in _OBSERVATION_VIEWERS:
+        descriptor = observations.get(key)
+        if not isinstance(descriptor, dict) or not descriptor.get("times"):
+            continue
+        field = display_grid(_observation_field(source, descriptor))
+        _write_bundle(
+            out / directory,
+            field,
+            shared,
+            title=f"{label} · {field.name}",
+            notice=notice,
+            mock=True,
+            is_real_forecast=False,
         )
-        axis.set_title(f"{title}\n{stamp}", fontsize=9)
-        axis.set_xticks([])
-        axis.set_yticks([])
-    fig.colorbar(image, ax=list(axes), shrink=0.8, label=forecast_field.units)
-    fig.savefig(out / "comparison.png", dpi=110)
-    label_fig, label_axis = plt.subplots(figsize=(4.2, 4.2), constrained_layout=True)
-    label_axis.imshow(
-        np.ma.masked_where(
-            target_cube["mask"][target_index], target_cube["values"][target_index]
-        ),
-        origin="lower",
-        cmap=cmap,
-        vmin=0,
-        vmax=75,
-        aspect="auto",
+
+
+def _observation_field(source, descriptor):
+    cube = source.cube(descriptor)
+    values = np.asarray(cube["values"])
+    mask = np.asarray(cube["mask"])
+    if values.ndim == 4:
+        values, mask = values[0], mask[0]
+    times = np.asarray(
+        [np.datetime64(str(stamp).removesuffix("Z")) for stamp in descriptor["times"]],
+        dtype="datetime64[s]",
     )
-    label_axis.set_title(
-        f"Label (observed)\n{target['times'][target_index]}", fontsize=9
+    if times.size != values.shape[0]:
+        raise ValueError("observation times do not match the stored field")
+    leads = (times - times[0]).astype("timedelta64[s]")
+    data = xr.DataArray(
+        np.where(mask, np.nan, values).astype("float64"),
+        dims=("lead_time", "y", "x"),
+        coords={"lead_time": leads, "x": cube["x"], "y": cube["y"]},
+        name=descriptor["variable"],
+        attrs={"units": descriptor["unit"]},
     )
-    label_axis.set_xticks([])
-    label_axis.set_yticks([])
-    label_fig.savefig(out / "label.png", dpi=110)
-    plt.close(label_fig)
-    plt.close(fig)
+    return validate_field(
+        VisualizationField(
+            values=data,
+            crs=descriptor["grid"]["crs"],
+            init_time=times[0],
+            temporal_statistic="instantaneous",
+            valid_time=times,
+            provenance={"source": "observation"},
+        )
+    )
 
 
 def _notice(manifest):

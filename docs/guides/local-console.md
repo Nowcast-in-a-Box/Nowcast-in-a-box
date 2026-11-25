@@ -197,10 +197,13 @@ Select **New trigger**, choose a saved order, then select **New data arrives**,
 **Fixed interval**, or **Daily at**. Expand **Data window options** to change
 which windows are used. Only writable saved orders are eligible.
 
-Triggers can check for new data every configured interval, or run on an interval
-or at a daily local time. A scheduled run can use the order's own times or the
-newest available data. Window selection supports newest-only or all new windows,
-subject to the configured batch limit and one event per batch. Reader-based
+New-data triggers check at a configurable interval of 5 to 86,400 seconds
+(default 30 seconds). Checks are best-effort: a reader invocation can take longer
+than the interval, and the Handler does not overlap checks for one trigger. Existing
+minute-based settings retain their previous cadence when migrated. Triggers can also
+run on an interval or at a daily local time. A scheduled run can use the order's own
+times or the newest available data. Window selection supports newest-only or all new
+windows, subject to the configured batch limit and one event per batch. Reader-based
 checks need Docker and the configured data folder.
 
 The table retains last outcome, errors, next due time, missed runs and
@@ -264,6 +267,7 @@ Behaviour worth knowing:
 | `PATCH /v1/triggers/{id}` | Change conditions or enable/disable. |
 | `DELETE /v1/triggers/{id}` | Delete a trigger; keep its runs. |
 | `POST /v1/triggers/{id}/fire` | Fire an eligible trigger now. |
+`POST /v1/triggers` and `PATCH /v1/triggers/{id}` use `poll_seconds` for new-data checks (5–86,400 seconds, default 30). Legacy `poll_minutes` values in stored trigger files are migrated without changing their cadence.
 
 Saved-order detail includes `order`, `yaml`, `revision`, `order_id`,
 `package_id` (equal to `order_id`), summary fields, `source: saved` and

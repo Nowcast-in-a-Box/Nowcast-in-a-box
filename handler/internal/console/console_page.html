@@ -291,6 +291,8 @@
   #preflight-status { color:var(--muted); }
   .delete-trigger { flex-basis:100%; text-align:start; background:none; color:#b42318; border:0; border-top:1px solid var(--line); margin-top:4px; }
   .delete-trigger:hover { text-decoration:underline; }
+  .delete-order { color:#b42318; border-color:#f3c6c4; }
+  .delete-order:hover:not(:disabled) { background:#fff5f5; border-color:#e9a8a4; }
   .orders-table td.time { font-family:ui-monospace,monospace; }
   .folder-browser { display:grid; grid-template-columns:minmax(11rem, 30%) minmax(0,1fr); gap:20px; align-items:start; }
   #dataset-list { max-height:18rem; overflow:auto; display:grid; gap:2px; border-right:1px solid var(--line); padding-right:8px; }
@@ -522,6 +524,26 @@
   #runs .cell-actions { flex-wrap: nowrap; justify-content: flex-end; }
   #runs .cell-actions .row-link { white-space: nowrap; }
   #runs .orders-table td { vertical-align: top; }
+  /* Run history and detail use a larger scale than the compact order tables. */
+  #runs .orders-table { font-size: 15px; }
+  #runs .orders-table th { padding: 14px; font-size: 12.5px; letter-spacing: .05em; }
+  #runs .orders-table td { padding: 16px 14px; vertical-align: middle; }
+  #runs .table-button { min-height: 38px; padding: 7px 14px; font-size: 14px; }
+  #runs .run-overview { gap: 10px 12px; margin: 18px 0 8px; }
+  #runs .run-flag { padding: 5px 10px; font-size: 12.5px; }
+  #runs .check-strip { gap: 8px; margin: 12px 0 16px; }
+  #runs .check-chip { min-height: 30px; padding: 5px 10px; font-size: 12.5px; }
+  #runs .check-chip .check-icon { width: 18px; height: 18px; }
+  #runs .check-chip .check-icon svg { width: 12px; height: 12px; }
+  #runs #run-title { margin-bottom: 8px; font-size: 1.4rem; }
+  #runs .stage-rail { margin: 18px 0 22px; padding: 20px 18px 16px; }
+  #runs .stage-label { font-size: 13.5px; }
+  #runs .stage-meta { font-size: 12px; }
+  #runs .stage-now { margin-top: 16px; padding-top: 12px; font-size: 13px; }
+  #runs .model-step { padding: 6px 12px; font-size: 13px; }
+  #runs .model-step-meta { font-size: 12px; }
+  #runs .run-meta > summary, #runs .run-meta p { font-size: 13px; }
+  #runs .paging { margin-top: 20px; }
   .run-filter { display: flex; align-items: center; gap: 8px; max-width: 100%; color: var(--muted); }
   .run-filter select { min-width: 0; max-width: 26ch; padding: 10px 12px; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); font: inherit; }
 
@@ -723,7 +745,7 @@
             <div class="parameter-grid">
               <div class="field"><label for="order-id">Order ID</label><input id="order-id" required pattern="[a-z0-9][a-z0-9._\-]{0,127}" autocomplete="off"><span class="field-hint">Lowercase letters, digits, dot, underscore and dash. Unique on this machine.</span></div>
               <div class="field"><label for="order-data">Data source</label><select id="order-data" required></select><span class="field-hint" id="data-hint">Fixed for an imported or saved order.</span></div>
-              <div class="field"><label for="order-event">Event</label><select id="order-event" required></select><span class="field-hint">Dates available in the local dataset.</span></div>
+              <div class="field"><label for="order-event">Event</label><select id="order-event" required></select><span class="field-hint" id="event-hint">Dates come from the local dataset.</span></div>
               <div class="field field-wide">
                 <div class="field-label-row"><label id="sample-start-label" for="order-starts">Sample windows (UTC)</label><span class="field-meta" id="sample-count"></span></div>
                 <div id="order-starts" class="window-picker" role="group" aria-labelledby="sample-start-label"></div>
@@ -790,8 +812,8 @@
             <label><input type="radio" name="condition" value="daily">Daily at</label>
           </div></fieldset>
           <label class="field" id="trigger-poll-field">
-            <span>Check every (minutes)</span>
-            <input id="trigger-poll" type="number" min="1" max="1440" step="1" value="10">
+            <span>Check every (seconds)</span>
+            <input id="trigger-poll" type="number" min="5" max="86400" step="1" value="30">
           </label>
           <label class="field" id="trigger-interval-field" hidden>
             <span>Interval (minutes)</span>
@@ -845,7 +867,7 @@
         <div id="runs-loading" class="state-block" style="align-items:center"><div class="spinner" role="status" aria-label="Loading runs"></div></div>
         <div class="orders-table-wrap" id="runs-wrap" hidden tabindex="0">
           <table class="orders-table">
-            <colgroup><col style="width:24%"><col style="width:19%"><col style="width:13%"><col style="width:13%"><col style="width:31%"></colgroup>
+            <colgroup><col style="width:27%"><col style="width:23%"><col style="width:14%"><col style="width:15%"><col style="width:21%"></colgroup>
             <thead><tr><th>Run</th><th>Order</th><th>Status</th><th class="optional">Updated</th><th><span class="sr-only">Actions</span></th></tr></thead>
             <tbody id="runs-body"></tbody>
           </table>
@@ -1003,7 +1025,7 @@ function emptyOrdersBlock() {
   const block = el("div");
   block.className = "state-block";
   const title = el("span", "No orders saved on this machine yet."); title.className = "empty-title";
-  block.append(title, el("span", "Create an order or import YAML above. Older package history remains read-only."));
+  block.append(title, el("span", "Create an order or import YAML above."));
   return block;
 }
 
@@ -1029,17 +1051,18 @@ function orderMeta(label, value) {
   return item;
 }
 function paintOrders() {
+  const savedOrders = ordersCache.filter(order => order.source === "saved");
   const ids = new Set(ordersCache.map(order => order.order_id || order.package_id).filter(Boolean));
   if (runOrderFilter) ids.add(runOrderFilter);
   const all = el("option", "All runs"); all.value = "";
   $("order-filter").replaceChildren(all, ...Array.from(ids).sort().map(id => el("option", id)));
   $("order-filter").value = runOrderFilter;
   const count = document.getElementById("nav-order-count");
-  count.textContent = String(ordersCache.length);
-  count.hidden = ordersCache.length === 0;
-  note("orders-note", ordersCache.length + (ordersCache.length === 1 ? " order" : " orders"));
+  count.textContent = String(savedOrders.length);
+  count.hidden = savedOrders.length === 0;
+  note("orders-note", savedOrders.length + (savedOrders.length === 1 ? " saved order" : " saved orders"));
   const rows = [];
-  for (const order of ordersCache) {
+  for (const order of savedOrders) {
     const card = el("article");
     card.className = "order-card";
     if (order.error) card.classList.add("order-card--error");
@@ -1066,21 +1089,17 @@ function paintOrders() {
     main.append(meta);
     if (order.error) { const message = el("p", order.error); message.className = "order-error-copy"; main.append(message); }
     const actions = el("div"); actions.className = "order-actions";
-    if (order.error) {
-      const history = el("button", "View history"); history.type = "button"; history.className = "secondary table-button";
-      history.addEventListener("click", () => filterRuns(order.order_id || order.package_id, true));
-      actions.append(history);
-    } else {
-      const open = el("button", order.read_only ? "View history" : "Settings"); open.className = "secondary table-button"; open.type = "button";
-      open.addEventListener("click", () => openOrder(order));
-      actions.append(open);
-      if (!order.read_only && order.source === "saved") {
-        const start = el("button", "Start new run"); start.className = "primary table-button"; start.type = "button";
-        start.addEventListener("click", () => startOrder(order, start));
-        const trigger = el("button", "Add trigger"); trigger.className = "secondary table-button"; trigger.type = "button";
-        trigger.onclick = () => { location.hash = "#triggers"; openTriggerForm(order.package_id); };
-        actions.append(start, trigger);
-      }
+    const open = el("button", "Settings"); open.className = "secondary table-button"; open.type = "button";
+    open.addEventListener("click", () => openOrder(order));
+    actions.append(open);
+    if (!order.read_only && !order.error) {
+      const remove = el("button", "Delete"); remove.className = "secondary table-button delete-order"; remove.type = "button";
+      remove.addEventListener("click", () => deleteOrder(order, remove));
+      const start = el("button", "Start new run"); start.className = "primary table-button"; start.type = "button";
+      start.addEventListener("click", () => startOrder(order, start));
+      const trigger = el("button", "Add trigger"); trigger.className = "secondary table-button"; trigger.type = "button";
+      trigger.onclick = () => { location.hash = "#triggers"; openTriggerForm(order.package_id); };
+      actions.append(start, trigger, remove);
     }
     card.append(main, actions);
     rows.push(card);
@@ -1352,6 +1371,28 @@ function reportEntry(run) {
 }
 
 const startAttempts = new Map();
+async function deleteOrder(order, button) {
+  if (order.read_only || order.source !== "saved") return;
+  const id = order.package_id || order.order_id;
+  if (!confirm("Delete " + id + "? Saved runs stay on this machine. Triggers using this order must be deleted first.")) return;
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Deleting…";
+  try {
+    await api("/v1/orders/" + encodeURIComponent(id), { method: "DELETE" });
+    if (selectedOrder && (selectedOrder.package_id === id || selectedOrder.order_id === id)) {
+      selectedOrder = null;
+      editorDirty = false;
+      if ($("order-editor").open) $("order-editor").close();
+    }
+    await loadOrders();
+  } catch (cause) {
+    button.disabled = false;
+    button.textContent = previous;
+    showActionError("Could not delete " + id + ": " + cause.message);
+  }
+}
+
 async function startOrder(order, button) {
   if (order.read_only || order.source !== "saved") return;
   if (settingsBusy || imageSettingsDirty || dataSettingsDirty) { showActionError("Save local settings before starting a run."); return; }
@@ -1580,7 +1621,8 @@ async function loadSampleWindows(order) {
   const loading = el("p", "Loading available events…"); loading.className = "window-empty"; $("order-starts").replaceChildren(loading);
   $("sample-count").textContent = "";
   $("sample-hint").textContent = "Load the dataset folder to choose real event times.";
-  if (!dataId) return;
+  $("event-hint").textContent = "Loading event dates from the local dataset.";
+  if (!dataId) { $("event-hint").textContent = "Choose a data source first."; return; }
   try {
     const page = await api("/v1/datasets/" + encodeURIComponent(dataId) + "/samples?limit=1");
     if (generation !== sampleWindowsGeneration || dataId !== $("order-data").value) return;
@@ -1588,10 +1630,17 @@ async function loadSampleWindows(order) {
     sampleDays = Array.isArray(page.days) && page.days.length ? page.days : [...new Set(samples.map(item => item.event_id).filter(Boolean))].sort();
     $("sample-hint").textContent = "Only windows present in the local dataset are listed. Up to " + (orderOptions?.max_batch_samples || 1) + " per run.";
     const chosen = paintWindowPicker(order);
+    $("event-hint").textContent = sampleDays.length ? "Dates available in the local dataset." : "No event dates in the local dataset.";
     if (chosen) await loadSampleDay(dataId, chosen, new Set(order?.sample_starts || []));
   } catch (cause) {
     if (generation !== sampleWindowsGeneration) return;
-    $("sample-hint").textContent = "Could not load local windows. Set the dataset folder in Settings, then reopen this order.";
+    const detail = String(cause?.message || cause);
+    const missingRoot = /local data folder|data_roots|dataset folder/i.test(detail);
+    $("event-hint").replaceChildren(document.createTextNode(missingRoot ? "No local dataset folder configured. " : "Could not load event dates. "));
+    const settings = el("a", "Open Settings"); settings.href = "#settings"; $("event-hint").append(settings);
+    $("order-event").replaceChildren();
+    const noEvents = el("option", "No local events"); noEvents.value = ""; $("order-event").append(noEvents);
+    $("sample-hint").textContent = missingRoot ? "Set the dataset folder in Settings, then reopen this order." : "Could not load local windows.";
     const fallback = order?.sample_starts || [];
     if (!fallback.length) {
       const empty = el("p", "No sample windows loaded."); empty.className = "window-empty"; $("order-starts").replaceChildren(empty); return;
@@ -2022,7 +2071,7 @@ function openTriggerForm(packageId, trigger = null) {
   $("trigger-package").disabled = Boolean(trigger);
   if (trigger) {
     $("trigger-form").elements.condition.value = trigger.kind === "new_data" ? "new_data" : trigger.daily_at ? "daily" : "interval";
-    $("trigger-poll").value = trigger.poll_minutes || 10;
+    $("trigger-poll").value = trigger.poll_seconds || 30;
     $("trigger-interval").value = trigger.interval_minutes || 60;
     $("trigger-daily").value = trigger.daily_at || "08:00";
     $("trigger-source").value = trigger.start_source || "latest_ready";
@@ -2038,10 +2087,10 @@ function closeTriggerForm() {
   showTriggerError(""); $("new-trigger").focus();
 }
 
-const OUTCOME_TONES = { started: "badge--success", skipped: "badge--neutral", busy: "badge--info", failed: "badge--danger" };
+const TRIGGER_CHECK_LABELS = { skipped: "No new run", busy: "Run already active", failed: "Check failed" };
 
 function triggerWhenLabel(trigger) {
-  if (trigger.kind === "new_data") return "New data · checks every " + trigger.poll_minutes + " min";
+  if (trigger.kind === "new_data") return "New data · checks every " + trigger.poll_seconds + " sec";
   if (trigger.daily_at) return "Every day at " + trigger.daily_at;
   return "Every " + trigger.interval_minutes + " min";
 }
@@ -2056,13 +2105,19 @@ function triggerWindowLabel(trigger) {
 
 function triggerState(trigger) {
   const box = el("div");
-  const badge = el("span", trigger.last_fired_at ? (trigger.last_outcome || "unknown") : "never ran");
-  badge.className = "badge " + (OUTCOME_TONES[trigger.last_outcome] || "badge--neutral");
+  const badge = el("span", trigger.last_fired_at ? "Run triggered" : "No run yet");
+  badge.className = "badge " + (trigger.last_fired_at ? "badge--success" : "badge--neutral");
   box.append(badge);
   if (trigger.last_fired_at) {
-    const when = el("span", formatTime(trigger.last_fired_at));
+    const when = el("span", "Last triggered " + formatTime(trigger.last_fired_at));
     when.className = "trigger-flag";
     box.append(when);
+  }
+  const check = TRIGGER_CHECK_LABELS[trigger.last_outcome];
+  if (check && trigger.last_poll_at) {
+    const result = el("span", "Last check " + formatTime(trigger.last_poll_at) + " · " + check);
+    result.className = "trigger-flag";
+    box.append(result);
   }
   if (trigger.enabled && trigger.next_due) {
     const next = el("span", "next " + formatTime(trigger.next_due));
@@ -2076,7 +2131,7 @@ function triggerState(trigger) {
     box.append(missed);
   }
   if (trigger.kind === "new_data" && trigger.last_skipped) {
-    const skipped = el("span", trigger.last_skipped + " older window" + (trigger.last_skipped === 1 ? "" : "s") + " skipped on the last run");
+    const skipped = el("span", trigger.last_skipped + " older window" + (trigger.last_skipped === 1 ? "" : "s") + " skipped on the last check");
     skipped.className = "trigger-flag";
     box.append(skipped);
   }
@@ -2222,7 +2277,7 @@ async function addTrigger() {
   const body = id ? { kind } : { package_id: packageId, kind, enabled: true };
   if (!$("trigger-window").disabled) body.window_mode = $("trigger-window").value;
   if (kind === "new_data") {
-    body.poll_minutes = Number(document.getElementById("trigger-poll").value);
+    body.poll_seconds = Number(document.getElementById("trigger-poll").value);
   } else {
     body.start_source = document.getElementById("trigger-source").value;
     if (mode === "daily") {
@@ -2616,7 +2671,7 @@ async function repeatInference() {
   } catch (cause) { $("repeat-status").textContent = "Repeat failed: " + cause.message + " Inspect Runs before retrying: a lost response may still have created a run."; }
   finally { repeatBusy = false; if (selectedRunId) await loadRunDetail(selectedRunId); }
 }
-let currentPage = "", pendingPage = "", landing = "";
+let currentPage = "", pendingPage = "", landing = "", resumeOrderEditor = false;
 async function loadDashboard() {
   try {
     const overview = await api("/v1/dashboard", {signal:AbortSignal.timeout(8000)});
@@ -2673,7 +2728,7 @@ function route() {
   const [page] = location.hash.slice(1).split("/");
   const nextPage = Object.hasOwn(names, page) ? page : "dashboard";
   if (currentPage !== nextPage) {
-    if ($("order-editor").open) $("order-editor").close();
+    if ($("order-editor").open) { resumeOrderEditor = true; $("order-editor").close(); }
     if (currentPage === "triggers" && $("trigger-dialog").open) closeTriggerForm();
   }
   currentPage = nextPage;
@@ -2683,6 +2738,13 @@ function route() {
   document.body.dataset.page = currentPage; $("page-title").textContent = names[currentPage]; document.title = names[currentPage] + " | NiB local console";
   for (const link of document.querySelectorAll("nav a")) { const active = link.hash === "#" + currentPage; link.classList.toggle("nav-item--active", active); if (active) link.setAttribute("aria-current","page"); else link.removeAttribute("aria-current"); }
   window.scrollTo(0,0); $("page-title").focus({preventScroll:true}); refresh();
+  if (nextPage === "orders" && resumeOrderEditor) {
+    resumeOrderEditor = false;
+    if (!$("order-editor").open) $("order-editor").showModal();
+    const starts = checked("sample-start");
+    const eventId = $("order-event").value || selectedOrder?.order?.event_id || "";
+    void loadSampleWindows({ event_id: eventId, sample_starts: starts });
+  }
 }
 
 document.getElementById("refresh").addEventListener("click", () => {

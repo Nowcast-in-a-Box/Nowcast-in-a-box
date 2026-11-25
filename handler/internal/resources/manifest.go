@@ -72,6 +72,7 @@ type ModelWeights struct {
 	File     string `yaml:"file"`
 	SHA256   string `yaml:"sha256"`
 	Embedded bool   `yaml:"embedded"`
+	Status   string `yaml:"status"`
 }
 
 type ModelResource struct {
@@ -247,6 +248,12 @@ func readModelResources(dataDir, dataID string) (map[string]*ModelResource, erro
 		}
 		if resource.Weights.File == "" || resource.Weights.SHA256 == "" {
 			return nil, fmt.Errorf("%s: weights.file and weights.sha256 are required", path)
+		}
+		if resource.Weights.Status != "" && resource.Weights.Status != "not_required" {
+			return nil, fmt.Errorf("%s: weights.status must be not_required when set", path)
+		}
+		if resource.Weights.Status == "not_required" && !resource.Weights.Embedded {
+			return nil, fmt.Errorf("%s: weights.status not_required requires embedded weights", path)
 		}
 		if filepath.IsAbs(resource.Weights.File) || strings.Contains(resource.Weights.File, string(filepath.Separator)) {
 			return nil, fmt.Errorf("%s: weights.file must be one file name", path)

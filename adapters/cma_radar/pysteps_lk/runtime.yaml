@@ -9,6 +9,8 @@ weights:
   file: algorithm-manifest.json
   sha256: "ccf471fb208660e1f4fd66644f4b56db66cd2c429c92067a46a38df814170367"
   embedded: true
+  # Optical flow has no learned weights; skip the Handler's image/hash check.
+  status: not_required
 container:
   image: nib-pysteps-lk:cma-1
   build:
