@@ -40,6 +40,10 @@ CAPTIONS = {
     "map.png": "Forecast map",
     "animation.gif": "Forecast animation",
 }
+_VIEWER_SOURCES = (
+    ("observed", "Observed", "observed/viewer.json"),
+    ("input", "Model input", "input/viewer.json"),
+)
 
 
 def _read_json(path: Path) -> dict:
@@ -171,13 +175,29 @@ def _visualization_models(run: Path, manifest: dict, samples: list[dict]) -> lis
             if attempt is None:
                 continue
             images = _case_images(run, attempt["path"], model_id, names)
-            viewer = run / attempt["path"] / "viewer.json"
-            if images or viewer.is_file():
-                case = {"sample_id": sample_id, "images": images}
-                if viewer.is_file():
-                    case["viewer_url"] = (
-                        f"/visualization/{quote(attempt['path'], safe='/')}/viewer.json"
+            base = f"/visualization/{quote(attempt['path'], safe='/')}"
+            sources = []
+            if (run / attempt["path"] / "viewer.json").is_file():
+                sources.append(
+                    {
+                        "id": "forecast",
+                        "label": "Forecast",
+                        "viewer_url": f"{base}/viewer.json",
+                    }
+                )
+            for source_id, label, relative in _VIEWER_SOURCES:
+                if (run / attempt["path"] / relative).is_file():
+                    sources.append(
+                        {
+                            "id": source_id,
+                            "label": label,
+                            "viewer_url": f"{base}/{relative}",
+                        }
                     )
+            if images or sources:
+                case = {"sample_id": sample_id, "images": images, "sources": sources}
+                if sources:
+                    case["viewer_url"] = sources[0]["viewer_url"]
                 cases.append(case)
         if not cases:
             continue

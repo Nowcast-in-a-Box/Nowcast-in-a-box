@@ -10,26 +10,28 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Nowcast-in-a-Box/Nowcast-in-a-box/handler/internal/orders"
 	"gopkg.in/yaml.v3"
 )
 
 type orderSummary struct {
-	PackageID     string   `json:"package_id"`
-	OrderID       string   `json:"order_id,omitempty"`
-	DataID        string   `json:"data_id,omitempty"`
-	EventID       string   `json:"event_id,omitempty"`
-	StartTime     string   `json:"context_start_time,omitempty"`
-	Samples       int      `json:"samples,omitempty"`
-	Models        []string `json:"models,omitempty"`
-	Metrics       int      `json:"metrics,omitempty"`
-	Visualization bool     `json:"visualization,omitempty"`
-	Source        string   `json:"source"`
-	RunID         string   `json:"run_id,omitempty"`
-	Error         string   `json:"error,omitempty"`
-	ReadOnly      bool     `json:"read_only"`
-	Revision      string   `json:"revision,omitempty"`
+	PackageID     string    `json:"package_id"`
+	OrderID       string    `json:"order_id,omitempty"`
+	DataID        string    `json:"data_id,omitempty"`
+	EventID       string    `json:"event_id,omitempty"`
+	StartTime     string    `json:"context_start_time,omitempty"`
+	Samples       int       `json:"samples,omitempty"`
+	Models        []string  `json:"models,omitempty"`
+	Metrics       int       `json:"metrics,omitempty"`
+	Visualization bool      `json:"visualization,omitempty"`
+	Source        string    `json:"source"`
+	RunID         string    `json:"run_id,omitempty"`
+	Error         string    `json:"error,omitempty"`
+	ReadOnly      bool      `json:"read_only"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
+	Revision      string    `json:"revision,omitempty"`
 }
 
 func requestSummary(request *RuntimeRequest) orderSummary {
@@ -60,8 +62,14 @@ func (s *Server) handleOrdersList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		id := strings.TrimSuffix(entry.Name(), ".yaml")
+		path := filepath.Join(cfg.Paths.Orders, entry.Name())
+		info, statErr := os.Stat(path)
 		summary := orderSummary{PackageID: id, OrderID: id, Source: "saved"}
-		_, request, _, err := s.loadOrder(id)
+		if statErr == nil {
+			summary.CreatedAt = info.ModTime().UTC()
+		}
+		fallbackCreatedAt := summary.CreatedAt
+		_, request, raw, err := s.loadOrder(id)
 		if err != nil {
 			summary.Error = err.Error()
 			summary.ReadOnly = true
@@ -69,6 +77,7 @@ func (s *Server) handleOrdersList(w http.ResponseWriter, r *http.Request) {
 			summary = requestSummary(&request)
 			summary.Source = "saved"
 			summary.Revision = request.OrderRevision
+			summary.CreatedAt = orderCreatedAt(raw, fallbackCreatedAt)
 		}
 		seen[id] = true
 		summaries = append(summaries, summary)
@@ -78,7 +87,6 @@ func (s *Server) handleOrdersList(w http.ResponseWriter, r *http.Request) {
 		runtimeError(w, 500, err)
 		return
 	}
-	// ReadDir sorts names; newest historical fallback wins.
 	for i := len(entries) - 1; i >= 0; i-- {
 		entry := entries[i]
 		if !entry.IsDir() || !idPattern.MatchString(entry.Name()) {
@@ -98,8 +106,54 @@ func (s *Server) handleOrdersList(w http.ResponseWriter, r *http.Request) {
 		seen[identity] = true
 		summaries = append(summaries, summary)
 	}
-	sort.Slice(summaries, func(i, j int) bool { return summaries[i].OrderID < summaries[j].OrderID })
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].Source == "saved" && summaries[j].Source != "saved" {
+			return true
+		}
+		if summaries[i].Source != "saved" && summaries[j].Source == "saved" {
+			return false
+		}
+		if !summaries[i].CreatedAt.Equal(summaries[j].CreatedAt) {
+			return summaries[i].CreatedAt.After(summaries[j].CreatedAt)
+		}
+		return summaries[i].OrderID < summaries[j].OrderID
+	})
 	writeJSON(w, 200, map[string]any{"orders": summaries, "total": len(summaries)})
+}
+
+const orderCreatedComment = "# nib-handler-created-at: "
+
+func orderCreatedAt(raw []byte, fallback time.Time) time.Time {
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, orderCreatedComment) {
+			if created, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(strings.TrimPrefix(line, orderCreatedComment))); err == nil {
+				return created.UTC()
+			}
+		}
+	}
+	return fallback.UTC()
+}
+
+func withOrderCreatedAt(raw []byte, created time.Time) []byte {
+	lines := strings.Split(string(raw), "\n")
+	filtered := lines[:0]
+	for _, line := range lines {
+		if !strings.HasPrefix(line, orderCreatedComment) {
+			filtered = append(filtered, line)
+		}
+	}
+	return []byte(orderCreatedComment + created.UTC().Format(time.RFC3339Nano) + "\n" + strings.Join(filtered, "\n"))
+}
+
+func portableOrderYAML(raw []byte) []byte {
+	lines := strings.Split(string(raw), "\n")
+	filtered := lines[:0]
+	for _, line := range lines {
+		if !strings.HasPrefix(line, orderCreatedComment) {
+			filtered = append(filtered, line)
+		}
+	}
+	return []byte(strings.Join(filtered, "\n"))
 }
 
 func runPackageSummary(runsDir, id string) (orderSummary, bool) {
@@ -129,7 +183,7 @@ func (s *Server) handleOrderSave(w http.ResponseWriter, r *http.Request) {
 	}
 	s.ordersMu.Lock()
 	defer s.ordersMu.Unlock()
-	_, previous, _, readErr := s.loadOrder(id)
+	_, previous, previousRaw, readErr := s.loadOrder(id)
 	status := http.StatusCreated
 	if readErr == nil {
 		if r.Method == "PATCH" && revision != previous.OrderRevision {
@@ -149,6 +203,15 @@ func (s *Server) handleOrderSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, err := yaml.Marshal(order)
+	created := time.Now().UTC()
+	if readErr == nil {
+		fallback := created
+		if info, err := os.Stat(filepath.Join(s.currentConfig().Paths.Orders, id+".yaml")); err == nil {
+			fallback = info.ModTime().UTC()
+		}
+		created = orderCreatedAt(previousRaw, fallback)
+	}
+	raw = withOrderCreatedAt(raw, created)
 	if err != nil {
 		runtimeError(w, 422, err)
 		return
@@ -190,10 +253,36 @@ func (s *Server) handleOrder(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("download") == "1" {
 		w.Header().Set("Content-Type", "application/yaml")
 		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(order.OrderID+".yaml"))
-		_, _ = w.Write(raw)
+		_, _ = w.Write(portableOrderYAML(raw))
 		return
 	}
 	writeJSON(w, 200, orderDetail(order, request, raw))
+}
+
+func (s *Server) handleOrderDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("package_id")
+	s.ordersMu.Lock()
+	defer s.ordersMu.Unlock()
+	if _, _, _, err := s.loadOrder(id); err != nil {
+		runtimeError(w, 404, err)
+		return
+	}
+	triggers, err := s.ensureTriggers()
+	if err != nil {
+		runtimeError(w, 500, err)
+		return
+	}
+	for _, trigger := range triggers {
+		if trigger.PackageID == id {
+			runtimeError(w, 409, fmt.Errorf("order is used by trigger %s; delete the trigger first", trigger.ID))
+			return
+		}
+	}
+	if err := os.Remove(filepath.Join(s.currentConfig().Paths.Orders, id+".yaml")); err != nil {
+		runtimeError(w, 500, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleOrderValidate(w http.ResponseWriter, r *http.Request) {

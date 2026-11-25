@@ -159,7 +159,7 @@ async function loadVisualization() {
         : (data.sample_id || samples[0]?.sample_id || "");
       select.value = chosen;
       select.onchange = () => renderVisualization(data, select.value);
-      picker.hidden = samples.length <= 1;
+      picker.hidden = !samples.length;
     }
     if ($("#result-meta") && data.run_id) {
       $("#result-meta").textContent = data.sample_id || data.run_id;
@@ -192,46 +192,105 @@ function renderVisualization(data, sampleId) {
   const sample = (data.samples || []).find(item => item.sample_id === sampleId);
   if (meta) meta.textContent = sample ? (sample.init_time || sample.sample_id) : "";
   if ($("#result-meta") && sample) $("#result-meta").textContent = sample.sample_id;
-  mount(host, models.map(model => {
-    const cases = model.cases || [];
-    const selected = sampleId ? cases.find(item => item.sample_id === sampleId) : cases[0];
-    const images = selected ? selected.images || [] : [];
-    const artifacts = images.length
-      ? h("div", { class: "viz-artifacts" }, images.map(image =>
-          h("figure", { class: "viz-shot" },
-            h("img", { src: image.url, alt: image.alt || image.caption || "" }),
-            h("figcaption", { text: image.caption || "" }))))
-      : null;
-    if (selected?.viewer_url) {
-      const mapHost = h("div", { class: "viz-map" });
-      import("/map-viewer/visualization.js").then(({ mountVisualization }) => {
-        if (generation !== visualizationGeneration || !mapHost.isConnected) return;
-        visualizationDisposers.push(mountVisualization(mapHost, new URL(selected.viewer_url, location.href).href));
-      }).catch(error => {
-        if (generation === visualizationGeneration && mapHost.isConnected) {
-          mount(mapHost, notice("bad", `Could not open the map: ${error.message}`));
-        }
-      });
-      return h("section", { class: "card viz-model" },
-        h("h2", { text: model.name || model.id }),
-        model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
-        artifacts, mapHost);
+  const view = populateViewPicker(models, sampleId);
+  const selected = resolveView(view, models, sampleId);
+  if (selected?.source) {
+    mount(host, mapPanel(selected.source, generation));
+    return;
+  }
+  const cases = selected?.model?.cases || [];
+  const matched = sampleId ? cases.find(item => item.sample_id === sampleId) : cases[0];
+  const images = matched?.images || [];
+  if (images.length) {
+    mount(host, h("section", { class: "card viz-model" },
+      h("div", { class: "viz-artifacts" }, images.map(image =>
+        h("figure", { class: "viz-shot" },
+          h("img", { src: image.url, alt: image.alt || image.caption || "" }),
+          h("figcaption", { text: image.caption || "" }))))));
+    return;
+  }
+  mount(host, h("section", { class: "card viz-model" },
+    empty(cases.length && !matched
+      ? "No visualization is available for this case."
+      : "No visualization is available for this run.")));
+}
+
+function caseFor(model, sampleId) {
+  const cases = model?.cases || [];
+  return sampleId ? cases.find(item => item.sample_id === sampleId) : cases[0];
+}
+
+function populateViewPicker(models, sampleId) {
+  const select = $("#viz-view");
+  if (!select) return "";
+  let previous = select.value;
+  const modelOptions = [];
+  const observationOptions = new Map();
+  for (const model of models) {
+    const selected = caseFor(model, sampleId);
+    if (!selected) continue;
+    modelOptions.push({ value: `model:${model.id}`, label: model.name || model.id });
+    for (const source of selected.sources || []) {
+      if (source.id !== "forecast" && !observationOptions.has(source.id)) {
+        observationOptions.set(source.id, source);
+      }
     }
-    if (cases.length && !cases.some(item => item.sample_id === sampleId)) {
-      return h("section", { class: "card viz-model" },
-        h("h2", { text: model.name || model.id }),
-        empty("No visualization is available for this case."));
+  }
+  if (!modelOptions.length) {
+    select.hidden = true;
+    return "";
+  }
+  select.hidden = false;
+  const groups = [
+    h("optgroup", { label: "Models" }, modelOptions.map(option =>
+      h("option", { value: option.value, text: option.label }))),
+  ];
+  if (observationOptions.size) {
+    groups.push(h("optgroup", { label: "Observation" }, [...observationOptions.values()].map(source =>
+      h("option", { value: `source:${source.id}`, text: source.label || source.id }))));
+  }
+  mount(select, groups);
+  const values = [...select.options].map(option => option.value);
+  const chosen = values.includes(previous) ? previous : values[0];
+  select.value = chosen;
+  select.onchange = () => renderVisualization(state.visualization, $("#viz-sample")?.value || sampleId);
+  return chosen;
+}
+
+function resolveView(value, models, sampleId) {
+  if (value.startsWith("model:")) {
+    const model = models.find(item => item.id === value.slice(6));
+    const selected = caseFor(model, sampleId);
+    if (!model || !selected) return null;
+    const source = (selected.sources || []).find(item => item.id === "forecast")
+      || (selected.viewer_url
+        ? { id: "forecast", label: "Forecast", viewer_url: selected.viewer_url }
+        : null);
+    return { model, source };
+  }
+  if (value.startsWith("source:")) {
+    const id = value.slice(7);
+    for (const model of models) {
+      const source = (caseFor(model, sampleId)?.sources || []).find(item => item.id === id);
+      if (source) return { model, source };
     }
-    return h("section", { class: "card viz-model" },
-      h("h2", { text: model.name || model.id }),
-      model.notice ? h("p", { class: "viz-note", text: model.notice }) : null,
-      images.length
-        ? h("div", { class: "viz-artifacts" }, images.map(image =>
-            h("figure", { class: "viz-shot" },
-              h("img", { src: image.url, alt: image.alt || image.caption || "" }),
-              h("figcaption", { text: image.caption || "" }))))
-        : empty("No visualization is available for this case."));
-  }));
+  }
+  return null;
+}
+
+function mapPanel(source, generation) {
+  const mapHost = h("div", { class: "viz-map" });
+  let dispose = () => {};
+  visualizationDisposers.push(() => dispose());
+  import("/map-viewer/visualization.js").then(({ mountVisualization }) => {
+    if (generation !== visualizationGeneration || !mapHost.isConnected) return;
+    dispose = mountVisualization(mapHost, new URL(source.viewer_url, location.href).href);
+  }).catch(error => {
+    if (generation === visualizationGeneration && mapHost.isConnected) {
+      mount(mapHost, notice("bad", `Could not open the map: ${error.message}`));
+    }
+  });
+  return mapHost;
 }
 
 // ==================================================================

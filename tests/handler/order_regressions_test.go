@@ -146,7 +146,7 @@ func TestTriggerResetsCursorForChangedDataSource(t *testing.T) {
 	})
 	runner.setSamples(sampleList(t, [2]string{"S710140", stamp}))
 	out, fired := triggerDo(t, server, "POST", "/v1/triggers/t_changed1/fire", nil)
-	if out.Code != 202 || fired["last_outcome"] != "started" || fired["last_data_id"] != "sevir" || fired["last_start"] != stamp {
+	if out.Code != 202 || fired["poll_seconds"] != float64(300) || fired["last_outcome"] != "started" || fired["last_data_id"] != "sevir" || fired["last_start"] != stamp {
 		t.Fatalf("cursor not reset: %d %s", out.Code, out.Body.String())
 	}
 	id := fired["last_run_id"].(string)

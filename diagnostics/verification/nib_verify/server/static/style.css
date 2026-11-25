@@ -394,6 +394,7 @@ pre.log {
 .viz-model + .viz-model { margin-top: 16px; }
 .viz-model > h2 { margin-bottom: 2px; }
 .viz-note { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.viz-map { width: 100%; }
 @media (max-width: 900px) {
   .page-head { align-items: flex-start; flex-direction: column; }
   .result-tabs { width: 100%; }

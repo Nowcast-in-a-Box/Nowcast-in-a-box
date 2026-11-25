@@ -32,8 +32,10 @@ const (
 	triggerStartLatest = "latest_ready"
 	triggerStartOrder  = "order"
 
-	defaultTriggerPollMinutes = 10
-	defaultTriggerTick        = 30 * time.Second
+	defaultTriggerPollSeconds = 30
+	minTriggerPollSeconds     = 5
+	maxTriggerPollSeconds     = 86400
+	defaultTriggerTick        = time.Second
 	// missedTriggerLimit caps the missed-fire count so a fine-grained interval
 	// cannot spin the boot scan.
 	missedTriggerLimit = 500
@@ -41,15 +43,16 @@ const (
 
 // Trigger is one saved order plus the condition that re-runs it.
 type Trigger struct {
-	ID              string `json:"id"`
-	PackageID       string `json:"package_id"`
-	Enabled         bool   `json:"enabled"`
-	Kind            string `json:"kind"`
-	PollMinutes     int    `json:"poll_minutes,omitempty"`
-	IntervalMinutes int    `json:"interval_minutes,omitempty"`
-	DailyAt         string `json:"daily_at,omitempty"`
-	WindowMode      string `json:"window_mode"`
-	StartSource     string `json:"start_source"`
+	ID                string `json:"id"`
+	PackageID         string `json:"package_id"`
+	Enabled           bool   `json:"enabled"`
+	Kind              string `json:"kind"`
+	PollSeconds       int    `json:"poll_seconds,omitempty"`
+	LegacyPollMinutes int    `json:"poll_minutes,omitempty"`
+	IntervalMinutes   int    `json:"interval_minutes,omitempty"`
+	DailyAt           string `json:"daily_at,omitempty"`
+	WindowMode        string `json:"window_mode"`
+	StartSource       string `json:"start_source"`
 
 	// LastDueAt is the point the schedule is counted from. A missed point
 	// advances it without running anything, so a stopped Handler never catches up.
@@ -107,6 +110,12 @@ func (s *Server) loadTriggersLocked() ([]*Trigger, error) {
 	var store triggerStore
 	if err := json.Unmarshal(raw, &store); err != nil {
 		return nil, fmt.Errorf("%s is not valid JSON: %w; remove it or fix the entry", triggerFileName, err)
+	}
+	for _, trigger := range store.Triggers {
+		if trigger.PollSeconds == 0 && trigger.LegacyPollMinutes > 0 {
+			trigger.PollSeconds = trigger.LegacyPollMinutes * 60
+		}
+		trigger.LegacyPollMinutes = 0
 	}
 	s.triggers, s.triggersLoaded = store.Triggers, true
 	return s.triggers, nil
@@ -249,11 +258,11 @@ func (s *Server) runDueTriggers(now time.Time) {
 		}
 		switch trigger.Kind {
 		case triggerKindNewData:
-			minutes := trigger.PollMinutes
-			if minutes <= 0 {
-				minutes = defaultTriggerPollMinutes
+			seconds := trigger.PollSeconds
+			if seconds <= 0 {
+				seconds = defaultTriggerPollSeconds
 			}
-			if trigger.LastPollAt != nil && now.Sub(*trigger.LastPollAt) < time.Duration(minutes)*time.Minute {
+			if trigger.LastPollAt != nil && now.Sub(*trigger.LastPollAt) < time.Duration(seconds)*time.Second {
 				continue
 			}
 			s.fireTrigger(trigger.ID, now, now)
@@ -294,11 +303,11 @@ func (s *Server) fireTrigger(id string, now, due time.Time) {
 			return
 		}
 		if trigger.Kind == triggerKindNewData {
-			minutes := trigger.PollMinutes
-			if minutes <= 0 {
-				minutes = defaultTriggerPollMinutes
+			seconds := trigger.PollSeconds
+			if seconds <= 0 {
+				seconds = defaultTriggerPollSeconds
 			}
-			if trigger.LastPollAt != nil && now.Sub(*trigger.LastPollAt) < time.Duration(minutes)*time.Minute {
+			if trigger.LastPollAt != nil && now.Sub(*trigger.LastPollAt) < time.Duration(seconds)*time.Second {
 				return
 			}
 		}
@@ -564,14 +573,15 @@ func normalizeTrigger(trigger *Trigger) error {
 	case triggerKindNewData:
 		trigger.StartSource = triggerStartLatest
 		trigger.IntervalMinutes, trigger.DailyAt = 0, ""
-		if trigger.PollMinutes == 0 {
-			trigger.PollMinutes = defaultTriggerPollMinutes
+		if trigger.PollSeconds == 0 {
+			trigger.PollSeconds = defaultTriggerPollSeconds
 		}
-		if trigger.PollMinutes < 1 || trigger.PollMinutes > 1440 {
-			return fmt.Errorf("poll minutes must be 1..1440")
+		if trigger.PollSeconds < minTriggerPollSeconds || trigger.PollSeconds > maxTriggerPollSeconds {
+			return fmt.Errorf("poll seconds must be %d..%d", minTriggerPollSeconds, maxTriggerPollSeconds)
 		}
+		trigger.LegacyPollMinutes = 0
 	case triggerKindSchedule:
-		trigger.PollMinutes = 0
+		trigger.PollSeconds, trigger.LegacyPollMinutes = 0, 0
 		if (trigger.IntervalMinutes == 0) == (trigger.DailyAt == "") {
 			return fmt.Errorf("choose either interval minutes or a daily time")
 		}
@@ -606,6 +616,7 @@ func normalizeTrigger(trigger *Trigger) error {
 type triggerInput struct {
 	PackageID       *string `json:"package_id"`
 	Kind            *string `json:"kind"`
+	PollSeconds     *int    `json:"poll_seconds"`
 	PollMinutes     *int    `json:"poll_minutes"`
 	IntervalMinutes *int    `json:"interval_minutes"`
 	DailyAt         *string `json:"daily_at"`
@@ -618,8 +629,10 @@ func (in triggerInput) apply(trigger *Trigger) {
 	if in.Kind != nil {
 		trigger.Kind = *in.Kind
 	}
-	if in.PollMinutes != nil {
-		trigger.PollMinutes = *in.PollMinutes
+	if in.PollSeconds != nil {
+		trigger.PollSeconds = *in.PollSeconds
+	} else if in.PollMinutes != nil {
+		trigger.PollSeconds = *in.PollMinutes * 60
 	}
 	if in.IntervalMinutes != nil {
 		trigger.IntervalMinutes = *in.IntervalMinutes

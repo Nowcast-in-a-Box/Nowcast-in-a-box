@@ -254,6 +254,11 @@ func (s *Server) imageItem(image string) resourceItem {
 
 func (s *Server) weightItem(dataID, modelID string, resource *ModelResource) resourceItem {
 	item := resourceItem{Kind: "weight", ID: modelID}
+	if resource.Weights.Status == "not_required" {
+		item.Status = "ready"
+		item.Message = "no separate weights required"
+		return item
+	}
 	if resource.Weights.Embedded {
 		image := s.imageItem(resource.Container.Image)
 		item.Status = image.Status
@@ -338,6 +343,9 @@ func (s *Server) prepareExecution(dataID string, models []string) {
 	}
 	for _, model := range models {
 		item := resourceItem{Kind: "weight", ID: model, Status: "ready", Message: "weight matches the pinned SHA-256"}
+		if resource, err := s.modelResource(dataID, model); err == nil && resource.Weights.Status == "not_required" {
+			item.Message = "no separate weights required"
+		}
 		if err := s.prepareModelWeight(ctx, dataID, model); err != nil {
 			item.Status, item.Message = "failed", err.Error()
 		}
@@ -353,6 +361,9 @@ func (s *Server) prepareModelWeight(ctx context.Context, dataID, modelID string)
 	resource, err := s.modelResource(dataID, modelID)
 	if err != nil {
 		return err
+	}
+	if resource.Weights.Status == "not_required" {
+		return nil
 	}
 	if resource.Weights.Embedded {
 		file := resource.Weights.File

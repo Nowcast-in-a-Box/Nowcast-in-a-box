@@ -210,12 +210,32 @@ func TestTriggerRejectsUnknownOrderAndBadSchedule(t *testing.T) {
 		{"package_id": packageID, "kind": "schedule"},
 		{"package_id": packageID, "kind": "schedule", "interval_minutes": 1},
 		{"package_id": packageID, "kind": "schedule", "daily_at": "8 o'clock"},
-		{"package_id": packageID, "kind": "new_data", "poll_minutes": 0, "window_mode": "every"},
+		{"package_id": packageID, "kind": "new_data", "poll_seconds": 0, "window_mode": "every"},
 		{"package_id": packageID, "kind": "sometimes"},
 	}
 	for _, body := range cases {
 		if response, _ := triggerDo(t, server, "POST", "/v1/triggers", body); response.Code != 422 {
 			t.Fatalf("%v must be refused with 422, got %d %s", body, response.Code, response.Body.String())
+		}
+	}
+}
+func TestNewDataTriggerUsesSeconds(t *testing.T) {
+	_, server, _ := triggerServer(t)
+	packageID := saveOrder(t, server)
+	id := createTrigger(t, server, map[string]any{"package_id": packageID, "kind": "new_data", "poll_seconds": 5})
+	list := triggers(t, server)
+	if len(list) != 1 || list[0]["id"] != id || list[0]["poll_seconds"] != float64(5) {
+		t.Fatalf("trigger did not retain seconds interval: %#v", list)
+	}
+	defaultID := createTrigger(t, server, map[string]any{"package_id": packageID, "kind": "new_data"})
+	list = triggers(t, server)
+	if len(list) != 2 || list[1]["id"] != defaultID || list[1]["poll_seconds"] != float64(30) {
+		t.Fatalf("default interval should be 30 seconds: %#v", list)
+	}
+	for _, seconds := range []int{4, 86401} {
+		response, _ := triggerDo(t, server, "POST", "/v1/triggers", map[string]any{"package_id": packageID, "kind": "new_data", "poll_seconds": seconds})
+		if response.Code != 422 {
+			t.Fatalf("interval %d should be rejected: %d %s", seconds, response.Code, response.Body.String())
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -55,5 +56,34 @@ func TestExternalWeightsStillRequireMatchingHostChecksum(t *testing.T) {
 	}
 	if item := server.weightItem("sevir", "nowcastnet", &copyModel); item.Status != "missing" {
 		t.Fatalf("corrupt external weight accepted: %+v", item)
+	}
+}
+
+type noDockerRunner struct{ t *testing.T }
+
+func (r noDockerRunner) Run(context.Context, ...string) (int, []byte, error) {
+	r.t.Fatal("weightless model invoked Docker")
+	return 1, nil, nil
+}
+
+func TestWeightlessModelSkipsImageAndHashVerification(t *testing.T) {
+	resources, err := LoadResources("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{
+		Config:    Config{Paths: Paths{Artifacts: t.TempDir()}},
+		Resources: resources,
+		Runner:    noDockerRunner{t},
+	}
+	model, ok := resources.ModelByProductID("cma_radar", "pysteps-lk-cma")
+	if !ok {
+		t.Fatal("pysteps-lk-cma model not found")
+	}
+	if item := server.weightItem("cma_radar", "pysteps_lk", model); item.Status != "ready" || item.Message != "no separate weights required" {
+		t.Fatalf("weightless item: %+v", item)
+	}
+	if err := server.prepareModelWeight(context.Background(), "cma_radar", "pysteps_lk"); err != nil {
+		t.Fatalf("weightless preparation: %v", err)
 	}
 }

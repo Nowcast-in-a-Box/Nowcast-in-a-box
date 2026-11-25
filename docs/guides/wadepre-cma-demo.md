@@ -48,9 +48,9 @@ new `2026-08-03T12:00:00Z` window. No command line is required.
 
 Verification and visualization accept both model IDs. The run stage rail adds a
 model sequence showing done/running/waiting for each model. The result viewer
-shows one visualization card per model. Each bundle now contains
-`comparison.png` with the latest input, observed target and first forecast lead;
-the interactive map viewer remains forecast-only.
+shows one visualization card per model. Each card opens the interactive map with
+a data-source selector for the forecast, observed target and model input; legacy
+runs without a viewer still show the stored comparison images.
 
 ## Contract notes
 - `atlas/catalog/products/wadepre-cma.yaml` v2 maps the runtime model `wadepre`

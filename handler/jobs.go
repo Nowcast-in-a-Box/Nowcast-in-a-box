@@ -56,6 +56,7 @@ func (s *Server) runtimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/orders/validate", s.authorize(s.handleOrderValidate))
 	mux.HandleFunc("POST /v1/orders/import-selection", s.authorize(s.importSelection))
 	mux.HandleFunc("GET /v1/orders/{package_id}", s.authorize(s.handleOrder))
+	mux.HandleFunc("DELETE /v1/orders/{package_id}", s.authorize(s.handleOrderDelete))
 	mux.HandleFunc("PATCH /v1/orders/{package_id}", s.authorize(s.handleOrderSave))
 	mux.HandleFunc("POST /v1/orders/{package_id}/runs", s.authorize(s.handleOrderRun))
 	mux.HandleFunc("POST /v1/jobs", s.authorize(s.handleCreateJob))

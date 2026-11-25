@@ -224,7 +224,13 @@ def test_stored_cma_roundtrip(tmp_path):
     assert bundle["weather_style"]["min"] == 10
     assert bundle["spatial_sampling"] == "nearest"
     assert (report.parent / "weather" / "frame-0000.tif").is_file()
-    assert (report.parent / "comparison.png").is_file()
-    assert (report.parent / "label.png").is_file()
+    observed = json.loads((report.parent / "observed" / "viewer.json").read_text())
+    assert observed["mock"] is True and observed["is_real_forecast"] is False
+    assert len(observed["frames"]) == 20
+    supplied = json.loads((report.parent / "input" / "viewer.json").read_text())
+    assert supplied["mock"] is True and supplied["is_real_forecast"] is False
+    assert len(supplied["frames"]) == 6
+    assert not (report.parent / "comparison.png").exists()
+    assert not (report.parent / "label.png").exists()
     assert not (report.parent / "animation.gif").exists()
     assert stored.read_bytes() == before
